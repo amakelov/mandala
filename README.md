@@ -1,6 +1,6 @@
 # Mandala: self-managing experiments
 
-[install](#install) | [quickstart](#quick-start) | [docs](#todo)
+[install](#install) | [quickstart](#quick-start) | [docs](https://amakelov.github.io/mandala/index.html)
 
 ## What is Mandala?
 Mandala enables new, simpler patterns for working with complex and evolving
@@ -26,8 +26,8 @@ pip install git+https://github.com/amakelov/mandala
 ## Quick start
 ### Recommended introductions
 To build some understanding, check these out:
-- 2-minute introduction: [intro to self-managing code](#todo)
-- 10-minute introduction: [manage a small ML project](#todo)
+- 2-minute introduction: [intro to self-managing code](https://amakelov.github.io/mandala/intros/two_mins.html)
+- 10-minute introduction: [manage a toy ML project](https://amakelov.github.io/mandala/intros/ten_mins.html)
 
 ### Minimal working examples
 If you want to jump right into code, below are a few minimal, somewhat
@@ -87,4 +87,5 @@ useful, here are some things you can do to help:
 - share this repository with other people who might find it useful
 
 ### Next steps
-See the [docs](#todo) for more information and examples on how to use Mandala. 
+See the [docs](https://amakelov.github.io/mandala/index.html) for more
+information and examples on how to use Mandala. 
