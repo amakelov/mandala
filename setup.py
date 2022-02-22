@@ -34,7 +34,6 @@ packages = [
     'mandala',
     'mandala.adapters',
     'mandala.core',
-    'mandala.migration',
     'mandala.queries',
     'mandala.storages',
     'mandala.storages.kv_impl',
