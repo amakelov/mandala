@@ -1,0 +1,17 @@
+# Table of contents
+# Learn more at https://jupyterbook.org/customize/toc.html
+
+format: jb-book
+root: index
+# options:
+#   numbered: true
+parts:
+  - caption: Get started
+    chapters: 
+    - file: intros/two_mins
+    - file: intros/ten_mins
+    - file: tutorials/main
+      options:
+        numbered: false
+      sections: 
+      - file: tutorials/00_hello

@@ -1,0 +1,390 @@
+
+<!DOCTYPE html>
+
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>A 2-minute primer &#8212; Mandala</title>
+    
+  <link href="../_static/css/theme.css" rel="stylesheet">
+  <link href="../_static/css/index.ff1ffe594081f20da1ef19478df9384b.css" rel="stylesheet">
+
+    
+  <link rel="stylesheet"
+    href="../_static/vendor/fontawesome/5.13.0/css/all.min.css">
+  <link rel="preload" as="font" type="font/woff2" crossorigin
+    href="../_static/vendor/fontawesome/5.13.0/webfonts/fa-solid-900.woff2">
+  <link rel="preload" as="font" type="font/woff2" crossorigin
+    href="../_static/vendor/fontawesome/5.13.0/webfonts/fa-brands-400.woff2">
+
+    
+      
+
+    
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/sphinx-book-theme.css?digest=c3fdc42140077d1ad13ad2f1588a4309" />
+    <link rel="stylesheet" type="text/css" href="../_static/togglebutton.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/copybutton.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/mystnb.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/sphinx-thebe.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/proof.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/custom.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/custom.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/panels-main.c949a650a448cc0ae9fd3441c0e17fb0.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/panels-variables.06eb56fa6e07937060861dad626602ad.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/custom.css" />
+    
+  <link rel="preload" as="script" href="../_static/js/index.be7d3bbb2ef33a8344ce.js">
+
+    <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
+    <script src="../_static/jquery.js"></script>
+    <script src="../_static/underscore.js"></script>
+    <script src="../_static/doctools.js"></script>
+    <script src="../_static/togglebutton.js"></script>
+    <script src="../_static/clipboard.min.js"></script>
+    <script src="../_static/copybutton.js"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown, .tag_hide_input div.cell_input, .tag_hide-input div.cell_input, .tag_hide_output div.cell_output, .tag_hide-output div.cell_output, .tag_hide_cell.cell, .tag_hide-cell.cell';</script>
+    <script src="../_static/sphinx-book-theme.12a9622fbb08dcb3a2a40b2c02b83a57.js"></script>
+    <script async="async" src="https://unpkg.com/thebe@0.5.1/lib/index.js"></script>
+    <script>
+        const thebe_selector = ".thebe"
+        const thebe_selector_input = "pre"
+        const thebe_selector_output = ".output"
+    </script>
+    <script async="async" src="../_static/sphinx-thebe.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Manage a toy ML project" href="ten_mins.html" />
+    <link rel="prev" title="Mandala: self-managing experiments" href="../index.html" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="docsearch:language" content="None">
+    
+
+    <!-- Google Analytics -->
+    
+  </head>
+  <body data-spy="scroll" data-target="#bd-toc-nav" data-offset="80">
+    
+    <div class="container-fluid" id="banner"></div>
+
+    
+
+    <div class="container-xl">
+      <div class="row">
+          
+<div class="col-12 col-md-3 bd-sidebar site-navigation show" id="site-navigation">
+    
+        <div class="navbar-brand-box">
+    <a class="navbar-brand text-wrap" href="../index.html">
+      
+      
+      
+      <h1 class="site-logo" id="site-title">Mandala</h1>
+      
+    </a>
+</div><form class="bd-search d-flex align-items-center" action="../search.html" method="get">
+  <i class="icon fas fa-search"></i>
+  <input type="search" class="form-control" name="q" id="search-input" placeholder="Search this book..." aria-label="Search this book..." autocomplete="off" >
+</form><nav class="bd-links" id="bd-docs-nav" aria-label="Main">
+    <div class="bd-toc-item active">
+        <ul class="nav bd-sidenav">
+ <li class="toctree-l1">
+  <a class="reference internal" href="../index.html">
+   Mandala: self-managing experiments
+  </a>
+ </li>
+</ul>
+<p aria-level="2" class="caption" role="heading">
+ <span class="caption-text">
+  Get started
+ </span>
+</p>
+<ul class="current nav bd-sidenav">
+ <li class="toctree-l1 current active">
+  <a class="current reference internal" href="#">
+   A 2-minute primer
+  </a>
+ </li>
+ <li class="toctree-l1">
+  <a class="reference internal" href="ten_mins.html">
+   Manage a toy ML project
+  </a>
+ </li>
+ <li class="toctree-l1 has-children">
+  <a class="reference internal" href="../tutorials/main.html">
+   Tutorials
+  </a>
+  <input class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" type="checkbox"/>
+  <label for="toctree-checkbox-1">
+   <i class="fas fa-chevron-down">
+   </i>
+  </label>
+  <ul>
+   <li class="toctree-l2">
+    <a class="reference internal" href="../tutorials/00_hello.html">
+     Hello world!
+    </a>
+   </li>
+  </ul>
+ </li>
+</ul>
+
+    </div>
+</nav> <!-- To handle the deprecated key -->
+
+<div class="navbar_extra_footer">
+  Powered by <a href="https://jupyterbook.org">Jupyter Book</a>
+</div>
+
+</div>
+
+
+          
+
+
+          
+<main class="col py-md-3 pl-md-4 bd-content overflow-auto" role="main">
+    
+    <div class="topbar container-xl fixed-top">
+    <div class="topbar-contents row">
+        <div class="col-12 col-md-3 bd-topbar-whitespace site-navigation show"></div>
+        <div class="col pl-md-4 topbar-main">
+            
+            <button id="navbar-toggler" class="navbar-toggler ml-0" type="button" data-toggle="collapse"
+                data-toggle="tooltip" data-placement="bottom" data-target=".site-navigation" aria-controls="navbar-menu"
+                aria-expanded="true" aria-label="Toggle navigation" aria-controls="site-navigation"
+                title="Toggle navigation" data-toggle="tooltip" data-placement="left">
+                <i class="fas fa-bars"></i>
+                <i class="fas fa-arrow-left"></i>
+                <i class="fas fa-arrow-up"></i>
+            </button>
+            
+            
+<div class="dropdown-buttons-trigger">
+    <button id="dropdown-buttons-trigger" class="btn btn-secondary topbarbtn" aria-label="Download this page"><i
+            class="fas fa-download"></i></button>
+
+    <div class="dropdown-buttons">
+        <!-- ipynb file if we had a myst markdown file -->
+        
+        <!-- Download raw file -->
+        <a class="dropdown-buttons" href="../_sources/intros/two_mins.ipynb"><button type="button"
+                class="btn btn-secondary topbarbtn" title="Download source file" data-toggle="tooltip"
+                data-placement="left">.ipynb</button></a>
+        <!-- Download PDF via print -->
+        <button type="button" id="download-print" class="btn btn-secondary topbarbtn" title="Print to PDF"
+            onClick="window.print()" data-toggle="tooltip" data-placement="left">.pdf</button>
+    </div>
+</div>
+
+            <!-- Source interaction buttons -->
+
+<div class="dropdown-buttons-trigger">
+    <button id="dropdown-buttons-trigger" class="btn btn-secondary topbarbtn"
+        aria-label="Connect with source repository"><i class="fab fa-github"></i></button>
+    <div class="dropdown-buttons sourcebuttons">
+        <a class="repository-button"
+            href="https://github.com/executablebooks/jupyter-book"><button type="button" class="btn btn-secondary topbarbtn"
+                data-toggle="tooltip" data-placement="left" title="Source repository"><i
+                    class="fab fa-github"></i>repository</button></a>
+        <a class="issues-button"
+            href="https://github.com/executablebooks/jupyter-book/issues/new?title=Issue%20on%20page%20%2Fintros/two_mins.html&body=Your%20issue%20content%20here."><button
+                type="button" class="btn btn-secondary topbarbtn" data-toggle="tooltip" data-placement="left"
+                title="Open an issue"><i class="fas fa-lightbulb"></i>open issue</button></a>
+        
+    </div>
+</div>
+
+            <!-- Full screen (wrap in <a> to have style consistency -->
+
+<a class="full-screen-button"><button type="button" class="btn btn-secondary topbarbtn" data-toggle="tooltip"
+        data-placement="bottom" onclick="toggleFullScreen()" aria-label="Fullscreen mode"
+        title="Fullscreen mode"><i
+            class="fas fa-expand"></i></button></a>
+
+            <!-- Launch buttons -->
+
+        </div>
+
+        <!-- Table of contents -->
+        <div class="d-none d-md-block col-md-2 bd-toc show">
+            
+            <div class="tocsection onthispage pt-5 pb-3">
+                <i class="fas fa-list"></i> Contents
+            </div>
+            <nav id="bd-toc-nav" aria-label="Page">
+                <ul class="visible nav section-nav flex-column">
+ <li class="toc-h2 nav-item toc-entry">
+  <a class="reference internal nav-link" href="#self-managing-experiments">
+   Self-managing experiments
+  </a>
+  <ul class="nav section-nav flex-column">
+   <li class="toc-h3 nav-item toc-entry">
+    <a class="reference internal nav-link" href="#the-run-context-use-code-to-traverse-storage-directly">
+     The
+     <code class="docutils literal notranslate">
+      <span class="pre">
+       run
+      </span>
+     </code>
+     context: use code to traverse storage directly
+    </a>
+   </li>
+   <li class="toc-h3 nav-item toc-entry">
+    <a class="reference internal nav-link" href="#the-query-context-search-in-storage-by-pattern-matching-to-code">
+     The
+     <code class="docutils literal notranslate">
+      <span class="pre">
+       query
+      </span>
+     </code>
+     context: search in storage by pattern-matching to code
+    </a>
+   </li>
+  </ul>
+ </li>
+ <li class="toc-h2 nav-item toc-entry">
+  <a class="reference internal nav-link" href="#next-steps-abstraction-and-refactoring">
+   Next steps: abstraction and refactoring
+  </a>
+ </li>
+</ul>
+
+            </nav>
+        </div>
+    </div>
+</div>
+    <div id="main-content" class="row">
+        <div class="col-12 col-md-9 pl-md-3 pr-md-0">
+        
+              <div>
+                
+  <div class="tex2jax_ignore mathjax_ignore section" id="a-2-minute-primer">
+<span id="mins"></span><h1>A 2-minute primer<a class="headerlink" href="#a-2-minute-primer" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="self-managing-experiments">
+<h2>Self-managing experiments<a class="headerlink" href="#self-managing-experiments" title="Permalink to this headline">¶</a></h2>
+<p>With Mandala, the way you compose experiments out of function calls and
+collection creation/indexing automatically induces the organization of storage.
+For example, below are line-by-line analogous code blocks to</p>
+<ul class="simple">
+<li><p>save results of an imagined clustering experiment (<strong>left</strong>);</p></li>
+<li><p>query results from this and all analogous experiments in the storage (<strong>right</strong>):</p></li>
+</ul>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">with</span> <span class="n">run</span><span class="p">(</span><span class="n">storage</span><span class="p">,</span> <span class="n">lazy</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>                        <span class="k">with</span> <span class="n">query</span><span class="p">(</span><span class="n">storage</span><span class="p">)</span> <span class="k">as</span> <span class="n">q</span><span class="p">:</span>                    
+    <span class="n">X</span><span class="p">,</span> <span class="n">y</span> <span class="o">=</span> <span class="n">get_data</span><span class="p">(</span><span class="n">preprocess</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>                     <span class="n">X</span><span class="p">,</span> <span class="n">y</span> <span class="o">=</span> <span class="n">get_data</span><span class="p">(</span><span class="n">preprocess</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>         
+    <span class="k">for</span> <span class="n">n_clusters</span> <span class="ow">in</span> <span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">8</span><span class="p">):</span>                         <span class="n">n_clusters</span> <span class="o">=</span> <span class="n">Query</span><span class="p">(</span><span class="nb">int</span><span class="p">)</span>                  
+        <span class="n">clusters</span> <span class="o">=</span> <span class="n">get_clusters</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">n_clusters</span><span class="p">)</span>        <span class="n">clusters</span> <span class="o">=</span> <span class="n">get_clusters</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">n_clusters</span><span class="p">)</span>
+        <span class="n">score</span> <span class="o">=</span> <span class="n">eval_clusters</span><span class="p">(</span><span class="n">clusters</span><span class="p">,</span> <span class="n">y</span><span class="p">)</span>               <span class="n">score</span> <span class="o">=</span> <span class="n">eval_clusters</span><span class="p">(</span><span class="n">clusters</span><span class="p">,</span> <span class="n">y</span><span class="p">)</span>       
+        <span class="k">if</span> <span class="n">score</span> <span class="o">&gt;</span> <span class="mf">0.95</span><span class="p">:</span>                                 <span class="n">score</span> <span class="o">&gt;</span> <span class="mf">0.95</span>                             
+            <span class="k">for</span> <span class="n">cluster</span> <span class="ow">in</span> <span class="n">clusters</span><span class="p">:</span>                     <span class="n">cluster</span> <span class="o">=</span> <span class="n">clusters</span><span class="p">[</span><span class="n">IndexQuery</span><span class="p">()]</span> 
+                <span class="n">centroid</span> <span class="o">=</span> <span class="n">get_centroid</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">cluster</span><span class="p">)</span>      <span class="n">centroid</span> <span class="o">=</span> <span class="n">get_centroid</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">cluster</span><span class="p">)</span>
+                                                         <span class="n">df</span> <span class="o">=</span> <span class="n">q</span><span class="o">.</span><span class="n">get_table</span><span class="p">(</span><span class="n">n_clusters</span><span class="p">,</span>             
+                                                                      <span class="n">score</span><span class="p">,</span> <span class="n">centroid</span><span class="p">)</span>          
+</pre></div>
+</div>
+<p>These blocks look a lot like code to just run computations, without data
+management concerns – but in fact support various natural ways to store and
+interact with results.</p>
+<div class="section" id="the-run-context-use-code-to-traverse-storage-directly">
+<h3>The <code class="docutils literal notranslate"><span class="pre">run</span></code> context: use code to traverse storage directly<a class="headerlink" href="#the-run-context-use-code-to-traverse-storage-directly" title="Permalink to this headline">¶</a></h3>
+<p>If you re-run <code class="docutils literal notranslate"><span class="pre">run</span></code>-wrapped code – <em>or any sub-program of it</em> – function calls
+you’ve already computed will load their results as needed to allow control flow
+to proceed. Consequences include</p>
+<ul class="simple">
+<li><p><strong>flexible queries</strong>: you can get to the results you want by directly
+retracing the steps that created them, however complicated they may be (an
+<strong>imperative</strong> query interface)</p></li>
+<li><p><strong>easy iteration</strong>: you can organically grow a piece of code with new
+parameters and functionality, without re-doing expensive work</p></li>
+<li><p><strong>resilience</strong>: recovering from failure is as simple as running the same
+code again – which will retrace the steps that completed successfully, up to
+the failed computations.</p></li>
+</ul>
+</div>
+<div class="section" id="the-query-context-search-in-storage-by-pattern-matching-to-code">
+<h3>The <code class="docutils literal notranslate"><span class="pre">query</span></code> context: search in storage by pattern-matching to code<a class="headerlink" href="#the-query-context-search-in-storage-by-pattern-matching-to-code" title="Permalink to this headline">¶</a></h3>
+<p>With the <code class="docutils literal notranslate"><span class="pre">query</span></code> block, you</p>
+<ul class="simple">
+<li><p>interpret function calls and collection operations as building a structure of
+dependencies between variables (such as <code class="docutils literal notranslate"><span class="pre">n_clusters</span></code> and <code class="docutils literal notranslate"><span class="pre">score</span></code>);</p></li>
+<li><p>point to a sequence of variables to get a table where each row is a
+matching of values to these variables satisfying the dependencies (a
+<strong>declarative</strong> query interface)</p></li>
+</ul>
+</div>
+</div>
+<div class="section" id="next-steps-abstraction-and-refactoring">
+<h2>Next steps: abstraction and refactoring<a class="headerlink" href="#next-steps-abstraction-and-refactoring" title="Permalink to this headline">¶</a></h2>
+<p>Read on to see how</p>
+<ul class="simple">
+<li><p>these patterns can be composed with <strong>abstraction</strong> and <strong>refactoring</strong> to
+scale them up to evolving projects with many components</p></li>
+<li><p>you can use imperative/declarative patterns similar to the above for deletions</p></li>
+</ul>
+</div>
+</div>
+
+    <script type="text/x-thebe-config">
+    {
+        requestKernel: true,
+        binderOptions: {
+            repo: "binder-examples/jupyter-stacks-datascience",
+            ref: "master",
+        },
+        codeMirrorConfig: {
+            theme: "abcdef",
+            mode: "python"
+        },
+        kernelOptions: {
+            kernelName: "python3",
+            path: "./intros"
+        },
+        predefinedOutput: true
+    }
+    </script>
+    <script>kernelName = 'python3'</script>
+
+              </div>
+              
+        
+            <!-- Previous / next buttons -->
+<div class='prev-next-area'> 
+    <a class='left-prev' id="prev-link" href="../index.html" title="previous page">
+        <i class="fas fa-angle-left"></i>
+        <div class="prev-next-info">
+            <p class="prev-next-subtitle">previous</p>
+            <p class="prev-next-title">Mandala: self-managing experiments</p>
+        </div>
+    </a>
+    <a class='right-next' id="next-link" href="ten_mins.html" title="next page">
+    <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">Manage a toy ML project</p>
+    </div>
+    <i class="fas fa-angle-right"></i>
+    </a>
+</div>
+        
+        </div>
+    </div>
+    <footer class="footer">
+    <div class="container">
+      <p>
+        
+          By A. Makelov<br/>
+        
+            &copy; Copyright 2021, A. Makelov.<br/>
+      </p>
+    </div>
+  </footer>
+</main>
+
+
+      </div>
+    </div>
+  
+  <script src="../_static/js/index.be7d3bbb2ef33a8344ce.js"></script>
+
+  </body>
+</html>

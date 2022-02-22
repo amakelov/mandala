@@ -1,0 +1,857 @@
+
+<!DOCTYPE html>
+
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Manage a toy ML project &#8212; Mandala</title>
+    
+  <link href="../_static/css/theme.css" rel="stylesheet">
+  <link href="../_static/css/index.ff1ffe594081f20da1ef19478df9384b.css" rel="stylesheet">
+
+    
+  <link rel="stylesheet"
+    href="../_static/vendor/fontawesome/5.13.0/css/all.min.css">
+  <link rel="preload" as="font" type="font/woff2" crossorigin
+    href="../_static/vendor/fontawesome/5.13.0/webfonts/fa-solid-900.woff2">
+  <link rel="preload" as="font" type="font/woff2" crossorigin
+    href="../_static/vendor/fontawesome/5.13.0/webfonts/fa-brands-400.woff2">
+
+    
+      
+
+    
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/sphinx-book-theme.css?digest=c3fdc42140077d1ad13ad2f1588a4309" />
+    <link rel="stylesheet" type="text/css" href="../_static/togglebutton.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/copybutton.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/mystnb.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/sphinx-thebe.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/proof.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/custom.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/custom.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/panels-main.c949a650a448cc0ae9fd3441c0e17fb0.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/panels-variables.06eb56fa6e07937060861dad626602ad.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/custom.css" />
+    
+  <link rel="preload" as="script" href="../_static/js/index.be7d3bbb2ef33a8344ce.js">
+
+    <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
+    <script src="../_static/jquery.js"></script>
+    <script src="../_static/underscore.js"></script>
+    <script src="../_static/doctools.js"></script>
+    <script src="../_static/togglebutton.js"></script>
+    <script src="../_static/clipboard.min.js"></script>
+    <script src="../_static/copybutton.js"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown, .tag_hide_input div.cell_input, .tag_hide-input div.cell_input, .tag_hide_output div.cell_output, .tag_hide-output div.cell_output, .tag_hide_cell.cell, .tag_hide-cell.cell';</script>
+    <script src="../_static/sphinx-book-theme.12a9622fbb08dcb3a2a40b2c02b83a57.js"></script>
+    <script async="async" src="https://unpkg.com/thebe@0.5.1/lib/index.js"></script>
+    <script>
+        const thebe_selector = ".thebe"
+        const thebe_selector_input = "pre"
+        const thebe_selector_output = ".output"
+    </script>
+    <script async="async" src="../_static/sphinx-thebe.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Tutorials" href="../tutorials/main.html" />
+    <link rel="prev" title="A 2-minute primer" href="two_mins.html" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="docsearch:language" content="None">
+    
+
+    <!-- Google Analytics -->
+    
+  </head>
+  <body data-spy="scroll" data-target="#bd-toc-nav" data-offset="80">
+    
+    <div class="container-fluid" id="banner"></div>
+
+    
+
+    <div class="container-xl">
+      <div class="row">
+          
+<div class="col-12 col-md-3 bd-sidebar site-navigation show" id="site-navigation">
+    
+        <div class="navbar-brand-box">
+    <a class="navbar-brand text-wrap" href="../index.html">
+      
+      
+      
+      <h1 class="site-logo" id="site-title">Mandala</h1>
+      
+    </a>
+</div><form class="bd-search d-flex align-items-center" action="../search.html" method="get">
+  <i class="icon fas fa-search"></i>
+  <input type="search" class="form-control" name="q" id="search-input" placeholder="Search this book..." aria-label="Search this book..." autocomplete="off" >
+</form><nav class="bd-links" id="bd-docs-nav" aria-label="Main">
+    <div class="bd-toc-item active">
+        <ul class="nav bd-sidenav">
+ <li class="toctree-l1">
+  <a class="reference internal" href="../index.html">
+   Mandala: self-managing experiments
+  </a>
+ </li>
+</ul>
+<p aria-level="2" class="caption" role="heading">
+ <span class="caption-text">
+  Get started
+ </span>
+</p>
+<ul class="current nav bd-sidenav">
+ <li class="toctree-l1">
+  <a class="reference internal" href="two_mins.html">
+   A 2-minute primer
+  </a>
+ </li>
+ <li class="toctree-l1 current active">
+  <a class="current reference internal" href="#">
+   Manage a toy ML project
+  </a>
+ </li>
+ <li class="toctree-l1 has-children">
+  <a class="reference internal" href="../tutorials/main.html">
+   Tutorials
+  </a>
+  <input class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" type="checkbox"/>
+  <label for="toctree-checkbox-1">
+   <i class="fas fa-chevron-down">
+   </i>
+  </label>
+  <ul>
+   <li class="toctree-l2">
+    <a class="reference internal" href="../tutorials/00_hello.html">
+     Hello world!
+    </a>
+   </li>
+  </ul>
+ </li>
+</ul>
+
+    </div>
+</nav> <!-- To handle the deprecated key -->
+
+<div class="navbar_extra_footer">
+  Powered by <a href="https://jupyterbook.org">Jupyter Book</a>
+</div>
+
+</div>
+
+
+          
+
+
+          
+<main class="col py-md-3 pl-md-4 bd-content overflow-auto" role="main">
+    
+    <div class="topbar container-xl fixed-top">
+    <div class="topbar-contents row">
+        <div class="col-12 col-md-3 bd-topbar-whitespace site-navigation show"></div>
+        <div class="col pl-md-4 topbar-main">
+            
+            <button id="navbar-toggler" class="navbar-toggler ml-0" type="button" data-toggle="collapse"
+                data-toggle="tooltip" data-placement="bottom" data-target=".site-navigation" aria-controls="navbar-menu"
+                aria-expanded="true" aria-label="Toggle navigation" aria-controls="site-navigation"
+                title="Toggle navigation" data-toggle="tooltip" data-placement="left">
+                <i class="fas fa-bars"></i>
+                <i class="fas fa-arrow-left"></i>
+                <i class="fas fa-arrow-up"></i>
+            </button>
+            
+            
+<div class="dropdown-buttons-trigger">
+    <button id="dropdown-buttons-trigger" class="btn btn-secondary topbarbtn" aria-label="Download this page"><i
+            class="fas fa-download"></i></button>
+
+    <div class="dropdown-buttons">
+        <!-- ipynb file if we had a myst markdown file -->
+        
+        <!-- Download raw file -->
+        <a class="dropdown-buttons" href="../_sources/intros/ten_mins.ipynb"><button type="button"
+                class="btn btn-secondary topbarbtn" title="Download source file" data-toggle="tooltip"
+                data-placement="left">.ipynb</button></a>
+        <!-- Download PDF via print -->
+        <button type="button" id="download-print" class="btn btn-secondary topbarbtn" title="Print to PDF"
+            onClick="window.print()" data-toggle="tooltip" data-placement="left">.pdf</button>
+    </div>
+</div>
+
+            <!-- Source interaction buttons -->
+
+<div class="dropdown-buttons-trigger">
+    <button id="dropdown-buttons-trigger" class="btn btn-secondary topbarbtn"
+        aria-label="Connect with source repository"><i class="fab fa-github"></i></button>
+    <div class="dropdown-buttons sourcebuttons">
+        <a class="repository-button"
+            href="https://github.com/executablebooks/jupyter-book"><button type="button" class="btn btn-secondary topbarbtn"
+                data-toggle="tooltip" data-placement="left" title="Source repository"><i
+                    class="fab fa-github"></i>repository</button></a>
+        <a class="issues-button"
+            href="https://github.com/executablebooks/jupyter-book/issues/new?title=Issue%20on%20page%20%2Fintros/ten_mins.html&body=Your%20issue%20content%20here."><button
+                type="button" class="btn btn-secondary topbarbtn" data-toggle="tooltip" data-placement="left"
+                title="Open an issue"><i class="fas fa-lightbulb"></i>open issue</button></a>
+        
+    </div>
+</div>
+
+            <!-- Full screen (wrap in <a> to have style consistency -->
+
+<a class="full-screen-button"><button type="button" class="btn btn-secondary topbarbtn" data-toggle="tooltip"
+        data-placement="bottom" onclick="toggleFullScreen()" aria-label="Fullscreen mode"
+        title="Fullscreen mode"><i
+            class="fas fa-expand"></i></button></a>
+
+            <!-- Launch buttons -->
+
+<div class="dropdown-buttons-trigger">
+    <button id="dropdown-buttons-trigger" class="btn btn-secondary topbarbtn"
+        aria-label="Launch interactive content"><i class="fas fa-rocket"></i></button>
+    <div class="dropdown-buttons">
+        
+        <a class="binder-button" href="https://mybinder.org/v2/gh/executablebooks/jupyter-book/master?urlpath=tree/jbook/docs/intros/ten_mins.ipynb"><button type="button"
+                class="btn btn-secondary topbarbtn" title="Launch Binder" data-toggle="tooltip"
+                data-placement="left"><img class="binder-button-logo"
+                    src="../_static/images/logo_binder.svg"
+                    alt="Interact on binder">Binder</button></a>
+        
+        
+        
+        
+    </div>
+</div>
+
+        </div>
+
+        <!-- Table of contents -->
+        <div class="d-none d-md-block col-md-2 bd-toc show">
+            
+            <div class="tocsection onthispage pt-5 pb-3">
+                <i class="fas fa-list"></i> Contents
+            </div>
+            <nav id="bd-toc-nav" aria-label="Page">
+                <ul class="visible nav section-nav flex-column">
+ <li class="toc-h2 nav-item toc-entry">
+  <a class="reference internal nav-link" href="#manage-experiments-with-composable-memoization">
+   Manage experiments with composable memoization
+  </a>
+  <ul class="nav section-nav flex-column">
+   <li class="toc-h3 nav-item toc-entry">
+    <a class="reference internal nav-link" href="#retrace-memoized-code-to-flexibly-interact-with-storage">
+     Retrace memoized code to flexibly interact with storage
+    </a>
+    <ul class="nav section-nav flex-column">
+     <li class="toc-h4 nav-item toc-entry">
+      <a class="reference internal nav-link" href="#why-should-you-care">
+       Why should you care?
+      </a>
+     </li>
+    </ul>
+   </li>
+   <li class="toc-h3 nav-item toc-entry">
+    <a class="reference internal nav-link" href="#reduce-complexity-with-hierarchical-memoization">
+     Reduce complexity with hierarchical memoization
+    </a>
+    <ul class="nav section-nav flex-column">
+     <li class="toc-h4 nav-item toc-entry">
+      <a class="reference internal nav-link" href="#id1">
+       Why should you care?
+      </a>
+     </li>
+    </ul>
+   </li>
+  </ul>
+ </li>
+ <li class="toc-h2 nav-item toc-entry">
+  <a class="reference internal nav-link" href="#turn-code-into-a-declarative-query-interface">
+   Turn code into a declarative query interface
+  </a>
+  <ul class="nav section-nav flex-column">
+   <li class="toc-h3 nav-item toc-entry">
+    <a class="reference internal nav-link" href="#what-just-happened">
+     What just happened?
+    </a>
+   </li>
+   <li class="toc-h3 nav-item toc-entry">
+    <a class="reference internal nav-link" href="#advanced-use-matching-more-interesting-patterns">
+     Advanced use: matching more interesting patterns
+    </a>
+    <ul class="nav section-nav flex-column">
+     <li class="toc-h4 nav-item toc-entry">
+      <a class="reference internal nav-link" href="#a-bit-of-refactoring">
+       A bit of refactoring
+      </a>
+     </li>
+     <li class="toc-h4 nav-item toc-entry">
+      <a class="reference internal nav-link" href="#advanced-query-patterns">
+       Advanced query patterns
+      </a>
+     </li>
+    </ul>
+   </li>
+  </ul>
+ </li>
+ <li class="toc-h2 nav-item toc-entry">
+  <a class="reference internal nav-link" href="#a-few-other-things">
+   A few other things
+  </a>
+  <ul class="nav section-nav flex-column">
+   <li class="toc-h3 nav-item toc-entry">
+    <a class="reference internal nav-link" href="#update-an-operation-to-preserve-past-results">
+     Update an operation to preserve past results
+    </a>
+    <ul class="nav section-nav flex-column">
+     <li class="toc-h4 nav-item toc-entry">
+      <a class="reference internal nav-link" href="#id2">
+       Why should you care?
+      </a>
+     </li>
+    </ul>
+   </li>
+   <li class="toc-h3 nav-item toc-entry">
+    <a class="reference internal nav-link" href="#deletion-run-code-in-undo-mode">
+     Deletion: run code in undo mode
+    </a>
+   </li>
+  </ul>
+ </li>
+ <li class="toc-h2 nav-item toc-entry">
+  <a class="reference internal nav-link" href="#next-steps">
+   Next steps
+  </a>
+ </li>
+</ul>
+
+            </nav>
+        </div>
+    </div>
+</div>
+    <div id="main-content" class="row">
+        <div class="col-12 col-md-9 pl-md-3 pr-md-0">
+        
+              <div>
+                
+  <div class="tex2jax_ignore mathjax_ignore section" id="manage-a-toy-ml-project">
+<span id="mins"></span><h1>Manage a toy ML project<a class="headerlink" href="#manage-a-toy-ml-project" title="Permalink to this headline">¶</a></h1>
+<p>In this quick overview, you will use Mandala to manage a small ML project. You
+will</p>
+<ul class="simple">
+<li><p>set up a pipeline to build and evaluate your own random forest classifier;</p></li>
+<li><p>evolve the project by extending parameter spaces and functionality;</p></li>
+<li><p>query the results in various ways, and delete the ones you don’t need any
+more.</p></li>
+</ul>
+<p>To start, let’s import a few things:</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">List</span><span class="p">,</span> <span class="n">Tuple</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="kn">from</span> <span class="nn">numpy</span> <span class="kn">import</span> <span class="n">ndarray</span>
+<span class="kn">from</span> <span class="nn">sklearn.datasets</span> <span class="kn">import</span> <span class="n">make_classification</span>
+<span class="kn">from</span> <span class="nn">sklearn.metrics</span> <span class="kn">import</span> <span class="n">accuracy_score</span>
+<span class="kn">from</span> <span class="nn">sklearn.tree</span> <span class="kn">import</span> <span class="n">DecisionTreeClassifier</span>
+
+<span class="kn">from</span> <span class="nn">mandala.all</span> <span class="kn">import</span> <span class="o">*</span>
+<span class="n">set_logging_level</span><span class="p">(</span><span class="n">level</span><span class="o">=</span><span class="s1">&#39;warning&#39;</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="section" id="manage-experiments-with-composable-memoization">
+<h2>Manage experiments with composable memoization<a class="headerlink" href="#manage-experiments-with-composable-memoization" title="Permalink to this headline">¶</a></h2>
+<p>Let’s create a storage for the results, and functions to generate a synthetic
+dataset and train a decision tree:</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">storage</span> <span class="o">=</span> <span class="n">Storage</span><span class="p">(</span><span class="n">in_memory</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+<span class="nd">@op</span><span class="p">(</span><span class="n">storage</span><span class="p">)</span>
+<span class="k">def</span> <span class="nf">get_data</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">ndarray</span><span class="p">]:</span>
+    <span class="k">return</span> <span class="n">make_classification</span><span class="p">(</span><span class="n">random_state</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+
+<span class="n">log_calls</span> <span class="o">=</span> <span class="kc">True</span>
+<span class="nd">@op</span><span class="p">(</span><span class="n">storage</span><span class="p">)</span>
+<span class="k">def</span> <span class="nf">train_tree</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">max_features</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">random_state</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DecisionTreeClassifier</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">log_calls</span><span class="p">:</span> <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;Computing train_tree...&#39;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">DecisionTreeClassifier</span><span class="p">(</span><span class="n">random_state</span><span class="o">=</span><span class="n">random_state</span><span class="p">,</span> <span class="n">max_depth</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> 
+                                  <span class="n">max_features</span><span class="o">=</span><span class="n">max_features</span><span class="p">)</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">y</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+<p>The <code class="docutils literal notranslate"><span class="pre">&#64;op</span></code> decorator turns functions into <strong>operations</strong>. Inputs/outputs for
+calls to operations can be
+<a class="reference external" href="https://en.wikipedia.org/wiki/Memoization">memoized</a>,
+either in-memory or on
+disk. In addition to saving the inputs/outputs of function calls, Mandala’s
+memoization</p>
+<ul class="simple">
+<li><p>smoothly <em>composes</em> through Python’s control flow, collections, and functional
+abstraction;</p></li>
+<li><p>can load results on demand, getting only the data necessary for control flow
+to proceed.</p></li>
+</ul>
+<p>Below, you’ll use this composable behavior to evolve and query the project.</p>
+<div class="section" id="retrace-memoized-code-to-flexibly-interact-with-storage">
+<h3>Retrace memoized code to flexibly interact with storage<a class="headerlink" href="#retrace-memoized-code-to-flexibly-interact-with-storage" title="Permalink to this headline">¶</a></h3>
+<p>To start, let’s train a few decision trees on the data:</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">with</span> <span class="n">run</span><span class="p">(</span><span class="n">storage</span><span class="p">):</span> 
+    <span class="n">X</span><span class="p">,</span> <span class="n">y</span> <span class="o">=</span> <span class="n">get_data</span><span class="p">()</span>
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">5</span><span class="p">):</span> 
+        <span class="n">train_tree</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">random_state</span><span class="o">=</span><span class="n">i</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Computing train_tree...
+Computing train_tree...
+Computing train_tree...
+Computing train_tree...
+Computing train_tree...
+</pre></div>
+</div>
+</div>
+</div>
+<p>As expected, the <code class="docutils literal notranslate"><span class="pre">train_tree</span></code> operation was computed 5 times. All calls to
+operations inside a <code class="docutils literal notranslate"><span class="pre">run</span></code> block are saved in storage, and re-running a
+memoized call simply loads its results instead of computing the function.</p>
+<p>This makes it easy to add more computations directly to memoized code. For
+example, here’s how you can add logic to evaluate the tree ensemble via a
+majority vote, and also increase the number of trees trained:</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="nd">@op</span><span class="p">(</span><span class="n">storage</span><span class="p">)</span>
+<span class="k">def</span> <span class="nf">eval_forest</span><span class="p">(</span><span class="n">trees</span><span class="p">:</span><span class="n">List</span><span class="p">[</span><span class="n">DecisionTreeClassifier</span><span class="p">],</span> <span class="n">X</span><span class="p">,</span> <span class="n">y</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">log_calls</span><span class="p">:</span> <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;Computing eval_forest...&#39;</span><span class="p">)</span>
+    <span class="n">majority_vote</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">tree</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">X</span><span class="p">)</span> <span class="k">for</span> <span class="n">tree</span> <span class="ow">in</span> <span class="n">trees</span><span class="p">])</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="mf">0.5</span>
+    <span class="k">return</span> <span class="nb">round</span><span class="p">(</span><span class="n">accuracy_score</span><span class="p">(</span><span class="n">y_true</span><span class="o">=</span><span class="n">y</span><span class="p">,</span> <span class="n">y_pred</span><span class="o">=</span><span class="n">majority_vote</span><span class="p">),</span> <span class="mi">2</span><span class="p">)</span>
+
+<span class="k">with</span> <span class="n">run</span><span class="p">(</span><span class="n">storage</span><span class="p">,</span> <span class="n">lazy</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+    <span class="n">X</span><span class="p">,</span> <span class="n">y</span> <span class="o">=</span> <span class="n">get_data</span><span class="p">()</span>
+    <span class="n">trees</span> <span class="o">=</span> <span class="p">[</span><span class="n">train_tree</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">random_state</span><span class="o">=</span><span class="n">i</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">10</span><span class="p">)]</span>
+    <span class="n">forest_acc</span> <span class="o">=</span> <span class="n">eval_forest</span><span class="p">(</span><span class="n">trees</span><span class="p">,</span> <span class="n">X</span><span class="p">,</span> <span class="n">y</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;Random forest accuracy: </span><span class="si">{</span><span class="n">forest_acc</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Computing train_tree...
+Computing train_tree...
+Computing train_tree...
+Computing train_tree...
+Computing train_tree...
+Computing eval_forest...
+Random forest accuracy: AtomRef(0.9, type=AtomType(float))
+</pre></div>
+</div>
+</div>
+</div>
+<p>Note that</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">train_tree</span></code> was computed only 5 times, since the first 5 calls were <em>retraced</em></p></li>
+<li><p>operations return <strong>value references</strong> (like <code class="docutils literal notranslate"><span class="pre">forest_acc</span></code> above), which contain
+metadata needed for storage and computation.</p></li>
+<li><p>you can use <strong>collections</strong> of individual value references as inputs/outputs
+of operations – like how <code class="docutils literal notranslate"><span class="pre">eval_forest</span></code> takes a list of decision trees – without
+duplicating the storage of the collection’s elements.</p></li>
+</ul>
+<p>By using <code class="docutils literal notranslate"><span class="pre">lazy=True</span></code> (as above) in the <code class="docutils literal notranslate"><span class="pre">run</span></code> context manager, you only load what
+is necessary for code execution not to be disrupted – for example, to evaluate a
+branching condition, or to run new computations.</p>
+<div class="section" id="why-should-you-care">
+<h4>Why should you care?<a class="headerlink" href="#why-should-you-care" title="Permalink to this headline">¶</a></h4>
+<p>The retracing pattern simplifies many aspects of experiment management. It</p>
+<ul class="simple">
+<li><p>makes code <strong>open to extension</strong> of parameter spaces and functionality.
+Directly add new logic to existing code, and re-run it without re-doing
+expensive work;</p></li>
+<li><p>enables <strong>expressive queries</strong>. Walk over chains of memoized calls to reach
+the results you need by directly retracing the steps that generated them. By
+sprinkling extra control flow when needed, you can query very complex computations;</p></li>
+<li><p>makes it easy to <strong>resume work after a crash</strong>: just run the code again, and
+<a class="reference internal" href="#mins-hierarchical"><span class="std std-ref">break jobs with many calls into stages</span></a> to speed up recovery.</p></li>
+</ul>
+</div>
+</div>
+<div class="section" id="reduce-complexity-with-hierarchical-memoization">
+<span id="mins-hierarchical"></span><h3>Reduce complexity with hierarchical memoization<a class="headerlink" href="#reduce-complexity-with-hierarchical-memoization" title="Permalink to this headline">¶</a></h3>
+<p>Once a composition of operations proves to be a useful building block in
+experiments, you can <em>extract</em> it as a higher-level operation using the
+<code class="docutils literal notranslate"><span class="pre">&#64;superop</span></code> decorator. Below, you’ll extract the training of
+decision as a higher-level operation, and expose the dataset and <code class="docutils literal notranslate"><span class="pre">max_features</span></code>
+as arguments:</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="nd">@superop</span><span class="p">(</span><span class="n">storage</span><span class="p">)</span>
+<span class="k">def</span> <span class="nf">train_trees</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">max_features</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">n_trees</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">DecisionTreeClassifier</span><span class="p">]:</span>
+    <span class="k">return</span> <span class="p">[</span><span class="n">train_tree</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">max_features</span><span class="o">=</span><span class="n">max_features</span><span class="p">,</span> <span class="n">random_state</span><span class="o">=</span><span class="n">i</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_trees</span><span class="p">)]</span>
+</pre></div>
+</div>
+</div>
+</div>
+<p>You can now use this superop to <strong>refactor both the code and the results
+connected to it</strong>:</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">with</span> <span class="n">run</span><span class="p">(</span><span class="n">storage</span><span class="p">,</span> <span class="n">lazy</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+    <span class="n">X</span><span class="p">,</span> <span class="n">y</span> <span class="o">=</span> <span class="n">get_data</span><span class="p">()</span>
+    <span class="n">trees</span> <span class="o">=</span> <span class="n">train_trees</span><span class="p">(</span><span class="n">X</span><span class="o">=</span><span class="n">X</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="n">y</span><span class="p">)</span>
+    <span class="n">forest_acc</span> <span class="o">=</span> <span class="n">eval_forest</span><span class="p">(</span><span class="n">trees</span><span class="o">=</span><span class="n">trees</span><span class="p">,</span> <span class="n">X</span><span class="o">=</span><span class="n">X</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="n">y</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+<p>Note that this did not execute any heavy operations – it only added
+higher-level indexing to the memoized data. The first call to <code class="docutils literal notranslate"><span class="pre">train_trees</span></code>
+retraces its internal structure, but all subsequent re-executions will jump
+straight to its final results.</p>
+<div class="section" id="id1">
+<h4>Why should you care?<a class="headerlink" href="#id1" title="Permalink to this headline">¶</a></h4>
+<p>Hierarchical memoization extends the computer programming concept of extracting a
+<a class="reference external" href="https://en.wikipedia.org/wiki/Subroutine#Advantages">subroutine</a> to the
+management of <em>both</em> code and its results, bringing additional benefits like</p>
+<ul class="simple">
+<li><p><strong>simplicity</strong>: make code <em>and</em> queries shorter;</p></li>
+<li><p><strong>convenience</strong>: index experimental outcomes in a more meaningful way;</p></li>
+<li><p><strong>efficiency</strong>: skip over uninteresting calls when retracing, and improve
+the time complexity of queries by matching to higher-level patterns.</p>
+<ul>
+<li><p>This turns retracing into a practical tool for large projects, since in any
+human-designed scenario where you must retrace a large number of calls, these
+calls will have some abstractable structure that you can extract to a
+<code class="docutils literal notranslate"><span class="pre">&#64;superop</span></code> and skip over.</p></li>
+</ul>
+</li>
+</ul>
+<p>Together, these properties allow projects to <em>scale up practically
+indefinitely</em>, as long as the designers themselves have a scalable and
+hierarchical mental decomposition of the logic.</p>
+</div>
+</div>
+</div>
+<div class="section" id="turn-code-into-a-declarative-query-interface">
+<h2>Turn code into a declarative query interface<a class="headerlink" href="#turn-code-into-a-declarative-query-interface" title="Permalink to this headline">¶</a></h2>
+<p>Retracing is very effective at interacting with storage when the space of input
+parameters (from which retracing must begin) is known to you in advance. This is
+not always the case.</p>
+<p>To make sense of all that exists in storage, you can use a complementary
+interface for <em>pattern-matching</em> against the structure of experiments. First,
+let’s create a bit more data to query by running more experiments:</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">log_calls</span> <span class="o">=</span> <span class="kc">False</span>
+<span class="k">with</span> <span class="n">run</span><span class="p">(</span><span class="n">storage</span><span class="p">,</span> <span class="n">lazy</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+    <span class="n">X</span><span class="p">,</span> <span class="n">y</span> <span class="o">=</span> <span class="n">get_data</span><span class="p">()</span>
+    <span class="k">for</span> <span class="n">n_trees</span> <span class="ow">in</span> <span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="mi">20</span><span class="p">):</span>
+        <span class="n">trees</span> <span class="o">=</span> <span class="n">train_trees</span><span class="p">(</span><span class="n">X</span><span class="o">=</span><span class="n">X</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="n">y</span><span class="p">,</span> <span class="n">n_trees</span><span class="o">=</span><span class="n">n_trees</span><span class="p">)</span>
+        <span class="n">forest_acc</span> <span class="o">=</span> <span class="n">eval_forest</span><span class="p">(</span><span class="n">trees</span><span class="o">=</span><span class="n">trees</span><span class="p">,</span> <span class="n">X</span><span class="o">=</span><span class="n">X</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="n">y</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+<p>Composing a query works a lot like composing the experiment being queried (so
+much that a good first step is to just copy-paste the computational code). For
+example, here is how you can query the relationship between the accuracy of the
+random forest and the number of trees in it:</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">with</span> <span class="n">query</span><span class="p">(</span><span class="n">storage</span><span class="p">)</span> <span class="k">as</span> <span class="n">q</span><span class="p">:</span>
+    <span class="n">X</span><span class="p">,</span> <span class="n">y</span> <span class="o">=</span> <span class="n">get_data</span><span class="p">()</span>
+    <span class="n">n_trees</span> <span class="o">=</span> <span class="n">Query</span><span class="p">()</span><span class="o">.</span><span class="n">named</span><span class="p">(</span><span class="s1">&#39;n_trees&#39;</span><span class="p">)</span>
+    <span class="n">trees</span> <span class="o">=</span> <span class="n">train_trees</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">n_trees</span><span class="o">=</span><span class="n">n_trees</span><span class="p">)</span>
+    <span class="n">forest_acc</span> <span class="o">=</span> <span class="n">eval_forest</span><span class="p">(</span><span class="n">trees</span><span class="p">,</span> <span class="n">X</span><span class="p">,</span> <span class="n">y</span><span class="p">)</span><span class="o">.</span><span class="n">named</span><span class="p">(</span><span class="s1">&#39;forest_acc&#39;</span><span class="p">)</span>
+    <span class="n">df</span> <span class="o">=</span> <span class="n">q</span><span class="o">.</span><span class="n">get_table</span><span class="p">(</span><span class="n">n_trees</span><span class="p">,</span> <span class="n">forest_acc</span><span class="p">)</span>
+<span class="n">df</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output text_html"><div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>n_trees</th>
+      <th>forest_acc</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>0</th>
+      <td>10</td>
+      <td>0.90</td>
+    </tr>
+    <tr>
+      <th>1</th>
+      <td>20</td>
+      <td>0.91</td>
+    </tr>
+  </tbody>
+</table>
+</div></div></div>
+</div>
+<div class="section" id="what-just-happened">
+<h3>What just happened?<a class="headerlink" href="#what-just-happened" title="Permalink to this headline">¶</a></h3>
+<p>The <code class="docutils literal notranslate"><span class="pre">query</span></code> context <em>significantly</em> changes the meaning of Python code:</p>
+<ul class="simple">
+<li><p>calls to <code class="docutils literal notranslate"><span class="pre">&#64;op</span></code>/<code class="docutils literal notranslate"><span class="pre">&#64;superop</span></code>-decorated functions build a pattern-matching
+graph encoding the query;</p></li>
+<li><p>This graph represents computational dependencies between variables (such as
+<code class="docutils literal notranslate"><span class="pre">n_trees</span></code> and <code class="docutils literal notranslate"><span class="pre">forest_acc</span></code>) imposed by operations (such as <code class="docutils literal notranslate"><span class="pre">train_trees</span></code>);</p></li>
+<li><p>to query the graph, you provide a sequence of variables. The result is a table,
+where each row is a matching of values to these variables that satisfies <em>all</em>
+the dependencies.</p></li>
+</ul>
+</div>
+<div class="section" id="advanced-use-matching-more-interesting-patterns">
+<h3>Advanced use: matching more interesting patterns<a class="headerlink" href="#advanced-use-matching-more-interesting-patterns" title="Permalink to this headline">¶</a></h3>
+<p>Above, you queried using the higher-level operation <code class="docutils literal notranslate"><span class="pre">train_trees</span></code> to directly
+get the list of decision trees from the data. However, you can also do a
+lower-level query through the internals of <code class="docutils literal notranslate"><span class="pre">train_trees</span></code>!</p>
+<div class="section" id="a-bit-of-refactoring">
+<h4>A bit of refactoring<a class="headerlink" href="#a-bit-of-refactoring" title="Permalink to this headline">¶</a></h4>
+<p>To make this a little more interesting, suppose you also want to look at the
+accuracy of each individual tree in the forest. The trees are computed inside
+the <code class="docutils literal notranslate"><span class="pre">train_trees</span></code> operation, so this is also the natural place to compute their
+accuracies.</p>
+<p>However, execution skips over past calls to <code class="docutils literal notranslate"><span class="pre">train_trees</span></code>, so you can’t really
+go inside. To overcome this, you can create a <strong>new version</strong> of <code class="docutils literal notranslate"><span class="pre">train_trees</span></code>,
+which does not remember the calls to the previous version, and will thus execute
+them again with the updated logic to evaluate the trees. Then, simply re-run the
+project to re-compute calls to the new version:</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="nd">@op</span><span class="p">(</span><span class="n">storage</span><span class="p">)</span>
+<span class="k">def</span> <span class="nf">eval_tree</span><span class="p">(</span><span class="n">tree</span><span class="p">,</span> <span class="n">X</span><span class="p">,</span> <span class="n">y</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+    <span class="k">return</span> <span class="nb">round</span><span class="p">(</span><span class="n">accuracy_score</span><span class="p">(</span><span class="n">y_true</span><span class="o">=</span><span class="n">y</span><span class="p">,</span> <span class="n">y_pred</span><span class="o">=</span><span class="n">tree</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">X</span><span class="p">)),</span> <span class="mi">2</span><span class="p">)</span>
+
+<span class="nd">@superop</span><span class="p">(</span><span class="n">storage</span><span class="p">,</span> <span class="n">version</span><span class="o">=</span><span class="s1">&#39;1&#39;</span><span class="p">)</span> <span class="c1"># note the version update!</span>
+<span class="k">def</span> <span class="nf">train_trees</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">max_features</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">n_trees</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">DecisionTreeClassifier</span><span class="p">]:</span>
+    <span class="n">trees</span> <span class="o">=</span> <span class="p">[</span><span class="n">train_tree</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">max_features</span><span class="o">=</span><span class="n">max_features</span><span class="p">,</span> <span class="n">random_state</span><span class="o">=</span><span class="n">i</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_trees</span><span class="p">)]</span>
+    <span class="k">for</span> <span class="n">tree</span> <span class="ow">in</span> <span class="n">trees</span><span class="p">:</span> <span class="n">eval_tree</span><span class="p">(</span><span class="n">tree</span><span class="p">,</span> <span class="n">X</span><span class="p">,</span> <span class="n">y</span><span class="p">)</span> <span class="c1"># new logic</span>
+    <span class="k">return</span> <span class="n">trees</span>
+
+<span class="k">with</span> <span class="n">run</span><span class="p">(</span><span class="n">storage</span><span class="p">,</span> <span class="n">lazy</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+    <span class="n">X</span><span class="p">,</span> <span class="n">y</span> <span class="o">=</span> <span class="n">get_data</span><span class="p">()</span>
+    <span class="k">for</span> <span class="n">n_trees</span> <span class="ow">in</span> <span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="mi">20</span><span class="p">):</span>
+        <span class="n">trees</span> <span class="o">=</span> <span class="n">train_trees</span><span class="p">(</span><span class="n">X</span><span class="o">=</span><span class="n">X</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="n">y</span><span class="p">,</span> <span class="n">n_trees</span><span class="o">=</span><span class="n">n_trees</span><span class="p">)</span>
+        <span class="n">forest_acc</span> <span class="o">=</span> <span class="n">eval_forest</span><span class="p">(</span><span class="n">trees</span><span class="o">=</span><span class="n">trees</span><span class="p">,</span> <span class="n">X</span><span class="o">=</span><span class="n">X</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="n">y</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+<p>Note that the new version of <code class="docutils literal notranslate"><span class="pre">train_trees</span></code> still returns the same list of
+trees, so downstream calls using this list are unaffected. The only new work
+done was running <code class="docutils literal notranslate"><span class="pre">eval_tree</span></code> inside <code class="docutils literal notranslate"><span class="pre">train_trees</span></code>.</p>
+</div>
+<div class="section" id="advanced-query-patterns">
+<h4>Advanced query patterns<a class="headerlink" href="#advanced-query-patterns" title="Permalink to this headline">¶</a></h4>
+<p>Below is code to query the internals of <code class="docutils literal notranslate"><span class="pre">train_tree</span></code>:</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">with</span> <span class="n">query</span><span class="p">(</span><span class="n">storage</span><span class="p">)</span> <span class="k">as</span> <span class="n">q</span><span class="p">:</span>
+    <span class="n">X</span><span class="p">,</span> <span class="n">y</span> <span class="o">=</span> <span class="n">get_data</span><span class="p">()</span>
+    <span class="n">tree</span> <span class="o">=</span> <span class="n">train_tree</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">y</span><span class="p">)</span><span class="o">.</span><span class="n">named</span><span class="p">(</span><span class="s1">&#39;tree&#39;</span><span class="p">)</span>
+    <span class="n">tree_acc</span> <span class="o">=</span> <span class="n">eval_tree</span><span class="p">(</span><span class="n">tree</span><span class="p">,</span> <span class="n">X</span><span class="p">,</span> <span class="n">y</span><span class="p">)</span><span class="o">.</span><span class="n">named</span><span class="p">(</span><span class="s1">&#39;tree_acc&#39;</span><span class="p">)</span>
+    <span class="n">df_trees</span> <span class="o">=</span> <span class="n">q</span><span class="o">.</span><span class="n">get_table</span><span class="p">(</span><span class="n">tree</span><span class="p">,</span> <span class="n">tree_acc</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">df_trees</span><span class="o">.</span><span class="n">head</span><span class="p">())</span>
+    <span class="k">with</span> <span class="n">q</span><span class="o">.</span><span class="n">branch</span><span class="p">():</span>
+        <span class="n">trees</span> <span class="o">=</span> <span class="n">MakeList</span><span class="p">(</span><span class="n">containing</span><span class="o">=</span><span class="n">tree</span><span class="p">,</span> <span class="n">at_index</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">named</span><span class="p">(</span><span class="s1">&#39;trees&#39;</span><span class="p">)</span>
+        <span class="n">forest_acc</span> <span class="o">=</span> <span class="n">eval_forest</span><span class="p">(</span><span class="n">trees</span><span class="p">,</span> <span class="n">X</span><span class="p">,</span> <span class="n">y</span><span class="p">)</span><span class="o">.</span><span class="n">named</span><span class="p">(</span><span class="s1">&#39;forest_acc&#39;</span><span class="p">)</span>
+        <span class="n">df_forest</span> <span class="o">=</span> <span class="n">q</span><span class="o">.</span><span class="n">get_table</span><span class="p">(</span><span class="n">trees</span><span class="p">,</span> <span class="n">forest_acc</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="n">df_forest</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>                                                tree  tree_acc
+0  DecisionTreeClassifier(max_depth=2, max_featur...      0.56
+1  DecisionTreeClassifier(max_depth=2, max_featur...      0.74
+2  DecisionTreeClassifier(max_depth=2, max_featur...      0.67
+3  DecisionTreeClassifier(max_depth=2, max_featur...      0.58
+4  DecisionTreeClassifier(max_depth=2, max_featur...      0.54
+                                               trees  forest_acc
+0  [DecisionTreeClassifier(max_depth=2, max_featu...        0.90
+1  [DecisionTreeClassifier(max_depth=2, max_featu...        0.91
+</pre></div>
+</div>
+</div>
+</div>
+<p>The above example introduces two new concepts:</p>
+<ul class="simple">
+<li><p>the <code class="docutils literal notranslate"><span class="pre">MakeList</span></code> built-in function matches a list given a variable representing
+an element of the list. The additional constraint <code class="docutils literal notranslate"><span class="pre">at_index=0</span></code> makes it so
+that you don’t match <code class="docutils literal notranslate"><span class="pre">trees</span></code> multiple times for each of its elements.</p></li>
+<li><p>the <code class="docutils literal notranslate"><span class="pre">.branch()</span></code> context can be used to give scope to dependencies, so
+that different code blocks don’t interact with one another unless one
+explicitly uses another’s variables. This allows you to match to any
+<code class="docutils literal notranslate"><span class="pre">tree</span></code> outside the <code class="docutils literal notranslate"><span class="pre">branch()</span></code> context, yet match only the first tree in the
+list <code class="docutils literal notranslate"><span class="pre">trees</span></code> inside it.</p></li>
+</ul>
+<p>The upshot is that query structure can be re-used to see both the forest and
+the trees :)</p>
+</div>
+</div>
+</div>
+<div class="section" id="a-few-other-things">
+<h2>A few other things<a class="headerlink" href="#a-few-other-things" title="Permalink to this headline">¶</a></h2>
+<div class="section" id="update-an-operation-to-preserve-past-results">
+<h3>Update an operation to preserve past results<a class="headerlink" href="#update-an-operation-to-preserve-past-results" title="Permalink to this headline">¶</a></h3>
+<p>Above, you created a new version of <code class="docutils literal notranslate"><span class="pre">train_trees</span></code> – which behaves like an
+entirely new operation, sharing only its name with the previous version. In
+particular, all connection to past calls of <code class="docutils literal notranslate"><span class="pre">train_trees</span></code> is lost in the new
+version, which forces recomputation of all calls to <code class="docutils literal notranslate"><span class="pre">train_trees</span></code>.</p>
+<p>Often, you don’t want to lose the connection to past results. You can do this by
+<strong>updating</strong> an operation instead. For example, let’s expose a parameter of
+<code class="docutils literal notranslate"><span class="pre">get_data</span></code>:</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="nd">@op</span><span class="p">(</span><span class="n">storage</span><span class="p">)</span>
+<span class="k">def</span> <span class="nf">get_data</span><span class="p">(</span><span class="n">n_samples</span><span class="o">=</span><span class="n">CompatArg</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="mi">100</span><span class="p">))</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">ndarray</span><span class="p">]:</span>
+    <span class="k">return</span> <span class="n">make_classification</span><span class="p">(</span><span class="n">n_samples</span><span class="o">=</span><span class="n">n_samples</span><span class="p">,</span> <span class="n">random_state</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+<p>Calls to <code class="docutils literal notranslate"><span class="pre">get_data</span></code> can now use the new argument; all existing calls will behave
+as if they were called with <code class="docutils literal notranslate"><span class="pre">n_samples=100</span></code>.</p>
+<div class="section" id="id2">
+<h4>Why should you care?<a class="headerlink" href="#id2" title="Permalink to this headline">¶</a></h4>
+<p>Updating an operation makes it easy to evolve logic in many practical cases:</p>
+<ul class="simple">
+<li><p>expose parameters in the operation’s interface that were hard-coded in its body until now;</p></li>
+<li><p>extend the operation’s behavior, for example by adding a new method for processing the
+input data;</p></li>
+<li><p>create a closely related variant of the operation that can coexist
+with the current one, of fix a bug affecting only some calls to the operation.</p></li>
+</ul>
+</div>
+</div>
+<div class="section" id="deletion-run-code-in-undo-mode">
+<h3>Deletion: run code in undo mode<a class="headerlink" href="#deletion-run-code-in-undo-mode" title="Permalink to this headline">¶</a></h3>
+<p>If you want to un-memoize the results of some calls, wrap them in a <code class="docutils literal notranslate"><span class="pre">delete</span></code>
+block:</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">with</span> <span class="n">run</span><span class="p">(</span><span class="n">storage</span><span class="p">,</span> <span class="n">lazy</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">autocommit</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+    <span class="n">X</span><span class="p">,</span> <span class="n">y</span> <span class="o">=</span> <span class="n">get_data</span><span class="p">()</span>
+    <span class="k">with</span> <span class="n">delete</span><span class="p">():</span>
+        <span class="n">trees</span> <span class="o">=</span> <span class="n">train_trees</span><span class="p">(</span><span class="n">X</span><span class="o">=</span><span class="n">X</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="n">y</span><span class="p">,</span> <span class="n">n_trees</span><span class="o">=</span><span class="mi">20</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+<p>It’s important to understand just what you deleted by doing this. Deletion works by</p>
+<ul class="simple">
+<li><p>collecting all calls captured in a <code class="docutils literal notranslate"><span class="pre">delete</span></code> block, recursively including those inside
+higher-level operations;</p></li>
+<li><p>deleting these calls and their outputs;</p></li>
+<li><p>and all results and calls that were computed using these outputs;</p></li>
+<li><p>and all calls that involve (as inputs or outputs) any of the deleted values
+described above.</p></li>
+</ul>
+<p>This means that all decision trees trained in the call to <code class="docutils literal notranslate"><span class="pre">train_trees</span></code> got
+deleted. These are <em>all</em> decision trees in the project, since the first 10 are
+shared between the calls with <code class="docutils literal notranslate"><span class="pre">n_trees=10</span></code> and <code class="docutils literal notranslate"><span class="pre">n_trees=20</span></code>. As a consequence,
+the call to <code class="docutils literal notranslate"><span class="pre">train_trees</span></code> with <code class="docutils literal notranslate"><span class="pre">n_trees=10</span></code> is deleted too, because it involves
+a list of deleted trees.</p>
+<p>There’s also a declarative interface to delete results, which is analogous to the
+declarative query interface.</p>
+</div>
+</div>
+<div class="section" id="next-steps">
+<h2>Next steps<a class="headerlink" href="#next-steps" title="Permalink to this headline">¶</a></h2>
+<p>There are some important capabilities of the library not covered in this
+tutorial. These will be linked to if tutorials on them become available:</p>
+<ul class="simple">
+<li><p>you can disable memoization selectively on a per-output basis. This can be
+used to force quantities to be recomputed on demand when this is more
+practical than saving and loading (think <code class="docutils literal notranslate"><span class="pre">lambda</span> <span class="pre">x:</span> <span class="pre">x</span> <span class="pre">+</span> <span class="pre">1</span></code> for a large array
+<code class="docutils literal notranslate"><span class="pre">x</span></code>);</p></li>
+<li><p>you can use custom object storage logic on a per-type basis (the default is
+<code class="docutils literal notranslate"><span class="pre">joblib</span></code>, and there’s builtin support for <code class="docutils literal notranslate"><span class="pre">sqlite</span></code>+<code class="docutils literal notranslate"><span class="pre">pickle</span></code> too);</p></li>
+<li><p>you can nest different kinds of contexts, for example a <code class="docutils literal notranslate"><span class="pre">query</span></code> context inside
+a <code class="docutils literal notranslate"><span class="pre">run</span></code> context, to compose their functionality</p></li>
+</ul>
+</div>
+</div>
+
+    <script type="text/x-thebe-config">
+    {
+        requestKernel: true,
+        binderOptions: {
+            repo: "binder-examples/jupyter-stacks-datascience",
+            ref: "master",
+        },
+        codeMirrorConfig: {
+            theme: "abcdef",
+            mode: "python"
+        },
+        kernelOptions: {
+            kernelName: "python3",
+            path: "./intros"
+        },
+        predefinedOutput: true
+    }
+    </script>
+    <script>kernelName = 'python3'</script>
+
+              </div>
+              
+        
+            <!-- Previous / next buttons -->
+<div class='prev-next-area'> 
+    <a class='left-prev' id="prev-link" href="two_mins.html" title="previous page">
+        <i class="fas fa-angle-left"></i>
+        <div class="prev-next-info">
+            <p class="prev-next-subtitle">previous</p>
+            <p class="prev-next-title">A 2-minute primer</p>
+        </div>
+    </a>
+    <a class='right-next' id="next-link" href="../tutorials/main.html" title="next page">
+    <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">Tutorials</p>
+    </div>
+    <i class="fas fa-angle-right"></i>
+    </a>
+</div>
+        
+        </div>
+    </div>
+    <footer class="footer">
+    <div class="container">
+      <p>
+        
+          By A. Makelov<br/>
+        
+            &copy; Copyright 2021, A. Makelov.<br/>
+      </p>
+    </div>
+  </footer>
+</main>
+
+
+      </div>
+    </div>
+  
+  <script src="../_static/js/index.be7d3bbb2ef33a8344ce.js"></script>
+
+  </body>
+</html>
