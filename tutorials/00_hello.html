@@ -1,0 +1,565 @@
+
+<!DOCTYPE html>
+
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Hello world! &#8212; Mandala</title>
+    
+  <link href="../_static/css/theme.css" rel="stylesheet">
+  <link href="../_static/css/index.ff1ffe594081f20da1ef19478df9384b.css" rel="stylesheet">
+
+    
+  <link rel="stylesheet"
+    href="../_static/vendor/fontawesome/5.13.0/css/all.min.css">
+  <link rel="preload" as="font" type="font/woff2" crossorigin
+    href="../_static/vendor/fontawesome/5.13.0/webfonts/fa-solid-900.woff2">
+  <link rel="preload" as="font" type="font/woff2" crossorigin
+    href="../_static/vendor/fontawesome/5.13.0/webfonts/fa-brands-400.woff2">
+
+    
+      
+
+    
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/sphinx-book-theme.css?digest=c3fdc42140077d1ad13ad2f1588a4309" />
+    <link rel="stylesheet" type="text/css" href="../_static/togglebutton.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/copybutton.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/mystnb.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/sphinx-thebe.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/proof.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/custom.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/custom.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/panels-main.c949a650a448cc0ae9fd3441c0e17fb0.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/panels-variables.06eb56fa6e07937060861dad626602ad.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/custom.css" />
+    
+  <link rel="preload" as="script" href="../_static/js/index.be7d3bbb2ef33a8344ce.js">
+
+    <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
+    <script src="../_static/jquery.js"></script>
+    <script src="../_static/underscore.js"></script>
+    <script src="../_static/doctools.js"></script>
+    <script src="../_static/togglebutton.js"></script>
+    <script src="../_static/clipboard.min.js"></script>
+    <script src="../_static/copybutton.js"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown, .tag_hide_input div.cell_input, .tag_hide-input div.cell_input, .tag_hide_output div.cell_output, .tag_hide-output div.cell_output, .tag_hide_cell.cell, .tag_hide-cell.cell';</script>
+    <script src="../_static/sphinx-book-theme.12a9622fbb08dcb3a2a40b2c02b83a57.js"></script>
+    <script async="async" src="https://unpkg.com/thebe@0.5.1/lib/index.js"></script>
+    <script>
+        const thebe_selector = ".thebe"
+        const thebe_selector_input = "pre"
+        const thebe_selector_output = ".output"
+    </script>
+    <script async="async" src="../_static/sphinx-thebe.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="prev" title="Tutorials" href="main.html" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="docsearch:language" content="None">
+    
+
+    <!-- Google Analytics -->
+    
+  </head>
+  <body data-spy="scroll" data-target="#bd-toc-nav" data-offset="80">
+    
+    <div class="container-fluid" id="banner"></div>
+
+    
+
+    <div class="container-xl">
+      <div class="row">
+          
+<div class="col-12 col-md-3 bd-sidebar site-navigation show" id="site-navigation">
+    
+        <div class="navbar-brand-box">
+    <a class="navbar-brand text-wrap" href="../index.html">
+      
+      
+      
+      <h1 class="site-logo" id="site-title">Mandala</h1>
+      
+    </a>
+</div><form class="bd-search d-flex align-items-center" action="../search.html" method="get">
+  <i class="icon fas fa-search"></i>
+  <input type="search" class="form-control" name="q" id="search-input" placeholder="Search this book..." aria-label="Search this book..." autocomplete="off" >
+</form><nav class="bd-links" id="bd-docs-nav" aria-label="Main">
+    <div class="bd-toc-item active">
+        <ul class="nav bd-sidenav">
+ <li class="toctree-l1">
+  <a class="reference internal" href="../index.html">
+   Mandala: self-managing experiments
+  </a>
+ </li>
+</ul>
+<p aria-level="2" class="caption" role="heading">
+ <span class="caption-text">
+  Get started
+ </span>
+</p>
+<ul class="current nav bd-sidenav">
+ <li class="toctree-l1">
+  <a class="reference internal" href="../intros/two_mins.html">
+   A 2-minute primer
+  </a>
+ </li>
+ <li class="toctree-l1">
+  <a class="reference internal" href="../intros/ten_mins.html">
+   Manage a toy ML project
+  </a>
+ </li>
+ <li class="toctree-l1 current active has-children">
+  <a class="reference internal" href="main.html">
+   Tutorials
+  </a>
+  <input checked="" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" type="checkbox"/>
+  <label for="toctree-checkbox-1">
+   <i class="fas fa-chevron-down">
+   </i>
+  </label>
+  <ul class="current">
+   <li class="toctree-l2 current active">
+    <a class="current reference internal" href="#">
+     Hello world!
+    </a>
+   </li>
+  </ul>
+ </li>
+</ul>
+
+    </div>
+</nav> <!-- To handle the deprecated key -->
+
+<div class="navbar_extra_footer">
+  Powered by <a href="https://jupyterbook.org">Jupyter Book</a>
+</div>
+
+</div>
+
+
+          
+
+
+          
+<main class="col py-md-3 pl-md-4 bd-content overflow-auto" role="main">
+    
+    <div class="topbar container-xl fixed-top">
+    <div class="topbar-contents row">
+        <div class="col-12 col-md-3 bd-topbar-whitespace site-navigation show"></div>
+        <div class="col pl-md-4 topbar-main">
+            
+            <button id="navbar-toggler" class="navbar-toggler ml-0" type="button" data-toggle="collapse"
+                data-toggle="tooltip" data-placement="bottom" data-target=".site-navigation" aria-controls="navbar-menu"
+                aria-expanded="true" aria-label="Toggle navigation" aria-controls="site-navigation"
+                title="Toggle navigation" data-toggle="tooltip" data-placement="left">
+                <i class="fas fa-bars"></i>
+                <i class="fas fa-arrow-left"></i>
+                <i class="fas fa-arrow-up"></i>
+            </button>
+            
+            
+<div class="dropdown-buttons-trigger">
+    <button id="dropdown-buttons-trigger" class="btn btn-secondary topbarbtn" aria-label="Download this page"><i
+            class="fas fa-download"></i></button>
+
+    <div class="dropdown-buttons">
+        <!-- ipynb file if we had a myst markdown file -->
+        
+        <!-- Download raw file -->
+        <a class="dropdown-buttons" href="../_sources/tutorials/00_hello.ipynb"><button type="button"
+                class="btn btn-secondary topbarbtn" title="Download source file" data-toggle="tooltip"
+                data-placement="left">.ipynb</button></a>
+        <!-- Download PDF via print -->
+        <button type="button" id="download-print" class="btn btn-secondary topbarbtn" title="Print to PDF"
+            onClick="window.print()" data-toggle="tooltip" data-placement="left">.pdf</button>
+    </div>
+</div>
+
+            <!-- Source interaction buttons -->
+
+<div class="dropdown-buttons-trigger">
+    <button id="dropdown-buttons-trigger" class="btn btn-secondary topbarbtn"
+        aria-label="Connect with source repository"><i class="fab fa-github"></i></button>
+    <div class="dropdown-buttons sourcebuttons">
+        <a class="repository-button"
+            href="https://github.com/executablebooks/jupyter-book"><button type="button" class="btn btn-secondary topbarbtn"
+                data-toggle="tooltip" data-placement="left" title="Source repository"><i
+                    class="fab fa-github"></i>repository</button></a>
+        <a class="issues-button"
+            href="https://github.com/executablebooks/jupyter-book/issues/new?title=Issue%20on%20page%20%2Ftutorials/00_hello.html&body=Your%20issue%20content%20here."><button
+                type="button" class="btn btn-secondary topbarbtn" data-toggle="tooltip" data-placement="left"
+                title="Open an issue"><i class="fas fa-lightbulb"></i>open issue</button></a>
+        
+    </div>
+</div>
+
+            <!-- Full screen (wrap in <a> to have style consistency -->
+
+<a class="full-screen-button"><button type="button" class="btn btn-secondary topbarbtn" data-toggle="tooltip"
+        data-placement="bottom" onclick="toggleFullScreen()" aria-label="Fullscreen mode"
+        title="Fullscreen mode"><i
+            class="fas fa-expand"></i></button></a>
+
+            <!-- Launch buttons -->
+
+<div class="dropdown-buttons-trigger">
+    <button id="dropdown-buttons-trigger" class="btn btn-secondary topbarbtn"
+        aria-label="Launch interactive content"><i class="fas fa-rocket"></i></button>
+    <div class="dropdown-buttons">
+        
+        <a class="binder-button" href="https://mybinder.org/v2/gh/executablebooks/jupyter-book/master?urlpath=tree/jbook/docs/tutorials/00_hello.ipynb"><button type="button"
+                class="btn btn-secondary topbarbtn" title="Launch Binder" data-toggle="tooltip"
+                data-placement="left"><img class="binder-button-logo"
+                    src="../_static/images/logo_binder.svg"
+                    alt="Interact on binder">Binder</button></a>
+        
+        
+        
+        
+    </div>
+</div>
+
+        </div>
+
+        <!-- Table of contents -->
+        <div class="d-none d-md-block col-md-2 bd-toc show">
+            
+            <div class="tocsection onthispage pt-5 pb-3">
+                <i class="fas fa-list"></i> Contents
+            </div>
+            <nav id="bd-toc-nav" aria-label="Page">
+                <ul class="visible nav section-nav flex-column">
+ <li class="toc-h2 nav-item toc-entry">
+  <a class="reference internal nav-link" href="#define-an-operation">
+   Define an operation
+  </a>
+ </li>
+ <li class="toc-h2 nav-item toc-entry">
+  <a class="reference internal nav-link" href="#call-the-operation-in-a-run-context-to-save-results">
+   Call the operation in a
+   <code class="docutils literal notranslate">
+    <span class="pre">
+     run
+    </span>
+   </code>
+   context to save results
+  </a>
+ </li>
+ <li class="toc-h2 nav-item toc-entry">
+  <a class="reference internal nav-link" href="#call-the-operation-again-to-load-results">
+   Call the operation again to
+   <em>
+    load
+   </em>
+   results
+  </a>
+ </li>
+ <li class="toc-h2 nav-item toc-entry">
+  <a class="reference internal nav-link" href="#exercise-extend-the-computation">
+   Exercise: extend the computation
+  </a>
+ </li>
+ <li class="toc-h2 nav-item toc-entry">
+  <a class="reference internal nav-link" href="#exercise-compose-operations">
+   Exercise: compose operations
+  </a>
+ </li>
+ <li class="toc-h2 nav-item toc-entry">
+  <a class="reference internal nav-link" href="#next-steps">
+   Next steps
+  </a>
+ </li>
+</ul>
+
+            </nav>
+        </div>
+    </div>
+</div>
+    <div id="main-content" class="row">
+        <div class="col-12 col-md-9 pl-md-3 pr-md-0">
+        
+              <div>
+                
+  <div class="tex2jax_ignore mathjax_ignore section" id="hello-world">
+<span id="tutorial-hello"></span><h1>Hello world!<a class="headerlink" href="#hello-world" title="Permalink to this headline">¶</a></h1>
+<p>In this tutorial, you will create a storage and use it to track calls to a
+Python function. You will save time when calling the function on the same inputs
+a second time, by having the result loaded for you instead of being computed
+again.</p>
+<div class="section" id="define-an-operation">
+<h2>Define an operation<a class="headerlink" href="#define-an-operation" title="Permalink to this headline">¶</a></h2>
+<p>First, import the necessary objects and create a storage:</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">mandala.all</span> <span class="kn">import</span> <span class="o">*</span>
+<span class="n">storage</span> <span class="o">=</span> <span class="n">Storage</span><span class="p">(</span><span class="n">in_memory</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+<p>The <code class="docutils literal notranslate"><span class="pre">storage</span></code> object is used to store the inputs and outputs for calls to Python
+functions. To make this automatic, you must tell the storage about the function
+by decorating the function with the <code class="docutils literal notranslate"><span class="pre">&#64;op()</span></code> decorator, passing the storage as
+argument:</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="nd">@op</span><span class="p">(</span><span class="n">storage</span><span class="p">)</span>
+<span class="k">def</span> <span class="nf">add</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;Hello world!&#39;</span><span class="p">)</span>
+    <span class="c1"># ...some long computation...</span>
+    <span class="k">return</span> <span class="n">x</span> <span class="o">+</span> <span class="n">y</span> 
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output text_html"><pre style="white-space:pre;overflow-x:auto;line-height:normal;font-family:Menlo,'DejaVu Sans Mono',consolas,'Courier New',monospace"><span style="color: #7fbfbf; text-decoration-color: #7fbfbf">[23:52:28] </span><span style="color: #000080; text-decoration-color: #000080">INFO    </span> CREATE OPERATION <span style="color: #008000; text-decoration-color: #008000">"add"</span> <span style="font-weight: bold">(</span><span style="color: #808000; text-decoration-color: #808000">VERSION</span>=<span style="color: #008080; text-decoration-color: #008080; font-weight: bold">0</span><span style="font-weight: bold">)</span>:                        <span style="color: #7f7f7f; text-decoration-color: #7f7f7f">storage.py:172</span>
+</pre>
+</div><div class="output text_html"><pre style="white-space:pre;overflow-x:auto;line-height:normal;font-family:Menlo,'DejaVu Sans Mono',consolas,'Courier New',monospace"><span style="color: #7fbfbf; text-decoration-color: #7fbfbf">           </span><span style="color: #000080; text-decoration-color: #000080">INFO    </span> <span style="color: #800080; text-decoration-color: #800080; font-weight: bold">Operation</span><span style="font-weight: bold">(</span><span style="color: #808000; text-decoration-color: #808000">name</span>=<span style="color: #800080; text-decoration-color: #800080">add</span>, <span style="color: #808000; text-decoration-color: #808000">version</span>=<span style="color: #008080; text-decoration-color: #008080; font-weight: bold">0</span>, <span style="color: #808000; text-decoration-color: #808000">signature</span>=<span style="font-weight: bold">(</span>x: <span style="color: #800080; text-decoration-color: #800080; font-weight: bold">AnyType</span><span style="font-weight: bold">()</span>, y: <span style="color: #7f7f7f; text-decoration-color: #7f7f7f">storage.py:173</span>
+<span style="color: #7fbfbf; text-decoration-color: #7fbfbf">           </span>         <span style="color: #800080; text-decoration-color: #800080; font-weight: bold">AnyType</span><span style="font-weight: bold">())</span> |---&gt; <span style="font-weight: bold">(</span>output_0: <span style="color: #800080; text-decoration-color: #800080; font-weight: bold">AtomType</span><span style="font-weight: bold">(</span>int<span style="font-weight: bold">)))</span>                <span style="color: #7f7f7f; text-decoration-color: #7f7f7f">              </span>
+</pre>
+</div></div>
+</div>
+<p>This process of connecting a function to the storage turns it into an
+<strong>operation</strong>, which is the fundamental unit of tracking and computation in
+Mandala.</p>
+</div>
+<div class="section" id="call-the-operation-in-a-run-context-to-save-results">
+<h2>Call the operation in a <code class="docutils literal notranslate"><span class="pre">run</span></code> context to save results<a class="headerlink" href="#call-the-operation-in-a-run-context-to-save-results" title="Permalink to this headline">¶</a></h2>
+<p>Next, call the operation <code class="docutils literal notranslate"><span class="pre">add</span></code> you just defined:</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">add</span><span class="p">(</span><span class="mi">23</span><span class="p">,</span> <span class="mi">42</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Hello world!
+</pre></div>
+</div>
+<div class="output text_html"><pre style="white-space:pre;overflow-x:auto;line-height:normal;font-family:Menlo,'DejaVu Sans Mono',consolas,'Courier New',monospace"><span style="color: #008080; text-decoration-color: #008080; font-weight: bold">65</span>
+</pre>
+</div></div>
+</div>
+<p>This is just the normal behavior of the function. Importantly, <strong>no data was
+saved to storage by the above call</strong>, and the function returns what you would
+expect. To track the results of computations, you must instead wrap them in the
+<code class="docutils literal notranslate"><span class="pre">run</span></code> context manager:</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">with</span> <span class="n">run</span><span class="p">(</span><span class="n">storage</span><span class="p">):</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="n">add</span><span class="p">(</span><span class="mi">23</span><span class="p">,</span> <span class="mi">42</span><span class="p">)</span>
+<span class="n">result</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Hello world!
+</pre></div>
+</div>
+<div class="output text_html"><pre style="white-space:pre;overflow-x:auto;line-height:normal;font-family:Menlo,'DejaVu Sans Mono',consolas,'Courier New',monospace"><span style="color: #7fbfbf; text-decoration-color: #7fbfbf">           </span><span style="color: #000080; text-decoration-color: #000080">INFO    </span> SUMMARY OF COMMITED CALLS:                                 <span style="color: #7f7f7f; text-decoration-color: #7f7f7f">storage.py:427</span>
+<span style="color: #7fbfbf; text-decoration-color: #7fbfbf">           </span>           Operation  Number of calls                               <span style="color: #7f7f7f; text-decoration-color: #7f7f7f">              </span>
+<span style="color: #7fbfbf; text-decoration-color: #7fbfbf">           </span>         <span style="color: #008080; text-decoration-color: #008080; font-weight: bold">0</span>       add                <span style="color: #008080; text-decoration-color: #008080; font-weight: bold">1</span>                               <span style="color: #7f7f7f; text-decoration-color: #7f7f7f">              </span>
+</pre>
+</div><div class="output text_html"><pre style="white-space:pre;overflow-x:auto;line-height:normal;font-family:Menlo,'DejaVu Sans Mono',consolas,'Courier New',monospace"><span style="color: #7fbfbf; text-decoration-color: #7fbfbf">           </span><span style="color: #000080; text-decoration-color: #000080">INFO    </span> Committed <span style="color: #008080; text-decoration-color: #008080; font-weight: bold">1</span> calls from partition __temp__                  <span style="color: #7f7f7f; text-decoration-color: #7f7f7f">storage.py:428</span>
+</pre>
+</div><div class="output text_html"><pre style="white-space:pre;overflow-x:auto;line-height:normal;font-family:Menlo,'DejaVu Sans Mono',consolas,'Courier New',monospace"><span style="color: #800080; text-decoration-color: #800080; font-weight: bold">AtomRef</span><span style="font-weight: bold">(</span><span style="color: #008080; text-decoration-color: #008080; font-weight: bold">65</span>, <span style="color: #808000; text-decoration-color: #808000">type</span>=<span style="color: #800080; text-decoration-color: #800080; font-weight: bold">AtomType</span><span style="font-weight: bold">(</span>int<span style="font-weight: bold">))</span>
+</pre>
+</div></div>
+</div>
+<p>The above code recorded in storage that the function <code class="docutils literal notranslate"><span class="pre">add</span></code> was called on the
+inputs <code class="docutils literal notranslate"><span class="pre">23</span></code> and <code class="docutils literal notranslate"><span class="pre">42</span></code>, and that the result’s value was <code class="docutils literal notranslate"><span class="pre">65</span></code>. The returned object
+<code class="docutils literal notranslate"><span class="pre">result</span></code> is a <strong>value reference</strong>. Value references represent an arbitrary
+Python object wrapped together with metadata used for storage and computation.</p>
+</div>
+<div class="section" id="call-the-operation-again-to-load-results">
+<h2>Call the operation again to <em>load</em> results<a class="headerlink" href="#call-the-operation-again-to-load-results" title="Permalink to this headline">¶</a></h2>
+<p>Importantly, re-running this code will not recompute the function, since the results
+already exist in storage. Instead, the storage will figure out for you that you
+have already called the function on these inputs, and will retreive the result;
+this is called <strong>retracing</strong> the computation:</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">with</span> <span class="n">run</span><span class="p">(</span><span class="n">storage</span><span class="p">):</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="n">add</span><span class="p">(</span><span class="mi">23</span><span class="p">,</span> <span class="mi">42</span><span class="p">)</span>
+<span class="n">result</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output text_html"><pre style="white-space:pre;overflow-x:auto;line-height:normal;font-family:Menlo,'DejaVu Sans Mono',consolas,'Courier New',monospace"><span style="color: #7fbfbf; text-decoration-color: #7fbfbf">           </span><span style="color: #000080; text-decoration-color: #000080">INFO    </span> Committed <span style="color: #008080; text-decoration-color: #008080; font-weight: bold">0</span> calls from partition __temp__                  <span style="color: #7f7f7f; text-decoration-color: #7f7f7f">storage.py:428</span>
+</pre>
+</div><div class="output text_html"><pre style="white-space:pre;overflow-x:auto;line-height:normal;font-family:Menlo,'DejaVu Sans Mono',consolas,'Courier New',monospace"><span style="color: #800080; text-decoration-color: #800080; font-weight: bold">AtomRef</span><span style="font-weight: bold">(</span><span style="color: #008080; text-decoration-color: #008080; font-weight: bold">65</span>, <span style="color: #808000; text-decoration-color: #808000">type</span>=<span style="color: #800080; text-decoration-color: #800080; font-weight: bold">AtomType</span><span style="font-weight: bold">(</span>int<span style="font-weight: bold">))</span>
+</pre>
+</div></div>
+</div>
+<p>Observe that this time nothing was printed out, because <code class="docutils literal notranslate"><span class="pre">add</span></code> was not actually
+computed.</p>
+</div>
+<div class="section" id="exercise-extend-the-computation">
+<h2>Exercise: extend the computation<a class="headerlink" href="#exercise-extend-the-computation" title="Permalink to this headline">¶</a></h2>
+<p>As an exercise, run the following code next:</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">with</span> <span class="n">run</span><span class="p">(</span><span class="n">storage</span><span class="p">):</span>
+    <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">20</span><span class="p">,</span> <span class="mi">25</span><span class="p">):</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="n">add</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="mi">42</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Hello world!
+Hello world!
+Hello world!
+Hello world!
+</pre></div>
+</div>
+<div class="output text_html"><pre style="white-space:pre;overflow-x:auto;line-height:normal;font-family:Menlo,'DejaVu Sans Mono',consolas,'Courier New',monospace"><span style="color: #7fbfbf; text-decoration-color: #7fbfbf">           </span><span style="color: #000080; text-decoration-color: #000080">INFO    </span> SUMMARY OF COMMITED CALLS:                                 <span style="color: #7f7f7f; text-decoration-color: #7f7f7f">storage.py:427</span>
+<span style="color: #7fbfbf; text-decoration-color: #7fbfbf">           </span>           Operation  Number of calls                               <span style="color: #7f7f7f; text-decoration-color: #7f7f7f">              </span>
+<span style="color: #7fbfbf; text-decoration-color: #7fbfbf">           </span>         <span style="color: #008080; text-decoration-color: #008080; font-weight: bold">0</span>       add                <span style="color: #008080; text-decoration-color: #008080; font-weight: bold">4</span>                               <span style="color: #7f7f7f; text-decoration-color: #7f7f7f">              </span>
+</pre>
+</div><div class="output text_html"><pre style="white-space:pre;overflow-x:auto;line-height:normal;font-family:Menlo,'DejaVu Sans Mono',consolas,'Courier New',monospace"><span style="color: #7fbfbf; text-decoration-color: #7fbfbf">           </span><span style="color: #000080; text-decoration-color: #000080">INFO    </span> Committed <span style="color: #008080; text-decoration-color: #008080; font-weight: bold">4</span> calls from partition __temp__                  <span style="color: #7f7f7f; text-decoration-color: #7f7f7f">storage.py:428</span>
+</pre>
+</div></div>
+</div>
+<p>What happened? How many times was <code class="docutils literal notranslate"><span class="pre">&quot;Hello,</span> <span class="pre">world!&quot;</span></code> printed out? Why?</p>
+</div>
+<div class="section" id="exercise-compose-operations">
+<h2>Exercise: compose operations<a class="headerlink" href="#exercise-compose-operations" title="Permalink to this headline">¶</a></h2>
+<p>Operations are intended to be used as building blocks of larger computations.
+Below, define an increment operation <code class="docutils literal notranslate"><span class="pre">inc</span></code> that on input <code class="docutils literal notranslate"><span class="pre">x</span></code> returns <code class="docutils literal notranslate"><span class="pre">x+1</span></code> and prints
+out a message.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1">### your code here</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="nd">@op</span><span class="p">(</span><span class="n">storage</span><span class="p">)</span>
+<span class="k">def</span> <span class="nf">inc</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;Hello from inc!&#39;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">x</span> <span class="o">+</span> <span class="mi">1</span> 
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output text_html"><pre style="white-space:pre;overflow-x:auto;line-height:normal;font-family:Menlo,'DejaVu Sans Mono',consolas,'Courier New',monospace"><span style="color: #7fbfbf; text-decoration-color: #7fbfbf">           </span><span style="color: #000080; text-decoration-color: #000080">INFO    </span> CREATE OPERATION <span style="color: #008000; text-decoration-color: #008000">"inc"</span> <span style="font-weight: bold">(</span><span style="color: #808000; text-decoration-color: #808000">VERSION</span>=<span style="color: #008080; text-decoration-color: #008080; font-weight: bold">0</span><span style="font-weight: bold">)</span>:                        <span style="color: #7f7f7f; text-decoration-color: #7f7f7f">storage.py:172</span>
+</pre>
+</div><div class="output text_html"><pre style="white-space:pre;overflow-x:auto;line-height:normal;font-family:Menlo,'DejaVu Sans Mono',consolas,'Courier New',monospace"><span style="color: #7fbfbf; text-decoration-color: #7fbfbf">           </span><span style="color: #000080; text-decoration-color: #000080">INFO    </span> <span style="color: #800080; text-decoration-color: #800080; font-weight: bold">Operation</span><span style="font-weight: bold">(</span><span style="color: #808000; text-decoration-color: #808000">name</span>=<span style="color: #800080; text-decoration-color: #800080">inc</span>, <span style="color: #808000; text-decoration-color: #808000">version</span>=<span style="color: #008080; text-decoration-color: #008080; font-weight: bold">0</span>, <span style="color: #808000; text-decoration-color: #808000">signature</span>=<span style="font-weight: bold">(</span>x: <span style="color: #800080; text-decoration-color: #800080; font-weight: bold">AnyType</span><span style="font-weight: bold">())</span>    <span style="color: #7f7f7f; text-decoration-color: #7f7f7f">storage.py:173</span>
+<span style="color: #7fbfbf; text-decoration-color: #7fbfbf">           </span>         |---&gt; <span style="font-weight: bold">(</span>output_0: <span style="color: #800080; text-decoration-color: #800080; font-weight: bold">AtomType</span><span style="font-weight: bold">(</span>int<span style="font-weight: bold">)))</span>                           <span style="color: #7f7f7f; text-decoration-color: #7f7f7f">              </span>
+</pre>
+</div></div>
+</div>
+<p>Now run the following code that combines <code class="docutils literal notranslate"><span class="pre">add</span></code> and <code class="docutils literal notranslate"><span class="pre">inc</span></code> into a toy pipeline and
+saves the results:</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">with</span> <span class="n">run</span><span class="p">(</span><span class="n">storage</span><span class="p">):</span>
+    <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">3</span><span class="p">):</span>
+        <span class="n">n_inc</span> <span class="o">=</span> <span class="n">inc</span><span class="p">(</span><span class="n">n</span><span class="p">)</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="n">add</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">n_inc</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Hello from inc!
+Hello world!
+Hello from inc!
+Hello world!
+Hello from inc!
+Hello world!
+</pre></div>
+</div>
+<div class="output text_html"><pre style="white-space:pre;overflow-x:auto;line-height:normal;font-family:Menlo,'DejaVu Sans Mono',consolas,'Courier New',monospace"><span style="color: #7fbfbf; text-decoration-color: #7fbfbf">           </span><span style="color: #000080; text-decoration-color: #000080">INFO    </span> SUMMARY OF COMMITED CALLS:                                 <span style="color: #7f7f7f; text-decoration-color: #7f7f7f">storage.py:427</span>
+<span style="color: #7fbfbf; text-decoration-color: #7fbfbf">           </span>           Operation  Number of calls                               <span style="color: #7f7f7f; text-decoration-color: #7f7f7f">              </span>
+<span style="color: #7fbfbf; text-decoration-color: #7fbfbf">           </span>         <span style="color: #008080; text-decoration-color: #008080; font-weight: bold">0</span>       add                <span style="color: #008080; text-decoration-color: #008080; font-weight: bold">3</span>                               <span style="color: #7f7f7f; text-decoration-color: #7f7f7f">              </span>
+<span style="color: #7fbfbf; text-decoration-color: #7fbfbf">           </span>         <span style="color: #008080; text-decoration-color: #008080; font-weight: bold">1</span>       inc                <span style="color: #008080; text-decoration-color: #008080; font-weight: bold">3</span>                               <span style="color: #7f7f7f; text-decoration-color: #7f7f7f">              </span>
+</pre>
+</div><div class="output text_html"><pre style="white-space:pre;overflow-x:auto;line-height:normal;font-family:Menlo,'DejaVu Sans Mono',consolas,'Courier New',monospace"><span style="color: #7fbfbf; text-decoration-color: #7fbfbf">           </span><span style="color: #000080; text-decoration-color: #000080">INFO    </span> Committed <span style="color: #008080; text-decoration-color: #008080; font-weight: bold">6</span> calls from partition __temp__                  <span style="color: #7f7f7f; text-decoration-color: #7f7f7f">storage.py:428</span>
+</pre>
+</div></div>
+</div>
+<p>Run the computation again; is anything printed out? Why?</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">with</span> <span class="n">run</span><span class="p">(</span><span class="n">storage</span><span class="p">):</span>
+    <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">3</span><span class="p">):</span>
+        <span class="n">n_inc</span> <span class="o">=</span> <span class="n">inc</span><span class="p">(</span><span class="n">n</span><span class="p">)</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="n">add</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">n_inc</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output text_html"><pre style="white-space:pre;overflow-x:auto;line-height:normal;font-family:Menlo,'DejaVu Sans Mono',consolas,'Courier New',monospace"><span style="color: #7fbfbf; text-decoration-color: #7fbfbf">           </span><span style="color: #000080; text-decoration-color: #000080">INFO    </span> Committed <span style="color: #008080; text-decoration-color: #008080; font-weight: bold">0</span> calls from partition __temp__                  <span style="color: #7f7f7f; text-decoration-color: #7f7f7f">storage.py:428</span>
+</pre>
+</div></div>
+</div>
+</div>
+<div class="section" id="next-steps">
+<h2>Next steps<a class="headerlink" href="#next-steps" title="Permalink to this headline">¶</a></h2>
+<p>You have tracked and resumed your first computation with Mandala. Dive into the
+next tutorials (coming soon) to build a toolkit for extending these concepts to
+increasingly realistic applications.</p>
+</div>
+</div>
+
+    <script type="text/x-thebe-config">
+    {
+        requestKernel: true,
+        binderOptions: {
+            repo: "binder-examples/jupyter-stacks-datascience",
+            ref: "master",
+        },
+        codeMirrorConfig: {
+            theme: "abcdef",
+            mode: "python"
+        },
+        kernelOptions: {
+            kernelName: "python3",
+            path: "./tutorials"
+        },
+        predefinedOutput: true
+    }
+    </script>
+    <script>kernelName = 'python3'</script>
+
+              </div>
+              
+        
+            <!-- Previous / next buttons -->
+<div class='prev-next-area'> 
+    <a class='left-prev' id="prev-link" href="main.html" title="previous page">
+        <i class="fas fa-angle-left"></i>
+        <div class="prev-next-info">
+            <p class="prev-next-subtitle">previous</p>
+            <p class="prev-next-title">Tutorials</p>
+        </div>
+    </a>
+</div>
+        
+        </div>
+    </div>
+    <footer class="footer">
+    <div class="container">
+      <p>
+        
+          By A. Makelov<br/>
+        
+            &copy; Copyright 2021, A. Makelov.<br/>
+      </p>
+    </div>
+  </footer>
+</main>
+
+
+      </div>
+    </div>
+  
+  <script src="../_static/js/index.be7d3bbb2ef33a8344ce.js"></script>
+
+  </body>
+</html>

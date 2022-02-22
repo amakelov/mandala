@@ -1,0 +1,738 @@
+
+<!DOCTYPE html>
+
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Mandala: self-managing experiments &#8212; Mandala</title>
+    
+  <link href="_static/css/theme.css" rel="stylesheet">
+  <link href="_static/css/index.ff1ffe594081f20da1ef19478df9384b.css" rel="stylesheet">
+
+    
+  <link rel="stylesheet"
+    href="_static/vendor/fontawesome/5.13.0/css/all.min.css">
+  <link rel="preload" as="font" type="font/woff2" crossorigin
+    href="_static/vendor/fontawesome/5.13.0/webfonts/fa-solid-900.woff2">
+  <link rel="preload" as="font" type="font/woff2" crossorigin
+    href="_static/vendor/fontawesome/5.13.0/webfonts/fa-brands-400.woff2">
+
+    
+      
+
+    
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css" />
+    <link rel="stylesheet" type="text/css" href="_static/sphinx-book-theme.css?digest=c3fdc42140077d1ad13ad2f1588a4309" />
+    <link rel="stylesheet" type="text/css" href="_static/togglebutton.css" />
+    <link rel="stylesheet" type="text/css" href="_static/copybutton.css" />
+    <link rel="stylesheet" type="text/css" href="_static/mystnb.css" />
+    <link rel="stylesheet" type="text/css" href="_static/sphinx-thebe.css" />
+    <link rel="stylesheet" type="text/css" href="_static/proof.css" />
+    <link rel="stylesheet" type="text/css" href="_static/custom.css" />
+    <link rel="stylesheet" type="text/css" href="_static/custom.css" />
+    <link rel="stylesheet" type="text/css" href="_static/panels-main.c949a650a448cc0ae9fd3441c0e17fb0.css" />
+    <link rel="stylesheet" type="text/css" href="_static/panels-variables.06eb56fa6e07937060861dad626602ad.css" />
+    <link rel="stylesheet" type="text/css" href="_static/custom.css" />
+    
+  <link rel="preload" as="script" href="_static/js/index.be7d3bbb2ef33a8344ce.js">
+
+    <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
+    <script src="_static/jquery.js"></script>
+    <script src="_static/underscore.js"></script>
+    <script src="_static/doctools.js"></script>
+    <script src="_static/togglebutton.js"></script>
+    <script src="_static/clipboard.min.js"></script>
+    <script src="_static/copybutton.js"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown, .tag_hide_input div.cell_input, .tag_hide-input div.cell_input, .tag_hide_output div.cell_output, .tag_hide-output div.cell_output, .tag_hide_cell.cell, .tag_hide-cell.cell';</script>
+    <script src="_static/sphinx-book-theme.12a9622fbb08dcb3a2a40b2c02b83a57.js"></script>
+    <script async="async" src="https://unpkg.com/thebe@0.5.1/lib/index.js"></script>
+    <script>
+        const thebe_selector = ".thebe"
+        const thebe_selector_input = "pre"
+        const thebe_selector_output = ".output"
+    </script>
+    <script async="async" src="_static/sphinx-thebe.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="A 2-minute primer" href="intros/two_mins.html" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="docsearch:language" content="None">
+    
+
+    <!-- Google Analytics -->
+    
+  </head>
+  <body data-spy="scroll" data-target="#bd-toc-nav" data-offset="80">
+    
+    <div class="container-fluid" id="banner"></div>
+
+    
+
+    <div class="container-xl">
+      <div class="row">
+          
+<div class="col-12 col-md-3 bd-sidebar site-navigation show" id="site-navigation">
+    
+        <div class="navbar-brand-box">
+    <a class="navbar-brand text-wrap" href="#">
+      
+      
+      
+      <h1 class="site-logo" id="site-title">Mandala</h1>
+      
+    </a>
+</div><form class="bd-search d-flex align-items-center" action="search.html" method="get">
+  <i class="icon fas fa-search"></i>
+  <input type="search" class="form-control" name="q" id="search-input" placeholder="Search this book..." aria-label="Search this book..." autocomplete="off" >
+</form><nav class="bd-links" id="bd-docs-nav" aria-label="Main">
+    <div class="bd-toc-item active">
+        <ul class="nav bd-sidenav">
+ <li class="toctree-l1 current">
+  <a class="reference internal" href="#">
+   Mandala: self-managing experiments
+  </a>
+ </li>
+</ul>
+<p aria-level="2" class="caption" role="heading">
+ <span class="caption-text">
+  Get started
+ </span>
+</p>
+<ul class="nav bd-sidenav">
+ <li class="toctree-l1">
+  <a class="reference internal" href="intros/two_mins.html">
+   A 2-minute primer
+  </a>
+ </li>
+ <li class="toctree-l1">
+  <a class="reference internal" href="intros/ten_mins.html">
+   Manage a toy ML project
+  </a>
+ </li>
+ <li class="toctree-l1 has-children">
+  <a class="reference internal" href="tutorials/main.html">
+   Tutorials
+  </a>
+  <input class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" type="checkbox"/>
+  <label for="toctree-checkbox-1">
+   <i class="fas fa-chevron-down">
+   </i>
+  </label>
+  <ul>
+   <li class="toctree-l2">
+    <a class="reference internal" href="tutorials/00_hello.html">
+     Hello world!
+    </a>
+   </li>
+  </ul>
+ </li>
+</ul>
+
+    </div>
+</nav> <!-- To handle the deprecated key -->
+
+<div class="navbar_extra_footer">
+  Powered by <a href="https://jupyterbook.org">Jupyter Book</a>
+</div>
+
+</div>
+
+
+          
+
+
+          
+<main class="col py-md-3 pl-md-4 bd-content overflow-auto" role="main">
+    
+    <div class="topbar container-xl fixed-top">
+    <div class="topbar-contents row">
+        <div class="col-12 col-md-3 bd-topbar-whitespace site-navigation show"></div>
+        <div class="col pl-md-4 topbar-main">
+            
+            <button id="navbar-toggler" class="navbar-toggler ml-0" type="button" data-toggle="collapse"
+                data-toggle="tooltip" data-placement="bottom" data-target=".site-navigation" aria-controls="navbar-menu"
+                aria-expanded="true" aria-label="Toggle navigation" aria-controls="site-navigation"
+                title="Toggle navigation" data-toggle="tooltip" data-placement="left">
+                <i class="fas fa-bars"></i>
+                <i class="fas fa-arrow-left"></i>
+                <i class="fas fa-arrow-up"></i>
+            </button>
+            
+            
+<div class="dropdown-buttons-trigger">
+    <button id="dropdown-buttons-trigger" class="btn btn-secondary topbarbtn" aria-label="Download this page"><i
+            class="fas fa-download"></i></button>
+
+    <div class="dropdown-buttons">
+        <!-- ipynb file if we had a myst markdown file -->
+        
+        <!-- Download raw file -->
+        <a class="dropdown-buttons" href="_sources/index.ipynb"><button type="button"
+                class="btn btn-secondary topbarbtn" title="Download source file" data-toggle="tooltip"
+                data-placement="left">.ipynb</button></a>
+        <!-- Download PDF via print -->
+        <button type="button" id="download-print" class="btn btn-secondary topbarbtn" title="Print to PDF"
+            onClick="window.print()" data-toggle="tooltip" data-placement="left">.pdf</button>
+    </div>
+</div>
+
+            <!-- Source interaction buttons -->
+
+<div class="dropdown-buttons-trigger">
+    <button id="dropdown-buttons-trigger" class="btn btn-secondary topbarbtn"
+        aria-label="Connect with source repository"><i class="fab fa-github"></i></button>
+    <div class="dropdown-buttons sourcebuttons">
+        <a class="repository-button"
+            href="https://github.com/executablebooks/jupyter-book"><button type="button" class="btn btn-secondary topbarbtn"
+                data-toggle="tooltip" data-placement="left" title="Source repository"><i
+                    class="fab fa-github"></i>repository</button></a>
+        <a class="issues-button"
+            href="https://github.com/executablebooks/jupyter-book/issues/new?title=Issue%20on%20page%20%2Findex.html&body=Your%20issue%20content%20here."><button
+                type="button" class="btn btn-secondary topbarbtn" data-toggle="tooltip" data-placement="left"
+                title="Open an issue"><i class="fas fa-lightbulb"></i>open issue</button></a>
+        
+    </div>
+</div>
+
+            <!-- Full screen (wrap in <a> to have style consistency -->
+
+<a class="full-screen-button"><button type="button" class="btn btn-secondary topbarbtn" data-toggle="tooltip"
+        data-placement="bottom" onclick="toggleFullScreen()" aria-label="Fullscreen mode"
+        title="Fullscreen mode"><i
+            class="fas fa-expand"></i></button></a>
+
+            <!-- Launch buttons -->
+
+<div class="dropdown-buttons-trigger">
+    <button id="dropdown-buttons-trigger" class="btn btn-secondary topbarbtn"
+        aria-label="Launch interactive content"><i class="fas fa-rocket"></i></button>
+    <div class="dropdown-buttons">
+        
+        <a class="binder-button" href="https://mybinder.org/v2/gh/executablebooks/jupyter-book/master?urlpath=tree/jbook/docs/index.ipynb"><button type="button"
+                class="btn btn-secondary topbarbtn" title="Launch Binder" data-toggle="tooltip"
+                data-placement="left"><img class="binder-button-logo"
+                    src="_static/images/logo_binder.svg"
+                    alt="Interact on binder">Binder</button></a>
+        
+        
+        
+        
+    </div>
+</div>
+
+        </div>
+
+        <!-- Table of contents -->
+        <div class="d-none d-md-block col-md-2 bd-toc show">
+            
+            <div class="tocsection onthispage pt-5 pb-3">
+                <i class="fas fa-list"></i> Contents
+            </div>
+            <nav id="bd-toc-nav" aria-label="Page">
+                <ul class="visible nav section-nav flex-column">
+ <li class="toc-h2 nav-item toc-entry">
+  <a class="reference internal nav-link" href="#what-is-mandala">
+   What is Mandala?
+  </a>
+  <ul class="nav section-nav flex-column">
+   <li class="toc-h3 nav-item toc-entry">
+    <a class="reference internal nav-link" href="#features-at-a-glance">
+     Features at a glance
+    </a>
+   </li>
+   <li class="toc-h3 nav-item toc-entry">
+    <a class="reference internal nav-link" href="#quick-start">
+     Quick start
+    </a>
+    <ul class="nav section-nav flex-column">
+     <li class="toc-h4 nav-item toc-entry">
+      <a class="reference internal nav-link" href="#installation">
+       Installation
+      </a>
+     </li>
+     <li class="toc-h4 nav-item toc-entry">
+      <a class="reference internal nav-link" href="#recommended-introductions">
+       Recommended introductions
+      </a>
+     </li>
+     <li class="toc-h4 nav-item toc-entry">
+      <a class="reference internal nav-link" href="#minimal-working-examples">
+       Minimal working examples
+      </a>
+     </li>
+    </ul>
+   </li>
+  </ul>
+ </li>
+ <li class="toc-h2 nav-item toc-entry">
+  <a class="reference internal nav-link" href="#why-mandala">
+   Why Mandala?
+  </a>
+  <ul class="nav section-nav flex-column">
+   <li class="toc-h3 nav-item toc-entry">
+    <a class="reference internal nav-link" href="#advantages">
+     Advantages
+    </a>
+   </li>
+   <li class="toc-h3 nav-item toc-entry">
+    <a class="reference internal nav-link" href="#comparisons">
+     Comparisons
+    </a>
+   </li>
+   <li class="toc-h3 nav-item toc-entry">
+    <a class="reference internal nav-link" href="#philosophy">
+     Philosophy
+    </a>
+   </li>
+  </ul>
+ </li>
+ <li class="toc-h2 nav-item toc-entry">
+  <a class="reference internal nav-link" href="#limitations">
+   Limitations
+  </a>
+  <ul class="nav section-nav flex-column">
+   <li class="toc-h3 nav-item toc-entry">
+    <a class="reference internal nav-link" href="#missing-features">
+     “Missing” features
+    </a>
+   </li>
+   <li class="toc-h3 nav-item toc-entry">
+    <a class="reference internal nav-link" href="#acquiring-best-practices">
+     Acquiring best practices
+    </a>
+   </li>
+   <li class="toc-h3 nav-item toc-entry">
+    <a class="reference internal nav-link" href="#performance">
+     Performance
+    </a>
+   </li>
+  </ul>
+ </li>
+</ul>
+
+            </nav>
+        </div>
+    </div>
+</div>
+    <div id="main-content" class="row">
+        <div class="col-12 col-md-9 pl-md-3 pr-md-0">
+        
+              <div>
+                
+  <div class="tex2jax_ignore mathjax_ignore section" id="mandala-self-managing-experiments">
+<h1>Mandala: self-managing experiments<a class="headerlink" href="#mandala-self-managing-experiments" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="what-is-mandala">
+<h2>What is Mandala?<a class="headerlink" href="#what-is-mandala" title="Permalink to this headline">¶</a></h2>
+<p>Mandala enables new, simpler patterns for working with complex and evolving
+computational experiments.</p>
+<p>It eliminates low-level code and decisions for how to save, load, query,
+delete and otherwise organize results. To achieve this, it lets computational
+code “manage itself” by organizing and addressing its own data storage.</p>
+<div class="warning admonition">
+<p class="admonition-title">Under construction</p>
+<p>This project is under active development</p>
+</div>
+<div class="section" id="features-at-a-glance">
+<h3>Features at a glance<a class="headerlink" href="#features-at-a-glance" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li><p><strong>concise</strong>: code computations in pure Python (w/ control flow, collections,
+…) – results are automatically tracked and queriable</p></li>
+<li><p><strong>iterate rapidly</strong>: add/edit parameters/logic and rerun code – past results
+are loaded on demand, and only new computations are executed</p></li>
+<li><p><strong>pattern-match against Python code</strong>: query across complex, branching
+projects by reusing computational code itself</p></li>
+</ul>
+</div>
+<div class="section" id="quick-start">
+<h3>Quick start<a class="headerlink" href="#quick-start" title="Permalink to this headline">¶</a></h3>
+<div class="section" id="installation">
+<h4>Installation<a class="headerlink" href="#installation" title="Permalink to this headline">¶</a></h4>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">pip install git+https://github.com/amakelov/mandala</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="recommended-introductions">
+<h4>Recommended introductions<a class="headerlink" href="#recommended-introductions" title="Permalink to this headline">¶</a></h4>
+<p>To build some understanding, check these out:</p>
+<ul class="simple">
+<li><p>2-minute introduction: <a class="reference internal" href="intros/two_mins.html#mins"><span class="std std-ref">intro to self-managing code</span></a></p></li>
+<li><p>10-minute introduction: <a class="reference internal" href="intros/ten_mins.html#mins"><span class="std std-ref">manage a small ML project</span></a></p></li>
+</ul>
+</div>
+<div class="section" id="minimal-working-examples">
+<h4>Minimal working examples<a class="headerlink" href="#minimal-working-examples" title="Permalink to this headline">¶</a></h4>
+<p>If you want to jump right into code, below are a few minimal, somewhat
+interesting examples to play with and extend:</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">List</span>
+<span class="kn">from</span> <span class="nn">mandala.all</span> <span class="kn">import</span> <span class="o">*</span>
+<span class="n">set_logging_level</span><span class="p">(</span><span class="s1">&#39;warning&#39;</span><span class="p">)</span>
+
+<span class="c1"># create a storage for results</span>
+<span class="n">storage</span> <span class="o">=</span> <span class="n">Storage</span><span class="p">(</span><span class="n">in_memory</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span> <span class="c1"># can also be persistent (on disk)</span>
+
+<span class="nd">@op</span><span class="p">(</span><span class="n">storage</span><span class="p">)</span> <span class="c1"># memoization decorator</span>
+<span class="k">def</span> <span class="nf">inc</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+    <span class="k">return</span> <span class="n">x</span> <span class="o">+</span> <span class="mi">1</span> 
+
+<span class="nd">@op</span><span class="p">(</span><span class="n">storage</span><span class="p">)</span> 
+<span class="k">def</span> <span class="nf">mean</span><span class="p">(</span><span class="n">x</span><span class="p">:</span><span class="n">List</span><span class="p">[</span><span class="nb">int</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span> 
+    <span class="c1"># you can operate on / return collections of memoized results</span>
+    <span class="k">return</span> <span class="nb">sum</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="o">/</span> <span class="nb">len</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> 
+
+<span class="k">with</span> <span class="n">run</span><span class="p">(</span><span class="n">storage</span><span class="p">):</span> <span class="c1"># calls inside `run` block are memoized</span>
+    <span class="n">nums</span> <span class="o">=</span> <span class="p">[</span><span class="n">inc</span><span class="p">(</span><span class="n">i</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">5</span><span class="p">)]</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="n">mean</span><span class="p">(</span><span class="n">nums</span><span class="p">)</span> <span class="c1"># memoization composes through lists without copying data</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;Mean of 5 nums: </span><span class="si">{</span><span class="n">result</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)</span>
+
+<span class="c1"># add logic/parameters directly on top of memoized code without re-doing past work</span>
+<span class="k">with</span> <span class="n">run</span><span class="p">(</span><span class="n">storage</span><span class="p">,</span> <span class="n">lazy</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+    <span class="n">nums</span> <span class="o">=</span> <span class="p">[</span><span class="n">inc</span><span class="p">(</span><span class="n">i</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">10</span><span class="p">)]</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="n">mean</span><span class="p">(</span><span class="n">nums</span><span class="p">)</span> 
+
+<span class="c1"># walk over chains of calls without loading intermediate data </span>
+<span class="c1"># to traverse storage and collect results flexibly</span>
+<span class="k">with</span> <span class="n">run</span><span class="p">(</span><span class="n">storage</span><span class="p">,</span> <span class="n">lazy</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+    <span class="n">nums</span> <span class="o">=</span> <span class="p">[</span><span class="n">inc</span><span class="p">(</span><span class="n">i</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">10</span><span class="p">)]</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="n">mean</span><span class="p">(</span><span class="n">nums</span><span class="p">)</span> 
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;Reference to mean of 10 nums: </span><span class="si">{</span><span class="n">result</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)</span>
+    <span class="n">storage</span><span class="o">.</span><span class="n">attach</span><span class="p">(</span><span class="n">result</span><span class="p">)</span> <span class="c1"># load the value in-place </span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;Loaded mean of 10 nums: </span><span class="si">{</span><span class="n">result</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)</span>
+
+<span class="c1"># pattern-match to memoized compositions of calls</span>
+<span class="k">with</span> <span class="n">query</span><span class="p">(</span><span class="n">storage</span><span class="p">)</span> <span class="k">as</span> <span class="n">q</span><span class="p">:</span> 
+    <span class="c1"># this may not make sense unless you read the tutorials</span>
+    <span class="n">i</span> <span class="o">=</span> <span class="n">Query</span><span class="p">()</span>
+    <span class="n">inc_i</span> <span class="o">=</span> <span class="n">inc</span><span class="p">(</span><span class="n">i</span><span class="p">)</span><span class="o">.</span><span class="n">named</span><span class="p">(</span><span class="s1">&#39;inc_i&#39;</span><span class="p">)</span>
+    <span class="n">nums</span> <span class="o">=</span> <span class="n">MakeList</span><span class="p">(</span><span class="n">containing</span><span class="o">=</span><span class="n">inc_i</span><span class="p">,</span> <span class="n">at_index</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">named</span><span class="p">(</span><span class="s1">&#39;nums&#39;</span><span class="p">)</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="n">mean</span><span class="p">(</span><span class="n">nums</span><span class="p">)</span><span class="o">.</span><span class="n">named</span><span class="p">(</span><span class="s1">&#39;result&#39;</span><span class="p">)</span>
+    <span class="n">df</span> <span class="o">=</span> <span class="n">q</span><span class="o">.</span><span class="n">get_table</span><span class="p">(</span><span class="n">inc_i</span><span class="p">,</span> <span class="n">nums</span><span class="p">,</span> <span class="n">result</span><span class="p">)</span>
+<span class="n">df</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Mean of 5 nums: AtomRef(3.0, type=AtomType(float))
+Reference to mean of 10 nums: AtomRef(in_memory=False, type=AtomType(float))
+Loaded mean of 10 nums: AtomRef(5.5, type=AtomType(float))
+</pre></div>
+</div>
+<div class="output text_html"><div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>inc_i</th>
+      <th>nums</th>
+      <th>result</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>0</th>
+      <td>1</td>
+      <td>[1, 2, 3, 4, 5]</td>
+      <td>3.0</td>
+    </tr>
+    <tr>
+      <th>1</th>
+      <td>1</td>
+      <td>[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]</td>
+      <td>5.5</td>
+    </tr>
+  </tbody>
+</table>
+</div></div></div>
+</div>
+</div>
+</div>
+</div>
+<div class="section" id="why-mandala">
+<h2>Why Mandala?<a class="headerlink" href="#why-mandala" title="Permalink to this headline">¶</a></h2>
+<div class="section" id="advantages">
+<h3>Advantages<a class="headerlink" href="#advantages" title="Permalink to this headline">¶</a></h3>
+<p>Compared to other tools for tracking and managing computations, the features that
+most set Mandala apart are the direct and concise patterns in which complex
+Python code can interact with its own storage. This manifests in several ways:</p>
+<ul>
+<li><p><strong>Python code as interface to its own storage</strong>: you just write the code to compute
+what you want to compute (freely using Python’s control flow and collections),
+and directly add more parameters and logic to it over time. Mandala takes
+care of the rest:</p>
+<ul class="simple">
+<li><p><strong>the organization of storage mirrors the structure of code</strong>, and Mandala
+provides you with the tools to make maximum use of this –
+retracing memoized code with on-demand data loading, and declarative
+code-based pattern-matching.</p></li>
+<li><p>this leads to <strong>simple, intuitive and flexible ways to query and iterate on
+experiments</strong>, even when their logic gets quite complex – without any data
+organization efforts on your part.</p></li>
+<li><p>it also allows you to <strong>query relationships between any variables in your
+projects</strong>, even when they are separated by many computational steps – <strong>without
+explicitly annotating these relationships</strong>.</p></li>
+</ul>
+</li>
+<li><p><strong>refactor code and data will follow</strong>: Mandala makes it easy to apply
+familiar software refactorings to code <em>without</em> losing the relationship to
+this code’s existing results. This gives you high-level tools to manage the
+complexity of both the code and its data as the project grows.</p></li>
+<li><p><strong>organize all results and their relationships</strong>: Mandala manages all the
+artifacts produced by computations, not just a set of human-readable
+metrics. It lets you use pure Python idioms to</p>
+<ul class="simple">
+<li><p>compute with <strong>data structures with shared substructure</strong></p></li>
+<li><p><strong>index and view data in multiple ways</strong> and on multiple levels of analysis</p></li>
+</ul>
+<p>without storage duplication. This gives you much flexibility in manipulating
+the contents of storage to express your intent.</p>
+</li>
+</ul>
+</div>
+<div class="section" id="comparisons">
+<h3>Comparisons<a class="headerlink" href="#comparisons" title="Permalink to this headline">¶</a></h3>
+<p>Mandala takes inspiration from many other programming tools and concepts. Below
+is an (incomplete but growing) list of comparisons with relevant tools:</p>
+<ul>
+<li><p><a class="reference external" href="https://www.algebraicjulia.org/">algebraicjulia</a>:
+<a class="reference external" href="https://www.algebraicjulia.org/blog/post/2020/12/cset-conjunctive-queries/">conjunctive</a> <a class="reference external" href="https://www.algebraicjulia.org/blog/post/2020/11/sql-as-hypergraph/">queries</a>
+are integral to Mandala’s declarative interface, and are generalized in
+several ways to make them practical for complex experiments:</p>
+<ul class="simple">
+<li><p>a single table of values is used to enable polymorphism</p></li>
+<li><p>operations on lists/dicts are integrated with query construction</p></li>
+<li><p>queries can use the hierarchical structure of computations</p></li>
+<li><p>constraints can be partitioned (to avoid interaction) while using some
+shared base (to enable code reuse)</p></li>
+<li><p>dynamic query generation can use conditionals to enable disjunctive
+queries, and even loops (though this quickly becomes inefficient)</p></li>
+</ul>
+</li>
+<li><p><a class="reference external" href="https://arxiv.org/abs/1901.01908">koji</a> and <a class="reference external" href="https://research.protocol.ai/publications/ipfs-fan-a-function-addressable-computation-network/delarocha2021a.pdf">content-addressable computation</a>:
+Mandala uses causal hashing to</p>
+<ul class="simple">
+<li><p>ensure correct, deterministic and idempotent behavior;</p></li>
+<li><p>avoid hashing large (or unhashable) Python objects;</p></li>
+<li><p>avoid discrepancies between object hashes across library versions</p></li>
+</ul>
+<p>Mandala can be thought of as a single-node, Python-only implementation of
+general-purpose content-addressable computation with two extra features:</p>
+<ul class="simple">
+<li><p>hierarchical organization of computation,</p></li>
+<li><p>declarative queries</p></li>
+</ul>
+</li>
+<li><p><a class="reference external" href="https://github.com/aspuru-guzik-group/funsies">funsies</a> is a workflow engine
+for Python scripts that also uses causal hashing. Mandala differs by
+integrating more closely with Python (by using functions instead of scripts as
+the units of work), and thus enabling more fine-grained control and
+expressiveness over what gets computed and how.</p></li>
+<li><p><a class="reference external" href="https://joblib.readthedocs.io/en/latest/memory.html#memory">joblib.Memory</a>
+implements persistent memoization for Python functions that overcomes some of
+the issues naive implementations have with large and complex Python objects.
+Mandala augments <code class="docutils literal notranslate"><span class="pre">joblib.Memory</span></code> in some key ways:</p>
+<ul class="simple">
+<li><p>memoized calls can be queried/deleted declaratively</p></li>
+<li><p>collections and memoized functions calling other memoized functions can
+reuse storage</p></li>
+<li><p>you can modify and refactor memoized functions while retaining connection to
+memoized calls</p></li>
+<li><p>you can avoid the latency of hashing large/complex objects</p></li>
+</ul>
+</li>
+<li><p><a class="reference external" href="https://dl.acm.org/doi/abs/10.1145/2001420.2001455?casa_token=ahM2UC4Uk-4AAAAA:9lZXVDS7nYEHzHPJk-UCTOAICGb2astAh2hrL00VB125nF6IGG90OwA-ujbe-cIg2hT4T1MOpbE2">incpy</a>
+augments the Python interpreter with automatic persistent memoization. Mandala
+also enables automatic persistent memoization, but it is different from
+<code class="docutils literal notranslate"><span class="pre">incpy</span></code> in some key ways:</p>
+<ul class="simple">
+<li><p>uses decorators to explicitly designate memoized functions (which can be
+good or bad depending on your goals)</p></li>
+<li><p>allows for lazy retracing of memoized calls</p></li>
+<li><p>provides additional features like the ones mentioned in the comparison with
+<code class="docutils literal notranslate"><span class="pre">joblib.Memory</span></code></p></li>
+</ul>
+</li>
+</ul>
+</div>
+<div class="section" id="philosophy">
+<h3>Philosophy<a class="headerlink" href="#philosophy" title="Permalink to this headline">¶</a></h3>
+<p>When can we declare data management for computational experiments a solved
+problem? It’s unclear how to turn this question into a measurable goal, but
+there is a somewhat objective <em>lower bound</em> on how simple data management can
+get:</p>
+<blockquote>
+<div><p>At the end of the day, we have to <em>at least</em> write down the (Python) code to express
+the computations we want to run, <em>regardless</em> of data management concerns.
+Can this be <em>all</em> the code we have to write, and <em>still</em> be able to achieve
+the goals of data management?</p>
+</div></blockquote>
+<p>Mandala aims to bring us to this idealized lower bound. It adopts the view that
+Python itself is flexible and expressive enough to capture our intentions about
+experiments. There shouldn’t be a ton of extra interfaces, concepts and syntax
+between your thoughts, their expression in code, and its results.</p>
+<p>By mirroring the structure of computational code in the organization of data,
+and harmoniously extending Python’s tools for capturing intention and managing
+complexity, we can achieve a more flexible, natural and immediate way to
+interact with computations.</p>
+<p>This echoes the design goals of some other tools. For example,
+<a class="reference external" href="https://dask.org">dask</a> and <a class="reference external" href="https://ray.io">ray</a> (both of which Mandala
+integrates with) aim to let you write Python code the way you are used to, and
+take care of parallelization for you.</p>
+</div>
+</div>
+<div class="section" id="limitations">
+<h2>Limitations<a class="headerlink" href="#limitations" title="Permalink to this headline">¶</a></h2>
+<p>This project is under active development, and not ready for production. Its goal
+so far has been to demonstrate that certain high-level programming patterns are
+viable by building a sufficiently useful working prototype. Limitations can be
+summarized as follows:</p>
+<ul class="simple">
+<li><p>it is easy to get started, but effective use in complex projects requires some
+getting used to;</p></li>
+<li><p>much of the code does what it does in very simple and often inefficient ways;</p></li>
+<li><p>interfaces and (more importantly) storage formats may change in backward
+incompatible ways.</p></li>
+<li><p>bugs likely still exist;</p></li>
+</ul>
+<p>That being said, Mandala is already quite usable in many practical situations.
+Below is a detailed outline of current limitations you should be aware of if you
+consider using this library in your work.</p>
+<div class="section" id="missing-features">
+<h3>“Missing” features<a class="headerlink" href="#missing-features" title="Permalink to this headline">¶</a></h3>
+<p>There are some things you may be used to seeing in projects like this that
+currently don’t exist:</p>
+<ul class="simple">
+<li><p><strong>functions over scripts</strong>: Mandala focuses on functions as the basic
+building blocks of experiments as opposed to Python scripts. There is no
+fundamental conceptual distinction between the two, but:</p>
+<ul>
+<li><p>functions provide a better-behaved interface, especially when it comes to
+typing, refactoring, and hierarchical organization</p></li>
+<li><p>using functions makes it much easier to use
+projects such as <a class="reference external" href="https://www.ray.io/">ray</a> and <a class="reference external" href="https://dask.org/">dask</a>
+alongside Mandala</p></li>
+<li><p>if you don’t need to do something extra complicated involving different
+Python processes or virtual environments, it is easy to wrap a script as a
+function that takes in some settings and resource descriptions (e.g., paths to
+input files) and returns other resource descriptions (e.g., paths to output
+files).  However, the burden of refactoring the script’s interface manually
+and organizing its input/output resources would still be on you. So, always
+use a function where you can.</p></li>
+</ul>
+</li>
+<li><p><strong>no integration with git</strong>: version control data is not automatically
+included in Mandala’s records at this point, thought this would be an easy
+addition. There are other programming patterns available for working with
+multiple versions of code.</p></li>
+<li><p><strong>no GUI</strong>: for now, the library leans heavily towards using computational
+code itself as a highly programmable interface to results, and visualization
+is left to other tools.</p></li>
+</ul>
+</div>
+<div class="section" id="acquiring-best-practices">
+<h3>Acquiring best practices<a class="headerlink" href="#acquiring-best-practices" title="Permalink to this headline">¶</a></h3>
+<p>Using some features effectively requires deeper understanding:</p>
+<ul>
+<li><p><strong>declarative queries</strong>: It’s possible to create underconstrained
+pattern-matching queries which return a number of rows that grows
+multiplicatively with the numbers of rows of memoization tables of functions
+in the query. Such queries may take a very long time or run out of RAM even
+for moderately-sized projects (<code class="docutils literal notranslate"><span class="pre">sqlite</span></code> will usually complain about this at
+the start of the query).</p>
+<p>Certain ways to define and compose memoized functions promote such queries, so
+a good understanding of this issue may be needed depending on the project.</p>
+</li>
+<li><p><strong>deletions</strong>: deleting anything from storage is subject to invariants that
+prevent the existence of “mysterious” objects (ones without a computational
+history tracing back to user inputs) from existing. This means that you must
+understand well how deletion works to avoid deleting more things than you
+really intend.</p></li>
+</ul>
+</div>
+<div class="section" id="performance">
+<h3>Performance<a class="headerlink" href="#performance" title="Permalink to this headline">¶</a></h3>
+<p>The library has not been optimized much for performance. A few things to keep in
+mind for now:</p>
+<ul class="simple">
+<li><p>When using disk-based persistence, Mandala introduces an overhead of a few 10s
+of ms for each call to a memoized function, on top of any work to serialize
+inputs/outputs and run the function.</p></li>
+<li><p>Storing and loading large collections can be slow (a list of 1000 integers
+already leads to a visible ~1s delay)</p></li>
+</ul>
+</div>
+</div>
+<div class="toctree-wrapper compound">
+</div>
+</div>
+
+    <script type="text/x-thebe-config">
+    {
+        requestKernel: true,
+        binderOptions: {
+            repo: "binder-examples/jupyter-stacks-datascience",
+            ref: "master",
+        },
+        codeMirrorConfig: {
+            theme: "abcdef",
+            mode: "python"
+        },
+        kernelOptions: {
+            kernelName: "python3",
+            path: "./."
+        },
+        predefinedOutput: true
+    }
+    </script>
+    <script>kernelName = 'python3'</script>
+
+              </div>
+              
+        
+            <!-- Previous / next buttons -->
+<div class='prev-next-area'>
+    <a class='right-next' id="next-link" href="intros/two_mins.html" title="next page">
+    <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">A 2-minute primer</p>
+    </div>
+    <i class="fas fa-angle-right"></i>
+    </a>
+</div>
+        
+        </div>
+    </div>
+    <footer class="footer">
+    <div class="container">
+      <p>
+        
+          By A. Makelov<br/>
+        
+            &copy; Copyright 2021, A. Makelov.<br/>
+      </p>
+    </div>
+  </footer>
+</main>
+
+
+      </div>
+    </div>
+  
+  <script src="_static/js/index.be7d3bbb2ef33a8344ce.js"></script>
+
+  </body>
+</html>
