@@ -29,7 +29,7 @@ def inc(x:Int) -> Int:
     return x + 1 
 
 @op()
-def add(x:Any, y:Any) -> Any:
+def add(x:Int, y:Int) -> Int:
     return x + y 
 
 @op()

@@ -75,7 +75,7 @@ def _setup_tests(default_kv:TType[KVStore],
         for num in numbers:
             all_factors.append(get_prime_factors(x=num))
         result_1 = mean_2d(arr=all_factors)
-        result_2 = int_mean(x=[mean(x=elt) for elt in all_factors])
+        result_2 = mean(x=[mean(x=elt) for elt in all_factors])
         assert result_1.obj() == result_2.obj()
         return (result_1, result_2)
     ct = ComputationTest(func=prime_factor_mean_over_range)

@@ -59,6 +59,7 @@ test_output/
 # release
 release_scripts/
 htmlcov/
+demos/output/
 
 ### fancier things
 # visualizations

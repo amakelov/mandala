@@ -400,7 +400,8 @@ class PSQLRelStorage(RelStorage):
         else:
             fk_line = ''
         if with_default:
-            default_line = f'DEFAULT "{default_value}"'
+            #! in psql, single quotes are used to indicate string literals
+            default_line = f"DEFAULT '{default_value}'"
         else:
             default_line = ''
         query = f"""

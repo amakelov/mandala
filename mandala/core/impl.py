@@ -9,7 +9,7 @@ from .exceptions import VRefNotInMemoryError
 from .idx import OpIndex, ValueIndex, BuiltinOpClasses
 from .sig import BaseSignature, Signature, BaseSigMap, SigMap
 from .tps import Type, ListType, AnyType, AtomType, BuiltinTypes, DictType
-from .utils import AnnotatedObj
+from .utils import AnnotatedObj, AsFinal
 
 from ..common_imports import *
 from ..util.common_ut import rename_dict_keys, invert_dict
@@ -554,13 +554,13 @@ class SimpleFunc(Operation): # todo - unfortunate name b/c backward compat
             self._name = None
             self._ui_name = None
         else:
-            self._sig = Signature.from_callable(
+            self._sig, skip_data = Signature.from_callable(
                 clbl=func,
                 output_names=output_names,
                 excluded_names=[self.CONTEXT_KW],
                 fixed_outputs=not self._var_outputs
             )
-            self._orig_sig = Signature.from_callable(
+            self._orig_sig, skip_data = Signature.from_callable(
                 clbl=func,
                 output_names=output_names,
                 excluded_names=[self.CONTEXT_KW],
@@ -570,10 +570,15 @@ class SimpleFunc(Operation): # todo - unfortunate name b/c backward compat
                                 kwarg_map={k: k for k in self.sig.kw})
             self._name = self.func.__name__
             self._ui_name = self.func.__name__
+            self._skip_data = skip_data
         self._metadata_cols = ['__tag__', '__version__']
         self._version = '0' if version is None else version
         self._is_super = is_super
         self._unwrap_inputs = unwrap_inputs
+    
+    @property
+    def skip_data(self) -> TDict[str, TAny]:
+        return self._skip_data
     
     @property
     def sig(self) -> BaseSignature:
@@ -657,31 +662,98 @@ class SimpleFunc(Operation): # todo - unfortunate name b/c backward compat
     
     @property
     def num_outputs(self) -> int:
+        # return the number of *tracked* outputs
         return len(self.output_names)
     
-    def compute(self, inputs: TDict[str, TAny], context_representation:TAny=None, 
-                context_arg:str=None) -> TDict[str, TAny]:
+    def _num_all_outputs(self) -> int:
+        return self.num_outputs + len(self.skip_data['skipped_output_positions'])
+    
+    @property
+    def has_skipped_outputs(self) -> bool:
+        return len(self.skip_data['skipped_output_positions']) > 0
+    
+    def _outcome_to_list(self, outcome:TUnion[None, TAny, TTuple[TAny,...]]) -> TList[TAny]:
+        num_all_outputs = self._num_all_outputs()
+        if num_all_outputs == 0:
+            assert outcome is None
+            outcome_list = []
+        elif num_all_outputs == 1:
+            outcome_list = [outcome]
+        else:
+            assert isinstance(outcome, tuple)
+            assert len(outcome) == num_all_outputs
+            outcome_list = list(outcome)
+        return outcome_list
+    
+    def _reconstruct_returns(self, 
+                             wrapped_tracked_outputs:TDict[str, TAny],
+                             skipped_outputs:TList[TAny], ) -> TUnion[None, TAny, TTuple[TAny,...]]:
+        """
+        Insert outputs in their proper positions in the returns
+        """
+        tracked_output_positions = self.skip_data['tracked_output_positions']
+        skipped_output_positions = self.skip_data['skipped_output_positions']
+        num_all_outputs = len(tracked_output_positions) + len(skipped_output_positions)
+        result = [None for _ in range(num_all_outputs)]
+        assert self.output_names is not None
+        for i, output_name in enumerate(self.output_names):
+            result[tracked_output_positions[i]] = wrapped_tracked_outputs[output_name]
+        for i, skipped_output in zip(skipped_output_positions, skipped_outputs):
+            result[i] = skipped_output 
+        if num_all_outputs == 0:
+            return None
+        elif num_all_outputs == 1:
+            return result[0]
+        else:
+            return tuple(result)
+    
+    def compute(self, inputs:TDict[str, TAny],
+                context_representation:TAny=None, 
+                context_arg:str=None) -> TTuple[TDict[str, TAny], TList[TAny]]:
+        """
+        Run the function with raw inputs
+
+        Returns:
+            - a dictionary of {output name: raw return value} for tracked
+              outputs
+            - a list of skipped (from tracking) outputs
+        """
         # need to use the original function's signature for this 
+        skipped_input_names = self.skip_data['skipped_input_names']
         inv_map = self.sig_map.inverse()
-        input_map = inv_map.map_input_names(input_names=inputs.keys())
-        ui_inputs = rename_dict_keys(dct=inputs, mapping=input_map)
+        tracked_inputs = {k: v for k, v in inputs.items()
+                          if k not in skipped_input_names}
+        input_map = inv_map.map_input_names(input_names=tracked_inputs.keys())
+        ui_inputs = rename_dict_keys(dct=tracked_inputs, mapping=input_map)
+        ui_inputs.update({k: v for k, v in inputs.items() if k in skipped_input_names})
+
         if context_arg is not None:
             assert context_arg not in ui_inputs
             assert context_representation is not None
             ui_inputs[context_arg] = context_representation
+
         outcome = self.func(**ui_inputs)
+        # parse the skipped outputs
+        output_list = self._outcome_to_list(outcome=outcome)
+        skipped_output_positions = self.skip_data['skipped_output_positions']
+        tracked_output_list = [output for i, output in enumerate(output_list)
+                                if i not in skipped_output_positions]
+        skipped_output_list = [output_list[i] for i in skipped_output_positions]
+
         if self.sig.has_fixed_outputs:
             assert self.output_names is not None
             if self.num_outputs == 0:
-                assert outcome is None
-                return {}
+                assert not tracked_output_list
+                res = {}
             elif self.num_outputs == 1:
-                return {self.output_names[0]: outcome}
+                assert len(tracked_output_list) == 1
+                res = {self.output_names[0]: tracked_output_list[0]}
             else:
-                assert isinstance(outcome, tuple)
-                assert len(outcome) == len(self.output_names)
-                return {self.output_names[i]: elt for i, elt in enumerate(outcome)}
+                assert len(tracked_output_list) == len(self.output_names)
+                res = {self.output_names[i]: elt for i, elt in enumerate(tracked_output_list)}
         else:
+            if skipped_output_positions:
+                raise NotImplementedError() 
             if outcome is None:
                 res = {}
             elif isinstance(outcome, tuple):
@@ -692,7 +764,9 @@ class SimpleFunc(Operation): # todo - unfortunate name b/c backward compat
             for k, v in res.items():
                 assert isinstance(v, AnnotatedObj)
                 assert v.target_type is not None
-            return res
+        # annotate skipped outputs
+        skipped_output_list = [AsFinal(obj=obj) for obj in skipped_output_list]
+        return res, skipped_output_list
     
     def compute_wrapped(self, inputs: TDict[str, ValueRef], 
                         input_types: TDict[str, Type],

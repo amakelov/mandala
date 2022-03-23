@@ -2,6 +2,7 @@ from .test_context import setup_storage
 from .funcs import *
 from .utils import *
 from mandala.core.exceptions import SynchronizationError
+from mandala.all import Skip, Mark
 
 def test_definition_styles():
     storage = Storage()
@@ -43,3 +44,25 @@ def test_defaults(setup_storage):
             return x + y 
         a = f(23)
         assert unwrap(a) == 65
+
+def test_skip():
+    storage = Storage()
+    
+    @op(storage)
+    def f(x:int, log:Mark[bool, Skip]) -> TTuple[int, Mark[float, Skip], int]:
+        if log:
+            print('hi')
+        return x, time.time(), x
+    
+    with run(storage):
+        x, y, z = f(x=23, log=True)
+        assert isinstance(y, AnnotatedObj) and y.is_final
+        assert isinstance(x, ValueRef) and isinstance(z, ValueRef)
+    
+    with query(storage) as q:
+        inp = Query()
+        x, y, z = f(x=inp, log=True)
+        df = q.get_table(x, z, inp)
+    assert df.shape[0] == 1 
+    assert df.values.tolist() == [[23, 23, 23]]
+

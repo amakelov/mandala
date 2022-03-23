@@ -46,7 +46,7 @@ class Storage(object):
         ### fs storage
         in_memory:bool=False,
         fs_rel:str=None,
-        fs_abs:Path=None,
+        fs_abs:TUnion[Path, str]=None,
         obj_kv:TType[KVStore]=None,
         call_kv:TType[KVStore]=None,
         ### rel storage
@@ -55,8 +55,14 @@ class Storage(object):
         psql_name:str=None, 
         # for sqlite
         sqlite_rel:str=None, # a relative path to desired sqlite file
-        sqlite_abs:Path=None,
+        sqlite_abs:TUnion[Path, str]=None,
+        # rel settings
+        track_provenance:bool=None,
     ):
+        if fs_abs is not None:
+            fs_abs = Path(fs_abs).absolute()
+        if sqlite_abs is not None:
+            sqlite_abs = Path(sqlite_abs).absolute()
         ### figure out db backend
         if psql_name is not None:
             assert sqlite_rel is None
@@ -130,7 +136,8 @@ class Storage(object):
         self._rel_adapter = RelAdapter(
             rel_storage=self.rel_st,
             val_adapter=self.val_adapter,
-            call_graph_storage=self.call_graph_st
+            call_graph_storage=self.call_graph_st,
+            track_provenance=track_provenance,
         )
         self.rel_adapter.init(first_time=(not rels_exists))
         self._call_adapter = CallAdapter(
@@ -733,7 +740,7 @@ class CallBuffer(object):
         self._calls.append(call)
         
     def minsert(self, calls:TList[Call]):
-        self._calls += calls
+        self._calls += [call.detached() for call in calls]
     
     def reset(self):
         self._calls = []

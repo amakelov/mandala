@@ -161,6 +161,12 @@ def test_context_passing():
         print(__context__.mode)
         return f(f(x))
     
+    @op(storage)
+    def h(x:int, __context__:Context=None) -> int:
+        return x
+    
     with run(storage, autocommit=True) as c:
         g(23, __context__=c)
+    with run(storage):
+        h(23)
     storage.drop_instance_data(answer=True)

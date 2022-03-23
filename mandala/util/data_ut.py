@@ -59,7 +59,6 @@ def explode_lists_as_rows_old(df:pd.DataFrame,
         assert all(lengths[0] == elt for elt in lengths[1:])
     ### 
     nonexplode_cols = [col for col in all_cols if col not in list_cols]
-    print(nonexplode_cols)
     if nonexplode_cols:
         df = df.set_index(nonexplode_cols)
     ### apply explode to each column

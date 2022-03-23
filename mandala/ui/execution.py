@@ -4,7 +4,7 @@ from .storage import Storage
 from ..common_imports import *
 from ..util.common_ut import group_like, ungroup_like, rename_dict_keys, get_collection_atoms, concat_homogeneous_lists
 from ..util.common_ut import transpose_lists, transpose_listdict, transpose_returns
-from ..core.config import CoreConfig, MODES, SuperopWrapping
+from ..core.config import CoreConfig, MODES, SuperopWrapping, CoreConsts
 from ..core.utils import BackwardCompatible, AnnotatedObj
 from ..core.bases import (
     Operation, Call, ValueRef, is_member_of_tp, is_instance, is_deeply_persistable,
@@ -17,6 +17,7 @@ from ..core.impl import BaseCall, SimpleFunc, AtomRef
 from ..core.wrap import (
     wrap_constructive, wrap_structure, get_deconstruction_calls, wrap_detached
 )
+from ..core.utils import AsFinal
 from ..storages.calls import CallLocation
 from ..adapters.vals import BaseValAdapter
 from ..adapters.calls import BaseCallAdapter
@@ -203,7 +204,7 @@ class OpCaller(object):
         return pass_context_to_func, context
     
     def preprocess_inputs(self, args, kwargs, apply_defaults:bool,
-                          ) -> TTuple[TDict[str, TAny], bool, TAny, Context, bool]:
+                          ) -> TTuple[TDict[str, TAny], TDict[str, TAny], bool, TAny, Context, bool]:
         """
         Put inputs in a dict named by internal argnames, and parse out optional 
         return override and optional context override
@@ -211,11 +212,29 @@ class OpCaller(object):
         """
         apply_returns, returns = self.process_returns_kwarg(kwargs=kwargs)
         pass_context_to_func, context_data = self.process_context_kwarg(kwargs=kwargs)
-        ui_inputs_dict = self.op.orig_sig.bind_args(args=args, kwargs=kwargs, 
+        ### split the skipped and tracked inputs
+        func_sig = inspect.signature(self.op.func)
+        parameter_names = [p.name for name, p in func_sig.parameters.items()]
+        args_names = [parameter_names[i] for i in range(len(args))]
+        arguments_dict = {name: args[i] for i, name in enumerate(args_names)}
+        arguments_dict.update(kwargs)
+        if apply_defaults:
+            for name, p in func_sig.parameters.items():
+                if p.default is not inspect._empty and name not in arguments_dict and (name not in CoreConsts.APPLY_DEFAULTS_SKIP):
+                    arguments_dict[name] = p.default
+        skipped_input_names = self.op.skip_data['skipped_input_names']
+        skipped_inputs_dict = {k: arguments_dict[k]
+                               for k in skipped_input_names if k in arguments_dict}
+        tracked_inputs_dict_ui = {k: v for k, v in arguments_dict.items()
+                               if k not in skipped_input_names}
+        # ui_inputs_dict = self.op.orig_sig.bind_args(args=args, kwargs=kwargs, 
+        #                                             apply_defaults=apply_defaults)
+        ui_inputs_dict = self.op.orig_sig.bind_args(args=tuple(), kwargs=tracked_inputs_dict_ui, 
                                                     apply_defaults=apply_defaults)
         name_mapping = self.op.sig_map.map_input_names(input_names=ui_inputs_dict.keys())
-        inputs_dict = rename_dict_keys(dct=ui_inputs_dict, mapping=name_mapping)
-        return (inputs_dict, apply_returns, returns,
+        tracked_inputs_dict = rename_dict_keys(dct=ui_inputs_dict, mapping=name_mapping)
+        return (tracked_inputs_dict, skipped_inputs_dict, 
+                apply_returns, returns,
                 context_data, pass_context_to_func)
 
     def get_call_uid(self, wrapped_inputs:TDict[str, ValueRef], c:Context):
@@ -373,7 +392,10 @@ class OpCaller(object):
             tags = {}
         func_query = FuncQuery(op=self.op, tags=tags)
         results = func_query(**inputs_dict)
-        return self.postprocess_outputs_as_returns(outputs_dict=results)
+        num_skipped_outputs = len(self.op.skip_data['skipped_output_positions'])
+        skipped_outputs_list = [AsFinal(None) for _ in range(num_skipped_outputs)]
+        return self.postprocess_outputs_as_returns(outputs_dict=results, 
+                                                   skipped_outputs_list=skipped_outputs_list)
     
     def _returns_to_dict(self, sig:BaseSignature,
                          returns:TAny) -> TDict[str, TAny]:
@@ -404,10 +426,13 @@ class OpCaller(object):
                 func_outputs = {'output_0': returns}
         return func_outputs
 
-    def compute(self, call_uid:str, wrapped_inputs:TDict[str, ValueRef],
+    def compute(self, call_uid:str,
+                wrapped_inputs:TDict[str, ValueRef],
+                skipped_inputs:TDict[str, TAny],
                 returns:TUnion[tuple, TAny], apply_returns:bool,
                 pass_context_to_func:bool, compat_inputs:TDict[str, TAny],
-                c:Context, is_retracing_superop:bool):
+                c:Context, 
+                is_retracing_superop:bool) -> TTuple[TDict[str, ValueRef], TList[Call], Call, TList[TAny]]:
         """
         Responsible for computing the function (or simulating its computation
         via returns). 
@@ -417,6 +442,13 @@ class OpCaller(object):
             superops or low-level ops;
             - handle wrapping of inputs/outputs of superops separately 
             - figure out if the call will need to be recomputed in the future
+        
+        Returns:
+            - {output name: wrapped output}
+            - list of extra output calls produced
+            - this call
+            - list of values to be interpreted as skipped outputs (either from
+              function execution or placeholders)
         """
         input_uids = {k: v.uid for k, v in wrapped_inputs.items()}
         allow_calls = c.allow_calls
@@ -425,8 +457,11 @@ class OpCaller(object):
             '__tag__': c.tag
         }
         if apply_returns:
+            if self.op.has_skipped_outputs:
+                raise NotImplementedError()
             func_outputs = self._returns_to_dict(sig=self.op.sig,
                                                  returns=returns)
+            skipped_output_list = []
             # ensure that values are fully unwrapped 
             if CoreConfig.require_returns_unwrapped:
                assert all(not contains_any_vref(obj) 
@@ -439,14 +474,16 @@ class OpCaller(object):
                                for k, v in wrapped_inputs.items()}
             else:
                 func_inputs = wrapped_inputs
+            # add skipped inputs
+            func_inputs.update(skipped_inputs)
             if pass_context_to_func:
-                func_outputs = self.op.compute(inputs={**func_inputs,
+                func_outputs, skipped_output_list = self.op.compute(inputs={**func_inputs,
                                                        **compat_inputs}, 
                                         context_arg=CONTEXT_KW,
                                         context_representation=c)
             else:
-                func_outputs = self.op.compute(inputs={**func_inputs, **compat_inputs})
-            
+                func_outputs, skipped_output_list = self.op.compute(inputs={**func_inputs, **compat_inputs})
+        
         if not self.op.is_super:
             wrapped_outputs, output_calls = self.wrap_outputs(
                 outputs=func_outputs,
@@ -489,7 +526,7 @@ class OpCaller(object):
             outputs=wrapped_outputs,
             metadata=call_metadata, uid=call_uid
         )
-        return wrapped_outputs, output_calls, op_call
+        return wrapped_outputs, output_calls, op_call, skipped_output_list
     
     def mload_outputs(self, mcall_data:TList[Call],
                       c:Context, deeplazy:bool=False,
@@ -556,15 +593,13 @@ class OpCaller(object):
                                    minput_calls=minput_calls, c=c,
                                    skip_delayed=skip_delayed)
 
-    def postprocess_outputs_as_returns(self, outputs_dict:TDict[str, TAny]):
+    def postprocess_outputs_as_returns(self, outputs_dict:TDict[str, TAny], 
+                                       skipped_outputs_list:TList[TAny]):
         if self.op.sig.is_fixed:
             assert self.op.output_names is not None
-            if len(self.op.output_names) == 1:
-                assert len(outputs_dict) == 1
-                key = list(outputs_dict.keys())[0]
-                return outputs_dict[key]
-            else:
-                return tuple([outputs_dict[k] for k in self.op.output_names])
+            returns = self.op._reconstruct_returns(wrapped_tracked_outputs=outputs_dict,
+                                         skipped_outputs=skipped_outputs_list,)
+            return returns
         else:
             output_names = outputs_dict.keys()
             expected_names = [f'output_{i}' for i in range(len(output_names))]
@@ -602,7 +637,7 @@ class OpCaller(object):
         return margs, mkwargs, mapply_returns, mreturns
 
     def run_is_recoverable(self, args, kwargs) -> bool:
-        (inputs_dict, apply_returns, returns, c,
+        (inputs_dict, _, apply_returns, returns, c,
          pass_context_to_func) = self.preprocess_inputs(args=args,
                                                         kwargs=kwargs,
                                                         apply_defaults=True)
@@ -618,7 +653,7 @@ class OpCaller(object):
                                                        mkwarg_cols=mkwarg_cols)
         call_uids = []
         for args, kwargs in zip(margs, mkwargs):
-            (inputs_dict, _, _, c, _) = self.preprocess_inputs(args=args, 
+            (inputs_dict, _, _, _, c, _) = self.preprocess_inputs(args=args, 
                                                                kwargs=kwargs,
                                                                apply_defaults=True)
             wrapped_inputs, _, _ = self.wrap_inputs(args=(), kwargs=inputs_dict,
@@ -700,7 +735,7 @@ class OpCaller(object):
         """
         Return the location of the call for these arguments
         """
-        (inputs_dict, apply_returns, returns, c,
+        (inputs_dict, _, apply_returns, returns, c,
          pass_context_to_func) = self.preprocess_inputs(
              args=args,
             kwargs=kwargs,
@@ -728,8 +763,8 @@ class OpCaller(object):
         return {mapping[k]: v for k, v in self.op.mutations.items()}
 
     def verify_mutations(self, wrapped_inputs:TDict[str, ValueRef], 
-                        returns:TUnion[ValueRef, TTuple[ValueRef,...]], 
-                        first_time:bool=False):
+                         wrapped_outputs:TDict[str, ValueRef], 
+                         first_time:bool=False):
         """
         Check that mutations are valid
 
@@ -741,10 +776,10 @@ class OpCaller(object):
         if self.op.mutations is None:
             return
         internal_mutations = self.get_internal_mutations()
-        outputs_tuple = returns if isinstance(returns, tuple) else (returns,)
         for input_name, output_index in internal_mutations.items():
             mut_input = wrapped_inputs[input_name]
-            mut_output = outputs_tuple[output_index]
+            output_name = self.op.output_names[output_index]
+            mut_output = wrapped_outputs[output_name]
             if not isinstance(mut_input, AtomRef):
                 raise NotImplementedError()
             if not isinstance(mut_output, AtomRef):
@@ -756,18 +791,18 @@ class OpCaller(object):
                     raise RuntimeError()
     
     def apply_mutations(self, wrapped_inputs:TDict[str, ValueRef], 
-                        returns:TUnion[ValueRef, TTuple[ValueRef,...]]):
+                        wrapped_outputs:TDict[str, ValueRef]):
         """
         Overwrite the state of the op's mutated inputs with their matching
         outputs.
         """
         if self.op.mutations is None:
             return
-        outputs_tuple = returns if isinstance(returns, tuple) else (returns,)
         internal_mutations = self.get_internal_mutations()
         for input_name, output_index in internal_mutations.items():
             mut_input = wrapped_inputs[input_name]
-            mut_output = outputs_tuple[output_index]
+            output_name = self.op.output_names[output_index]
+            mut_output = wrapped_outputs[output_name]
             overwrite_vref(vref=mut_input, overwrite_from=mut_output)
     
     ############################################################################ 
@@ -819,28 +854,32 @@ class OpCaller(object):
         ### figure out if we should apply defaults
         c = self.get_context_from_kwargs(kwargs=kwargs)
         mode = c.mode
+        logging.debug(f'Mode is {mode}')
+        if mode in MODES.noop:
+            return self.op.func(*args, **kwargs)
         if mode == MODES.query:
             apply_defaults = CoreConfig.bind_defaults_in_queries
         else:
             apply_defaults = CoreConfig.enable_defaults
         ### 
-        (inputs_dict, apply_returns, returns, c,
+        (tracked_inputs_dict, skipped_inputs_dict, apply_returns, returns, c,
          pass_context_to_func) = self.preprocess_inputs(
              args=args,
             kwargs=kwargs,
             apply_defaults=apply_defaults
         )
+        for v in tracked_inputs_dict.values():
+            if isinstance(v, AnnotatedObj) and v.is_final:
+                raise ValueError()
         mode = c.mode
-        logging.debug(f'Mode is {mode}')
-        if mode in MODES.noop:
-            return self.op.func(*args, **kwargs)
         if mode in (MODES.query, MODES.query_delete):
-            return self.call_query(inputs_dict=inputs_dict, c=c)
+            return self.call_query(inputs_dict=tracked_inputs_dict, c=c)
         inputs_include_deconstructive =\
             self._infer_include_deconstructive_in_inputs()
+        # remove skipped inputs before wrapping
         wrapped_inputs, input_calls, compat_inputs = self.wrap_inputs(
             args=(),
-            kwargs=inputs_dict,
+            kwargs=tracked_inputs_dict,
             include_deconstructive=inputs_include_deconstructive
         )
         logging.debug('Wrapped inputs')
@@ -881,22 +920,29 @@ class OpCaller(object):
                                             skip_delayed=True)
             self._cg_precall(c=c, will_compute=True)
             start_time = time.time() # an approximation really
-            wrapped_outputs, output_calls, op_call = self.compute(
+
+            wrapped_outputs, output_calls, op_call, skipped_outputs_list = self.compute(
                 call_uid=call_uid,
                 wrapped_inputs=wrapped_inputs,
+                skipped_inputs=skipped_inputs_dict,
                 returns=returns,
                 apply_returns=apply_returns,
                 compat_inputs=compat_inputs,
                 c=c, is_retracing_superop=is_retracing_superop,
                 pass_context_to_func=pass_context_to_func
             )
+
             end_time = time.time()
             self._cg_postcall(c=c, did_compute=True)
             op_call.exec_interval = (start_time, end_time)
             logging.debug(f'Computed function')
-            returns = self.postprocess_outputs_as_returns(outputs_dict=wrapped_outputs)
+            returns = self.postprocess_outputs_as_returns(
+                outputs_dict=wrapped_outputs,
+                skipped_outputs_list=skipped_outputs_list
+            )
             self.verify_mutations(wrapped_inputs=wrapped_inputs,
-                                  returns=returns, first_time=True)
+                                  wrapped_outputs=wrapped_outputs,
+                                  first_time=True)
             if mode == MODES.run and call_data is None:
                 # save calls only for calls that have not happened (like above)
                 self.save_resulting_calls(
@@ -905,8 +951,6 @@ class OpCaller(object):
                     input_calls=None,
                     c=c, skip_delayed=True
                 )
-            #! mutations must be applied AFTER calls have been saved
-            self.apply_mutations(wrapped_inputs=wrapped_inputs, returns=returns)
             if mode in (MODES.delete, MODES.capture):
                 if mode == MODES.delete:
                     call_destination = 'deletion_buffer'
@@ -919,6 +963,9 @@ class OpCaller(object):
                                  deeplazy_outputs=wrapped_outputs,
                                  output_calls=output_calls,
                                  c=c, destination=call_destination)
+            #! mutations must be applied AFTER calls have been saved and processed
+            self.apply_mutations(wrapped_inputs=wrapped_inputs, 
+                                 wrapped_outputs=wrapped_outputs)
         ### case: skip to end of op
         else:
             if apply_returns:
@@ -942,13 +989,18 @@ class OpCaller(object):
                                  output_calls=[],
                                  deeplazy_outputs=wrapped_outputs, c=c, 
                                  destination=call_destination)
+            # come up with empty skipped output values
+            num_skipped_outputs = len(self.op.skip_data['skipped_output_positions'])
+            skipped_outputs_list = [AsFinal(obj=None) for _ in range(num_skipped_outputs)]
             returns = self.postprocess_outputs_as_returns(
-                outputs_dict=wrapped_outputs
+                outputs_dict=wrapped_outputs,
+                skipped_outputs_list=skipped_outputs_list
             )
             self.verify_mutations(wrapped_inputs=wrapped_inputs,
-                                  returns=returns, first_time=False)
+                                  wrapped_outputs=wrapped_outputs,
+                                  first_time=False)
             self.apply_mutations(wrapped_inputs=wrapped_inputs,
-                                 returns=returns)
+                                 wrapped_outputs=wrapped_outputs)
         return returns
 
     # needs to be updated

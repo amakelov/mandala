@@ -32,6 +32,20 @@ def test_refactorings(setup_storage):
             return 23 
         x = f_1_1(x=23)
         assert unwrap(x) == 23
+    
+        ############################## 
+        ### invalid output type change
+        ############################## 
+        @op()
+        def f_1_2(x:int) -> TAny:
+            return 23
+        try:
+            @op()
+            def f_1_2(x:int) -> int:
+                return 23
+            assert False
+        except SynchronizationError:
+            assert True
 
     #############################
     ### creating an input
@@ -104,6 +118,25 @@ def test_refactorings(setup_storage):
         df = c.qeval(x, y, res)
         assert df.shape[0] == 9
     storage.drop_instance_data(answer=True)
+
+
+def test_update_bug():
+    storage = Storage()
+
+    @op(storage)
+    def f(x:int) -> int:
+        return x + 1 
+    
+    with run(storage):
+        f(23)
+        
+    @op(storage)
+    def f(x:int, y:int=CompatArg(default=1)) -> int:
+        return x + y
+    
+    f.get_table()
+    
+    
 
 def test_changes_before_commit():
     storage = Storage()

@@ -461,8 +461,7 @@ def is_subtype(s:Type, t:Type) -> bool:
     Return True if and only if any value that is an instance of s is also
     an instance of t.
     """
-    if isinstance(s, AnyType) or isinstance(t, AnyType):
-        # clear out the Any special cases first
+    if isinstance(t, AnyType):
         res = True
     elif isinstance(t, AtomType):
         if not isinstance(s, AtomType):
@@ -615,3 +614,9 @@ class TypeVar(Type):
     
     def subtypes(self) -> TIter['Type']:
         return [self]
+
+
+is_subtype(UnionType([AnyType(), ListType(AnyType())]), 
+           UnionType([AnyType(), ListType(AnyType())]), )
+
+a = UnionType([AnyType(), ListType(AnyType())]) 

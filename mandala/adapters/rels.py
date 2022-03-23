@@ -302,6 +302,11 @@ class BaseRelAdapter(ABC):
     ############################################################################ 
     ### provenance
     ############################################################################ 
+    @property
+    @abstractmethod
+    def track_provenance(self) -> bool:
+        raise NotImplementedError()
+
     @abstractmethod
     def read_provenance(self, conn:Connection=None) -> pd.DataFrame:
         """
@@ -463,10 +468,14 @@ class RelAdapter(BaseRelAdapter):
     PROVENANCE_TABLE = '__provenance__'
 
     def __init__(self, rel_storage:RelStorage, val_adapter:BaseValAdapter, 
-                 call_graph_storage:BaseCallGraphStorage):
+                 call_graph_storage:BaseCallGraphStorage, 
+                 track_provenance:bool=None):
         self._rel_storage = rel_storage
         self._val_adapter = val_adapter
         self._call_graph_storage = call_graph_storage
+        if track_provenance is None:
+            track_provenance = CoreConfig.track_provenance
+        self._track_provenance = track_provenance
 
     def init(self, first_time:bool):
         if first_time:
@@ -569,7 +578,12 @@ class RelAdapter(BaseRelAdapter):
                 default_value = default.default
                 default_type = op.sig.inputs()[new_input_name]
                 vref = wrap_as_atom(obj=default_value, tp=default_type, set_uid=True)
+                sess.d = locals()
+                # put vref in objects
                 self.val_adapter.set(vref=vref)
+                # put vref in relations
+                vref_rel = self.get_vref_relation(vref=vref)
+                self.rel_storage.mfast_upsert(relations_dict={self.VAR_TABLE: vref_rel}, conn=conn)
                 default_uid = vref.uid
                 self.create_input(relname=op_relname, input_name=new_input_name, 
                                   default=default_uid, conn=conn)
@@ -877,7 +891,7 @@ class RelAdapter(BaseRelAdapter):
         tables = self.calls_to_tables(calls=calls)
         self.rel_storage.mfast_insert(relations_dict=tables, conn=conn)
         # provenance 
-        if CoreConfig.track_provenance:
+        if self.track_provenance:
             provenance_df = self.mget_provenance_table(calls=calls)
             self.rel_storage.mfast_insert(relations_dict={self.PROVENANCE_TABLE: provenance_df},
                                         conn=conn)
@@ -887,7 +901,7 @@ class RelAdapter(BaseRelAdapter):
         tables = self.calls_to_tables(calls=calls)
         self.rel_storage.mfast_upsert(relations_dict=tables, conn=conn)
         # provenance 
-        if CoreConfig.track_provenance:
+        if self.track_provenance:
             provenance_df = self.mget_provenance_table(calls=calls)
             self.rel_storage.mfast_upsert(relations_dict={self.PROVENANCE_TABLE: provenance_df},
                                         conn=conn)
@@ -963,7 +977,7 @@ class RelAdapter(BaseRelAdapter):
                                          allow_exist=True, conn=conn)
         
         ### provenance table
-        if CoreConfig.track_provenance:
+        if self.track_provenance:
             #! note that dtypes are not supported by some queries
             var_qtable = self.rel_storage.get_qtable(name=self.VAR_TABLE)
             var_qindex = f'{var_qtable}.{self.VAR_INDEX}'
@@ -1039,6 +1053,10 @@ class RelAdapter(BaseRelAdapter):
         df[Prov.is_input] = df[Prov.is_input].apply(lambda x: bool_mapper[x])
         df[Prov.is_super] = df[Prov.is_super].apply(lambda x: bool_mapper[x])
         return df
+    
+    @property
+    def track_provenance(self) -> bool:
+        return self._track_provenance
 
     @transaction()
     def read_provenance(self, conn:Connection=None) -> pd.DataFrame:
@@ -1220,7 +1238,7 @@ class RelAdapter(BaseRelAdapter):
         self.rel_storage.delete_rows(name=relname, index=call_uids,
                                      index_col=self.CALL_UID_COL, conn=conn)
         # delete from provenance
-        if CoreConfig.track_provenance:
+        if self.track_provenance:
             self.rel_storage.delete_rows(name=self.PROVENANCE_TABLE, 
                                         index=call_uids, index_col=Prov.call_uid, 
                                         conn=conn)

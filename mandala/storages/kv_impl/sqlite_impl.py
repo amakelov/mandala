@@ -44,7 +44,6 @@ class SQLiteStorage(KVStore):
     
     @root.setter
     def root(self, value:Path=None):
-        print(value)
         self._init(root=value)
         self.setup()
     

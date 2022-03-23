@@ -1,5 +1,5 @@
 import typing
-from .core.utils import CompatArg, AsType, AsTransient, AsDelayedStorage
+from .core.utils import CompatArg, AsType, AsTransient, AsDelayedStorage, Mut, Skip, Mark
 from .core.bases import unwrap, detached
 from .core.config import CoreConfig
 from .core.wrap import wrap_detached
@@ -15,6 +15,7 @@ from .ui.vars import Var, Query, BuiltinVars
 from .util.logging_ut import set_logging_level
 from .queries.rel_weaver import ValQuery, ListQuery, DictQuery
 from .queries.rel_weaver import MakeList
+from .queries.qfunc import qfunc
 
 IndexQuery = BuiltinVars.IndexQuery
 KeyQuery = BuiltinVars.KeyQuery

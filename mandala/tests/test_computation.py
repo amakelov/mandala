@@ -58,7 +58,7 @@ def test_lazy_patterns(setup_tests):
         for num in numbers:
             all_factors.append(get_prime_factors(x=num))
         result_1 = mean_2d(arr=all_factors)
-        result_2 = int_mean(x=[mean(x=elt) for elt in all_factors])
+        result_2 = mean(x=[mean(x=elt) for elt in all_factors])
         c.commit()
 
     ### resume lazily with explicit attaching of values
@@ -73,7 +73,7 @@ def test_lazy_patterns(setup_tests):
         assert not result_1.in_memory
         means = [mean(x=elt) for elt in all_factors]
         for vref in means: c.attach(vref=vref)
-        result_2 = int_mean(x=means)
+        result_2 = mean(x=means)
         assert not result_2.in_memory
         c.attach(result_1)
         c.attach(result_2)

@@ -3,6 +3,8 @@ from inspect import Parameter
 
 from .config import CoreConfig
 from .tps import Type, is_subtype, AnyType
+from .utils import Mark, Skip, is_skipped
+from .config import CoreConsts
 
 from ..common_imports import *
 from ..util.common_ut import rename_dict_keys, invert_dict
@@ -218,7 +220,7 @@ class BaseSignature(ABC):
                 res[k] = self.varkwarg[1] if bind_types else kwargs[k]
         if (bind_what == 'values' and apply_defaults):
             for k, v in self.defaults.items():
-                if (k not in res) and (v is not inspect._empty):
+                if (k not in res) and (v is not inspect._empty) and (k not in CoreConsts.APPLY_DEFAULTS_SKIP):
                     res[k] = v
         return res
         
@@ -305,17 +307,21 @@ class Signature(BaseSignature):
     @staticmethod
     def from_callable(clbl:TCallable, output_names:TList[str]=None, 
                       strict:bool=None, excluded_names:TList[str]=None, 
-                      fixed_outputs:bool=True) -> 'Signature':
+                      fixed_outputs:bool=True) -> TTuple['Signature', TDict[str, TAny]]:
         """
         Get a Signature object from a callable. 
             - strict: controls whether annotations are allowed to be generic 
             python annotations (False), or must be only custom 
             Type-related objects (True)
+        
+        Returns:
+            - the signature object
+            - parsed metadata for skipped inputs/outputs (or future things)
         """
         if strict is None:
             strict = CoreConfig.strict_signatures
         sig = inspect.signature(clbl)
-        params = sig.parameters
+        params = sig.parameters # parameters are ordered in definition order
         arg_annotations:TList[TTuple[str, TAny]] = []
         vararg_annotation:TOption[TTuple[str, TAny]] = None
         kwarg_annotations:TDict[str, TAny] = {}
@@ -324,17 +330,26 @@ class Signature(BaseSignature):
         excluded_names = [] if excluded_names is None else excluded_names
         included_params = {k: v for k, v in params.items() 
                            if k not in excluded_names}
+        skipped_input_names = []
+        skipped_output_positions = []
+        tracked_output_positions = []
         for name, p in included_params.items():
             if p.kind == Parameter.POSITIONAL_ONLY:
                 raise NotImplementedError()
             elif p.kind == Parameter.POSITIONAL_OR_KEYWORD:
-                arg_annotations.append((name, p.annotation))
-                defaults[name] = p.default
+                if is_skipped(annotation=p.annotation):
+                    skipped_input_names.append(p.name)
+                else:
+                    arg_annotations.append((name, p.annotation))
+                    defaults[name] = p.default
             elif p.kind == Parameter.VAR_POSITIONAL:
                 vararg_annotation = (name, p.annotation)
             elif p.kind == Parameter.KEYWORD_ONLY:
-                kwarg_annotations[name] = p.annotation
-                defaults[name] = p.default
+                if is_skipped(annotation=p.annotation):
+                    skipped_input_names.append(p.name)
+                else:
+                    kwarg_annotations[name] = p.annotation
+                    defaults[name] = p.default
             elif p.kind == Parameter.VAR_KEYWORD:
                 varkwarg_annotation = (name, p.annotation)
         if not CoreConfig.enable_defaults and (len(defaults) > 0):
@@ -348,6 +363,15 @@ class Signature(BaseSignature):
                 pre_output_annotations = []
             else:
                 pre_output_annotations = [return_annotation]
+            # parse the skipped outputs
+            for i, output_annotation in enumerate(pre_output_annotations):
+                if is_skipped(output_annotation):
+                    skipped_output_positions.append(i)
+                else:
+                    tracked_output_positions.append(i)
+            pre_output_annotations = [pre_output_annotations[i] 
+                                      for i in range(len(pre_output_annotations))
+                                      if i not in skipped_output_positions]
             if output_names is None:
                 output_names = [f'output_{i}' for 
                                 i in range(len(pre_output_annotations))]
@@ -378,9 +402,14 @@ class Signature(BaseSignature):
                            for name, annotation in output_annotations]
         else:
             ord_outputs = None
+        skip_data = {
+            'skipped_input_names': skipped_input_names,
+            'skipped_output_positions': skipped_output_positions,
+            'tracked_output_positions': tracked_output_positions
+        }
         return Signature(ord_poskw=args, kw=kwargs, ord_outputs=ord_outputs, 
                          vararg=vararg, varkwarg=varkwarg, defaults=defaults, 
-                         fixed_outputs=fixed_outputs)
+                         fixed_outputs=fixed_outputs), skip_data
         
     def copy(self) -> 'Signature':
         return copy.deepcopy(self)

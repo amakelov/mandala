@@ -209,90 +209,156 @@ class Config(object):
     @property
     def default_hash_method(self) -> str:
         return self._default_hash_method
+    
+    def set_default_hash_method(self, value:str):
+        self._default_hash_method = value
 
     @property
     def enable_vref_magics(self) -> bool:
         return self._enable_vref_magics
+    
+    def set_vref_magics(self, value:bool):
+        self._enable_vref_magics = value
 
     @property
     def enable_query_magics(self) -> bool:
         return self._enable_query_magics
+    
+    def set_query_magics(self, value:bool):
+        self._enable_query_magics = value
 
     @property
     def enable_autonesting(self) -> bool:
         return self._enable_autonesting
     
+    def set_autonesting(self, value:bool):
+        self._enable_autonesting = value
+    
     @property
     def strict_signatures(self) -> bool:
         return self._strict_signatures
+    
+    def set_strict_signatures(self, value:bool):
+        self._strict_signatures = value
 
     @property
     def enable_defaults(self) -> bool:
         return self._enable_defaults
     
+    def set_defaults(self, value:bool):
+        self._enable_defaults = value
+    
     @property
     def bind_defaults_in_queries(self) -> bool:
         return self._bind_defaults_in_queries
+    
+    def set_bind_defaults_in_queries(self, value:bool):
+        self._bind_defaults_in_queries = value
     
     @property
     def allow_new_inputs(self) -> bool:
         return self._allow_new_inputs
     
+    def set_allow_new_inputs(self, value:bool):
+        self._allow_new_inputs = value
+    
     @property
     def autowrap(self) -> bool:
         return self._autowrap
+
+    def set_autowrap(self, value:bool):
+        self._autowrap = value
     
     @property
     def require_returns_unwrapped(self) -> bool:
         return self._require_returns_unwrapped
     
+    def set_require_returns_unwrapped(self, value:bool):
+        self._require_returns_unwrapped = value
+    
     @property
     def on_var_signature(self) -> str:
         return self._on_var_signature
     
+    def set_on_var_signature(self, value:str):
+        self._on_var_signature = value
+
     @property
     def track_provenance(self) -> bool:
         return self._track_provenance
     
+    def set_track_provenance(self, value:bool):
+        self._track_provenance = value
+    
     @property
     def build_call_graph(self) -> bool:
         return self._build_call_graph
-    
+
+    def set_build_call_graph(self, value:bool):
+        self._build_call_graph = value
+       
     @property
     def include_constructive_indexing_in_rels(self) -> bool:
         return self._include_constructive_indexing_in_rels
     
+    def set_include_constructive_indexing(self, value:bool):
+        self._include_constructive_indexing = value
+    
     @property
     def superop_wrapping_style(self) -> str:
         return self._superop_wrapping_style
-    
+
+    def set_superop_wrapping_style(self, value:str):
+        self._superop_wrapping_style = value
+       
     @property
     def decompose_struct_as_many(self) -> bool:
         return self._decompose_struct_as_many
 
+    def set_decompose_struct_as_many(self, value:bool):
+        self._decompose_struct_as_many = value
+    
     @property
     def autocommit(self) -> bool:
         return self._autocommit
 
+    def set_autocommit(self, value:bool):
+        self._autocommit = value
+    
     @property
     def autodelete(self) -> bool:
         return self._autodelete
 
+    def set_autodelete(self, value:bool):
+        self._autodelete = value
+    
     @property
     def logging_level(self) -> str:
         return self._logging_level
 
+    def set_logging_level(self, value:str):
+        self._logging_level = value
+    
     @property
     def transaction_loglevel(self) -> int:
         return self._transaction_loglevel
 
+    def set_transaction_loglevel(self, value:int):
+        self._transaction_loglevel = value
+    
     @property
     def verbose_deletes(self) -> bool:
         return self._verbose_deletes
 
+    def set_verbose_deletes(self, value:bool):
+        self._verbose_deletes = value
+    
     @property
     def verbose_commits(self) -> bool:
         return self._verbose_commits
+
+    def set_verbose_commits(self, value:bool):
+        self._verbose_commits = value
 
     @property
     def use_rich(self) -> bool:
@@ -310,6 +376,8 @@ if CoreConfig.use_rich and EnvConfig.has_rich:
 class CoreConsts(object):
     UID_COL = '__index__'
     PARTITION_COL = '__partition__'
+    CONTEXT_KWARG = '__context__'
+    APPLY_DEFAULTS_SKIP = (CONTEXT_KWARG, )
 
     class List(object):
         LIST = 'list'
