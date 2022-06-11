@@ -3,6 +3,7 @@ from .storage import Storage
 
 from ..common_imports import *
 from ..util.common_ut import group_like, ungroup_like, rename_dict_keys, get_collection_atoms, concat_homogeneous_lists
+from ..util.common_ut import invert_dict
 from ..util.common_ut import transpose_lists, transpose_listdict, transpose_returns
 from ..core.config import CoreConfig, MODES, SuperopWrapping, CoreConsts
 from ..core.utils import BackwardCompatible, AnnotatedObj
@@ -883,7 +884,14 @@ class OpCaller(object):
             include_deconstructive=inputs_include_deconstructive
         )
         logging.debug('Wrapped inputs')
+        if self.op._debug:
+            input_uids = {k: v.uid for k, v in wrapped_inputs.items()}
+            _inputs_map = invert_dict(self.op.sig_map.fixed_inputs_map())
+            input_uids = {_inputs_map[k]: v for k, v in input_uids.items()}
+            print(f'Input uids: {input_uids}')
         call_uid = self.get_call_uid(wrapped_inputs=wrapped_inputs, c=c)
+        if self.op._debug:
+            print(f'Call uid: {call_uid}')
         if mode in (MODES.run, MODES.delete, MODES.capture):
             recoverable, call_data = self.get_recoverable(call_uid=call_uid, c=c)
             logging.debug(f'Got call status: is_recoverable={recoverable}')

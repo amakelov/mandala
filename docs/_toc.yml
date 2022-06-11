@@ -15,3 +15,7 @@ parts:
         numbered: false
       sections: 
       - file: tutorials/00_hello
+  - caption: Blog
+    chapters:
+    - file: blog/intro 
+    - file: blog/test.html

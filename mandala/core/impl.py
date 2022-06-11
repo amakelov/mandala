@@ -543,10 +543,12 @@ class SimpleFunc(Operation): # todo - unfortunate name b/c backward compat
     def __init__(self, func:TCallable=None, output_names:TList[str]=None, 
                  version:str=None, is_super:bool=False, unwrap_inputs:bool=True,
                  var_outputs:bool=False, 
-                 mutations:TDict[str, int]=None):
+                 mutations:TDict[str, int]=None, 
+                 debug:bool=False):
         self._func = func
         self._var_outputs = var_outputs
         self._mutations = mutations
+        self._debug = debug
         if func is None:
             self._sig = None
             self._orig_sig = None

@@ -299,7 +299,7 @@ class ListQuery(ValQuery):
             return deconstruct_list_query(lst=self, 
                                           idx_constraint=idx_constraint)
 
-def MakeList(containing:ValQuery, at_index:int=None,
+def _MakeList(containing:ValQuery, at_index:int=None,
              at_indices:TList[int]=None) -> ListQuery:
     construct_list_query = ConstructListQuery(tags=get_tags_from_context())
     if at_index is not None:
@@ -313,6 +313,8 @@ def MakeList(containing:ValQuery, at_index:int=None,
     return construct_list_query(prototype=containing,
                                 idx_constraint=idx_constraint)
     
+def MakeList(containing:TAny, at_index:int=None, at_indices:TList[int]=None) -> TAny:
+    return _MakeList(containing=containing, at_index=at_index, at_indices=at_indices)
 
 class DictQuery(ValQuery):
 

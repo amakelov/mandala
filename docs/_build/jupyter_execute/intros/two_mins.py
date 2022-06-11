@@ -33,7 +33,8 @@
 # to proceed. Consequences include
 # - **flexible queries**: you can get to the results you want by directly
 #   retracing the steps that created them, however complicated they may be (an
-#   **imperative** query interface)
+#   **imperative** query interface) -- without loading unneeded intermediate
+#   results. 
 # - **easy iteration**: you can organically grow a piece of code with new
 #   parameters and functionality, without re-doing expensive work
 # - **resilience**: recovering from failure is as simple as running the same

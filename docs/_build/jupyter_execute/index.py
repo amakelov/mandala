@@ -1,10 +1,10 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# # Mandala: self-managing experiments
+# # Mandala: concise experiment management
 # ## What is Mandala?
-# Mandala enables new, simpler patterns for working with complex and evolving
-# computational experiments. 
+# Mandala enables new, simpler, and more concise patterns for working with complex
+# and evolving computational experiments. 
 # 
 # It eliminates low-level code and decisions for how to save, load, query,
 # delete and otherwise organize results. To achieve this, it lets computational

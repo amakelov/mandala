@@ -28,7 +28,8 @@ class FuncOpUI(FuncUIBase):
                  output_names:TList[str]=None, is_super:bool=False,
                  unwrap_inputs:bool=True, storage:Storage=None, 
                  ray_kwargs:TDict[str, TAny]=None, 
-                 var_outputs:bool=False, mutations:TDict[str, int]=None):
+                 var_outputs:bool=False, mutations:TDict[str, int]=None, 
+                 debug:bool=False):
         if n_out is not None and output_names is None:
             output_names = [f'output_{i}' for i in range(n_out)]
         version = str(version) if version is not None else version
@@ -36,7 +37,7 @@ class FuncOpUI(FuncUIBase):
                               version=version,
                               is_super=is_super, 
                               unwrap_inputs=unwrap_inputs,
-                              var_outputs=var_outputs, mutations=mutations)
+                              var_outputs=var_outputs, mutations=mutations, debug=debug)
         self._storage = None
 
         if GlobalContext.exists():
@@ -210,7 +211,8 @@ class FuncOpDecorator(object):
                  output_names:TList[str]=None, n_out:int=None,
                  is_super:bool=None, unwrap_inputs:bool=True,
                  ray_kwargs:TDict[str, TAny]=None, 
-                 var_outputs:bool=False, mutations:TDict[str, int]=None):
+                 var_outputs:bool=False, mutations:TDict[str, int]=None, 
+                 debug:bool=False):
         if is_super is None:
             is_super = self.IS_SUPER_DEFAULT
         self.version = version
@@ -224,6 +226,7 @@ class FuncOpDecorator(object):
         if mutations is not None and self.is_super:
             raise ValueError()
         self.mutations = mutations
+        self.debug = debug
     
     def __call__(self, func:TCallable) -> 'func':
         if self.var_outputs:
@@ -236,7 +239,8 @@ class FuncOpDecorator(object):
                         storage=self.storage, 
                         ray_kwargs=self.ray_kwargs, 
                         var_outputs=self.var_outputs, 
-                        mutations=self.mutations)
+                        mutations=self.mutations, 
+                        debug=self.debug)
         
 
 class FuncSuperOpDecorator(FuncOpDecorator):
