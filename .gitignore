@@ -1,0 +1,81 @@
+# python
+*.pyc
+
+# logs
+*.log
+
+# pictures and other visualization-related
+*.jpg
+*.JPG
+*.png
+*.tif
+*.gif
+*.svg
+*.dot
+*.gv
+# *.mp4
+
+# docs
+*.pdf
+*.djvu
+*.ps
+
+# vim
+*.swp
+*.swo
+*.swn
+
+# archives
+*.7z
+*.dmg
+*.gz
+*.iso
+*.jar
+*.rar
+*.tar
+*.zip
+
+# latex
+*.aux
+*.fdb_latexmk
+*.fls
+*.log
+*.out
+
+# web
+# *.html
+# *.css
+
+################################################################################
+### path-based
+################################################################################
+# eggs
+mandala.egg-info/*
+# documentation
+jbook/docs/_build/
+# test results
+mandala/tests/test_output/
+test_output/
+# release
+release_scripts/
+htmlcov/
+demos/output/
+demos/madrylab/output/
+
+### fancier things
+# visualizations
+# Ignore files cached by Hypothesis
+**/.hypothesis/*
+# Ignore files cached by vscode
+**/.vscode/*
+# ignore files cached by pytest
+**/.pytest_cache/*
+# ignore files cached by jupyter
+**/.ipynb_checkpoints
+# dask
+dask-worker-space/
+# catboost
+**/catboost_info/
+
+# redis
+**/*.rdb
