@@ -9,20 +9,13 @@ import binascii
 from pathlib import Path
 import pandas as pd
 
-def get_uid() -> str:
-    return '{}'.format(binascii.hexlify(os.urandom(16)).decode('utf-8'))
+from sqlalchemy.sql.expression import Select
 
 ################################################################################
-class ValueRef:
-    """
-    Wraps objects with storage metadata (uid for now). 
-    
-    This is the object passed between memoized functions (ops).
-    """
-    def __init__(self, uid:str, obj:Any):
-        self.uid = uid
-        self.obj = obj
-    
+### core utils
+################################################################################
+def get_uid() -> str:
+    return '{}'.format(binascii.hexlify(os.urandom(16)).decode('utf-8'))
 
 class Hashing:
     """
@@ -41,6 +34,20 @@ class Hashing:
         return m.hexdigest()
 
 
+################################################################################
+### value references and wrapping
+################################################################################
+class ValueRef:
+    """
+    Wraps objects with storage metadata (uid for now). 
+    
+    This is the object passed between memoized functions (ops).
+    """
+    def __init__(self, uid:str, obj:Any):
+        self.uid = uid
+        self.obj = obj
+    
+
 def wrap(obj:Any) -> ValueRef:
     """
     Wraps a value as a `ValueRef` (with uid = content hash) if it isn't one
@@ -48,6 +55,8 @@ def wrap(obj:Any) -> ValueRef:
     """
     return obj if isinstance(obj, ValueRef) else ValueRef(uid=Hashing.content_hash(obj), obj=obj)
 
+################################################################################
+### calls 
 ################################################################################
 class Call:
     """
@@ -65,6 +74,8 @@ class Call:
         self.op = op
     
 
+################################################################################
+### operations and signatures
 ################################################################################
 class FuncOp:
     """
@@ -146,6 +157,8 @@ class Signature:
         return Signature(name=name, input_names=input_names, n_outputs=n_outputs, defaults=defaults, version=version) 
 
 ################################################################################
+### object storages
+################################################################################
 class JoblibStorage:
     """
     A basic file-based key-value storage for any Python objects.
@@ -175,6 +188,16 @@ class InMemoryStorage:
     """
     pass
 
+
+class ValAdapter:
+    """
+    A higher-level layer for interacting with the object storage. Unclear if it
+    will be needed for now.
+    """
+    pass
+
+################################################################################
+### database stuff
 ################################################################################
 class RelStorage:
     """
@@ -216,6 +239,76 @@ class RelAdapter:
         raise NotImplementedError()
 
 
+################################################################################
+### relational queries
+################################################################################
+class ValQuery:
+    """
+    Represents an input/output to an operation under the `query` interpretation
+    of code.
+    
+    This is the equivalent of a `ValueRef` when in a query context. In SQL
+    terms, it points to the table of objects. What matters more are the
+    constraints it is connected to via the `creator` and `consumers` fields,
+    which tell us which tables to join and how.
+    
+    There is always a unique `creator`, which is the operation that returned
+    this `ValQuery` object, but potentially many `consumers`, which are
+    subsequent calls to operations that consume this `ValQuery` object.
+    """
+    def __init__(self, creator:'OpQuery'=None, created_as:str=None, 
+                 consumers:List['OpQuery']=None, consumed_as:List[str]=None):
+        self.creator = creator
+        self.created_as = created_as
+        self.consumers = [] if consumers is None else consumers
+        self.consumed_as = [] if consumed_as is None else consumed_as
+        self.aliases = []
+
+
+class OpQuery:
+    """
+    Represents a call to an operation under the `query` interpretation of code.
+
+    This is the equivalent to a `Call` when in a query context. In SQL terms, it
+    points to the memoization table of some function. The `inputs` and `outputs`
+    connected to it are the `ValQuery` objects that represent the inputs and
+    outputs of this call.
+    """
+    def __init__(self, inputs:Dict[str, ValQuery], outputs:List[ValQuery], 
+                 op:FuncOp):
+        self.inputs = inputs
+        self.outputs = outputs
+        self.op = op
+
+
+class Compiler:
+    """
+    Compile a computational graph of connected `OpQuery` and `ValQuery` objects
+    into an SQL query.
+    """
+    def __init__(self, rel_adapter:RelAdapter, 
+                 val_queries:List[ValQuery], 
+                 op_queries:List[OpQuery]):
+        self.rel_adapter = rel_adapter
+        self.val_queries = val_queries
+        self.op_queries = op_queries
+        # OpQuery -> sqlalchemy alias object
+        self.op_aliases = {}
+        # ValQuery -> sqlalchemy alias object
+        self.val_aliases = {}
+    
+    def compile(self, select_queries:List[ValQuery]) -> Select:
+        """
+        Given value queries whose corresponding variables want to select as
+        columns, this compiles the graph of `ValQuery` and `OpQuery` objects
+        into a SQLAlchemy `Select` object that can be executed against the DB
+        backend.
+        """
+        raise NotImplementedError()
+
+################################################################################
+### 
+################################################################################
 class SigStorage:
     """
     Keeps track of the operations connected to a given storage.
@@ -245,6 +338,8 @@ class SigStorage:
         raise NotImplementedError()
 
 ################################################################################
+### putting it all together
+################################################################################
 class Storage:
     """
     Groups together all the components of the storage system. 
@@ -268,7 +363,6 @@ class Storage:
         self.sig_storage = SigStorage()
 
 
-################################################################################
 class FuncInterface:
     """
     Wrapper around a memoized function. 
