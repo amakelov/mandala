@@ -50,17 +50,7 @@
 ### path-based
 ################################################################################
 # eggs
-mandala.egg-info/*
-# documentation
-jbook/docs/_build/
-# test results
-mandala/tests/test_output/
-test_output/
-# release
-release_scripts/
-htmlcov/
-demos/output/
-demos/madrylab/output/
+mandala_lite.egg-info/*
 
 ### fancier things
 # visualizations
@@ -72,10 +62,3 @@ demos/madrylab/output/
 **/.pytest_cache/*
 # ignore files cached by jupyter
 **/.ipynb_checkpoints
-# dask
-dask-worker-space/
-# catboost
-**/catboost_info/
-
-# redis
-**/*.rdb

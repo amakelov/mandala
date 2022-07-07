@@ -13,5 +13,5 @@ parser = get_parser()
 args = parser.parse_args()
 
 if __name__ == '__main__':
-    from tests import *
+    from mandala_lite.all import *
     # setup_logging(level='info')
