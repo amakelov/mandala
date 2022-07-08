@@ -49,11 +49,14 @@ class Context:
     def __exit__(self, exc_type, exc_value, exc_traceback):
         if not self._updates_stack:
             raise RuntimeError('No context to exit from')
+        # commit calls from temp partition to main and tabulate them
+        self.storage.commit()
+        # undo updates
         ascent_updates = self._updates_stack.pop()
         for k, v in ascent_updates.items():
             self.__dict__[f'{k}'] = v
+        # unlink from global if done
         if len(self._updates_stack) == 0:
-            # unlink from global if done
             GlobalContext.current = None
         if exc_type:
             raise exc_type(exc_value).with_traceback(exc_traceback)

@@ -5,7 +5,7 @@ import os
 import joblib
 import inspect
 import binascii
-from typing import Any, Dict, List, Callable, Tuple, Iterable, Optional, Set, Union
+from typing import Any, Dict, List, Callable, Tuple, Iterable, Optional, Set, Union, TypeVar
 from pathlib import Path
 
 import pandas as pd

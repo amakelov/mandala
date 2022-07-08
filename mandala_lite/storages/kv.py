@@ -16,6 +16,26 @@ class KVStore:
     def delete(self, k:str) -> None:
         raise NotImplementedError()
     
+    def keys(self) -> List[str]:
+        raise NotImplementedError()
+    
+    ############################################################################ 
+    ### mmethods are useful syntactic sugar
+    ############################################################################ 
+    def mget(self, ks:List[str]) -> List[Any]:
+        return [self.get(k=k) for k in ks]
+    
+    def mset(self, kvs:Dict[str, Any]):
+        for k, v in kvs.items():
+            self.set(k=k, v=v)
+    
+    def mexists(self, ks:List[str]) -> List[bool]:
+        return [self.exists(k=k) for k in ks]
+    
+    def mdelete(self, ks:List[str]):
+        for k in ks:
+            self.delete(k=k)
+    
 
 class JoblibStorage(KVStore):
     """
@@ -39,6 +59,9 @@ class JoblibStorage(KVStore):
     def delete(self, k:str):
         os.remove(path=self.get_obj_path(k=k))
 
+    def keys(self) -> List[str]:
+        return [k.stem for k in self.root.glob('*.joblib')]
+
 
 class InMemoryStorage(KVStore):
     """
@@ -58,3 +81,6 @@ class InMemoryStorage(KVStore):
 
     def delete(self, k:str):
         del self.data[k]
+    
+    def keys(self) -> List[str]:
+        return list(self.data.keys())

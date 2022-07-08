@@ -13,6 +13,12 @@ class ValueRef:
         self.obj = obj
         self.in_memory = in_memory
     
+    def __repr__(self) -> str:
+        if self.in_memory:
+            return f'ValueRef({self.obj}, uid={self.uid})' 
+        else:
+            return f'ValueRef(in_memory=False, uid={self.uid})'
+    
 
 def wrap(obj:Any, uid:Optional[str]=None) -> ValueRef:
     """
@@ -24,6 +30,15 @@ def wrap(obj:Any, uid:Optional[str]=None) -> ValueRef:
     else:
         uid = Hashing.get_content_hash(obj) if uid is None else uid
         return ValueRef(uid=uid, obj=obj, in_memory=True)
+
+
+T = TypeVar('T')
+def unwrap(obj:Union[T, ValueRef]) -> T:
+    if not isinstance(obj, ValueRef):
+        return obj
+    else:
+        return obj.obj
+
 
 class Call:
     """
@@ -45,14 +60,17 @@ class FuncOp:
     """
     Operation that models function execution.
     """
-    def __init__(self, func:Callable, version:int=0):
+    def __init__(self, func:Callable, version:int=0, is_super:bool=False):
         self.func = func 
         self.py_sig = inspect.signature(self.func)
         self.sig = Signature.from_py(sig=inspect.signature(func), 
-                                           name=func.__name__, version=version)
+                                     name=func.__name__, version=version, 
+                                     is_super=is_super)
         self.is_synchronized = False
     
     def compute(self, inputs:Dict[str, Any]) -> List[Any]:
+        inv_mapping = {v: k for k, v in self.sig.input_mapping.items()}
+        inputs = {inv_mapping[k]: v for k, v in inputs.items()}
         result = self.func(**inputs)
         if self.sig.n_outputs == 0:
             assert result is None, "Function returned non-None value"

@@ -20,19 +20,16 @@ class Signature:
     
     """
     def __init__(self, name:str, input_names:Set[str], n_outputs:int, 
-                 defaults:Dict[str, Any], version:int):
+                 defaults:Dict[str, Any], version:int, is_super:bool=False):
         self.name = name
         self.input_names = input_names
         self.defaults = defaults
         self.n_outputs = n_outputs
         self.version = version
         self.internal_name = ''
-        # internal name -> external name
+        self.is_super = is_super
+        # external name -> internal name
         self.input_mapping = {}
-    
-    @property
-    def ext_to_int_mapping(self) -> Dict[str, str]:
-        return {v: k for k, v in self.input_mapping.items()} 
     
     ############################################################################ 
     ### PURE methods for manipulating the signature 
@@ -61,6 +58,8 @@ class Signature:
         new_defaults = new.defaults
         if {k: new_defaults[k] for k in self.defaults} != self.defaults:
             raise ValueError('Changing defaults is not supported')
+        if self.is_super != new.is_super:
+            raise ValueError('Changing superop status is not supported')
         res = copy.deepcopy(self)
         for k in new.input_names:
             if k not in res.input_names:
@@ -71,7 +70,7 @@ class Signature:
         res = copy.deepcopy(self)
         res.input_names.add(name)
         internal_name = get_uid()
-        res.input_mapping[internal_name] = name
+        res.input_mapping[name] = internal_name
         if default is not DefaultSentinel:
             res.defaults[name] = default
         return res
@@ -83,14 +82,14 @@ class Signature:
 
     def rename_input(self, name:str, new_name:str) -> 'Signature':
         res = copy.deepcopy(self)
-        internal_name = self.ext_to_int_mapping[name]
+        internal_name = self.input_mapping[name]
         res.input_names.remove(name)
         res.input_names.add(new_name)
-        res.input_mapping[internal_name] = new_name
+        res.input_mapping[new_name] = internal_name
         return res
 
     @staticmethod
-    def from_py(name:str, version:int, sig:inspect.Signature) -> 'Signature':
+    def from_py(name:str, version:int, sig:inspect.Signature, is_super:bool=False) -> 'Signature':
         input_names = set([param.name for param in sig.parameters.values() if param.kind == inspect.Parameter.POSITIONAL_OR_KEYWORD])
         return_annotation = sig.return_annotation
         if hasattr(return_annotation, '__origin__') and return_annotation.__origin__ is tuple:
@@ -100,4 +99,6 @@ class Signature:
         else:
             n_outputs = 1
         defaults = {param.name:param.default for param in sig.parameters.values() if param.default is not inspect.Parameter.empty}
-        return Signature(name=name, input_names=input_names, n_outputs=n_outputs, defaults=defaults, version=version) 
+        return Signature(name=name, input_names=input_names,
+                         n_outputs=n_outputs, defaults=defaults, 
+                         version=version, is_super=is_super) 
