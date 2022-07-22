@@ -71,3 +71,7 @@ def test_nosuperops():
     with run(storage=storage):
         n = add(x=wrap(23), y=wrap(42))
         a = inc_n_times(x=wrap(23), n=n)
+    
+    # re-enable for isolation
+    Config.autowrap_inputs = True
+    Config.autounwrap_inputs = True

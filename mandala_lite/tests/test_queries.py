@@ -22,3 +22,5 @@ def test_basics():
         j = inc(i).named('j')
         # final = add(i, j)
         df = q.get_table(i, j)
+        assert set(df['i']) == {i for i in range(20, 25)}
+        assert all(df['j'] == df['i'] + 1)
