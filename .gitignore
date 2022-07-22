@@ -62,3 +62,6 @@ mandala_lite.egg-info/*
 **/.pytest_cache/*
 # ignore files cached by jupyter
 **/.ipynb_checkpoints
+
+## PyCharm stuff
+.idea/**
