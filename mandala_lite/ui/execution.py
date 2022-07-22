@@ -29,8 +29,23 @@ class FuncInterface:
             return inputs
 
     def wrap_outputs(self, outputs:List[Any], call_uid:str) -> List[ValueRef]:
-        output_uids = [Hashing.get_content_hash((call_uid, i)) for i in range(len(outputs))]
-        wrapped_outputs = [wrap(v, uid=u) for v, u in zip(outputs, output_uids)]
+        """
+        Wrap the outputs of a call as value references.
+        
+        If the function happens to return value references, they are returned as
+        they are. Otherwise, a UID is assigned depending on the configuration
+        settings of the library. 
+        """
+        wrapped_outputs = []
+        if Config.output_wrap_method == 'content':
+            uid_generator = lambda i, x: Hashing.get_content_hash(x) 
+        elif Config.output_wrap_method == 'causal':
+            uid_generator = lambda i, x: Hashing.get_content_hash(obj=(call_uid, i))
+        else:
+            raise ValueError()
+        wrapped_outputs = [wrap(obj=x, uid=uid_generator(i, x)) 
+                           if not isinstance(x, ValueRef) else x 
+                           for i, x in enumerate(outputs)]
         return wrapped_outputs
 
     def bind_inputs(self, args, kwargs) -> Dict[str, Any]:
@@ -51,6 +66,9 @@ class FuncInterface:
             return tuple(outputs)
 
     def call_run(self, inputs:Dict[str, Union[Any, ValueRef]]) -> Tuple[List[ValueRef], Call]:
+        """
+        Run the function and return the outputs and the call object.
+        """
         # wrap inputs
         wrapped_inputs = self.wrap_inputs(inputs) 
         # get call UID
@@ -75,8 +93,8 @@ class FuncInterface:
             wrapped_outputs = self.wrap_outputs(outputs, call_uid=call_uid)
             # create call
             call = Call(uid=call_uid, inputs=wrapped_inputs, outputs=wrapped_outputs, op=self.op)
-            # set call in call storage
-            self.storage.calls.temp.set(k=call_uid, v=call)
+            # save *detached* call in call storage
+            self.storage.calls.temp.set(k=call_uid, v=call.detached())
             # set outputs in obj storage
             for v in wrapped_outputs:
                 self.storage.objs.set(k=v.uid, v=v)

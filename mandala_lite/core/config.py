@@ -9,6 +9,8 @@ class Config:
     autowrap_inputs = True
     # whether to automatically unwrap inputs when an op is actually executed
     autounwrap_inputs = True
+    # how to assign UIDs to outputs
+    output_wrap_method = 'content'
 
     ### constants
     uid_col = '__uid__'

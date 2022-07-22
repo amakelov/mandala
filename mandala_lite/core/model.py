@@ -21,7 +21,7 @@ class ValueRef:
     
     def detached(self) -> 'ValueRef':
         """
-        Return a copy of this `ValueRef` without the pointer to the underlying
+        Return a *copy* of this `ValueRef` without the pointer to the underlying
         object.
         
         (Correspondingly, this is marked as not `in_memory`.)
@@ -81,9 +81,12 @@ class Call:
     
     def detached(self) -> 'Call':
         """
-        Returns a "detached" copy of this call, meaning that the inputs and
+        Returns a "detached" *copy* of this call, meaning that the inputs and
         outputs are replaced by detached *copies* of the original inputs and 
         outputs.
+
+        This is just a simple way to extract the metadata of the call without
+        coming up with a separate encoding.
         """
         return Call(
             uid=self.uid,
