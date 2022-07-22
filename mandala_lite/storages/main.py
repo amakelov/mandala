@@ -11,7 +11,11 @@ class Storage:
     Groups together all the components of the storage system. 
     
     Responsible for things that require multiple components to work together,
-    e.g. moving calls from the "temporary" partition to the "main" partition.
+    e.g. 
+        - committing: moving calls from the "temporary" partition to the "main"
+        partition. See also `CallStorage`.
+        - synchronizing: connecting an operation with the storage and performing
+        any necessary updates 
     """
     def __init__(self, root:Optional[Path]=None):
         self.root = root
