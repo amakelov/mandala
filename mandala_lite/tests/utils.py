@@ -2,12 +2,15 @@ from ..common_imports import *
 from mandala_lite.all import *
 
 
-def call_matches_signature(call:Call, sig:Signature) -> bool:
-    return (call.op.sig.internal_name == sig.internal_name and
-            set(call.inputs.keys()).issubset(sig.internal_input_names) and
-            len(call.outputs) == sig.n_outputs)
+def call_matches_signature(call: Call, sig: Signature) -> bool:
+    return (
+        call.op.sig.internal_name == sig.internal_name
+        and set(call.inputs.keys()).issubset(sig.internal_input_names)
+        and len(call.outputs) == sig.n_outputs
+    )
 
-def check_invariants(storage:Storage):
+
+def check_invariants(storage: Storage):
     obj_uids = storage.objs.keys()
     call_uids = storage.calls.keys()
     calls = [storage.calls.get(uid=uid) for uid in call_uids]
@@ -27,7 +30,7 @@ def check_invariants(storage:Storage):
         ext_name, version = sig.external_name, sig.version
         stored_sig = storage.sigs[ext_name, version]
         assert call_matches_signature(call, stored_sig)
-    
+
     # check that the committed calls are accounted for in the relational storage
     committed_tables = storage.rel_adapter.tabulate_calls(calls=committed_calls)
     # TODO: this is complicated by the fact that there may be calls for an old

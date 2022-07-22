@@ -1,16 +1,18 @@
 from ..common_imports import *
 from .weaver import ValQuery, FuncQuery
 
-def concat_lists(lists:List[list]) -> list:
+
+def concat_lists(lists: List[list]) -> list:
     return [x for lst in lists for x in lst]
 
-def traverse_all(val_queries:List[ValQuery]) -> Tuple[List[ValQuery], List[FuncQuery]]:
+
+def traverse_all(val_queries: List[ValQuery]) -> Tuple[List[ValQuery], List[FuncQuery]]:
     """
     Extend the given `ValQuery` objects to all objects connected to them through
     function inputs/outputs.
     """
     val_queries_ = [_ for _ in val_queries]
-    op_queries_:List[FuncQuery] = []
+    op_queries_: List[FuncQuery] = []
     found_new = True
     while found_new:
         found_new = False
@@ -28,26 +30,29 @@ def traverse_all(val_queries:List[ValQuery]) -> Tuple[List[ValQuery], List[FuncQ
                     val_queries_.append(neigh)
     return val_queries_, op_queries_
 
-def solve_query(data:Dict[str, pd.DataFrame], 
-                selection:List[ValQuery],
-                val_queries:List[ValQuery],
-                op_queries:List[FuncQuery]) -> pd.DataFrame:
+
+def solve_query(
+    data: Dict[str, pd.DataFrame],
+    selection: List[ValQuery],
+    val_queries: List[ValQuery],
+    op_queries: List[FuncQuery],
+) -> pd.DataFrame:
     """
     Given the relational storage (i.e., a dictionary of {internal function name:
     memoization table}, solve the conjunctive query imposed by the given query
-    objects. 
+    objects.
 
     Algorithm
     =========
-    
-    Suppose we have func queries F_1, ..., F_m that are connected 
+
+    Suppose we have func queries F_1, ..., F_m that are connected
     to val queries V_1, ..., V_n in a bipartite graph, where each edge is
     labeled
-        F_i ---name_ij--> V_j 
+        F_i ---name_ij--> V_j
     by the name of the input/output of the function corresponding to this value
     query. Also let S_1, ..., S_k be the queries in the SELECT clause of the
     query if you will.
-    
+
     For example, with the following code:
     ```python
     with query(storage) as q:
@@ -56,7 +61,7 @@ def solve_query(data:Dict[str, pd.DataFrame],
         final = add(x=i, y=j)
         q.get_table(i, final)
     ```
-    the graph would have edges 
+    the graph would have edges
     inc ---x--> i
     inc ---output_0--> j
     add ---x--> i
@@ -64,18 +69,18 @@ def solve_query(data:Dict[str, pd.DataFrame],
     add ---output_0--> final
 
     with S_1 = i, S_2 = final.
-    
+
     Then you can iteratively shrink this graph by
         - picking two function nodes F_i, F_j,
         - joining their tables along the shared edges in the obvious manner,
         - replacing them with a single node corresponding to the new table, with
-          edges to the union of their columns. 
-    
+          edges to the union of their columns.
+
     Since joins are associative, the order in which you do this does not change
     the result.
-    
+
     Finally, you return the restriction of this table to the columns S_i that
-    are in the given selection. 
+    are in the given selection.
 
     Optimizations
     =============
@@ -91,8 +96,7 @@ def solve_query(data:Dict[str, pd.DataFrame],
                     column_names.append(k)
             for i, output in enumerate(op_query.outputs):
                 if output is select_query:
-                    column_names.append(f'output_{i}')
+                    column_names.append(f"output_{i}")
         return df[column_names]
     else:
         raise NotImplementedError()
-

@@ -9,15 +9,16 @@ from .context import GlobalContext, MODES
 
 class FuncInterface:
     """
-    Wrapper around a memoized function. 
-    
+    Wrapper around a memoized function.
+
     This is the object the `@op` decorator converts functions into.
     """
-    def __init__(self, op:FuncOp, storage:Storage):
+
+    def __init__(self, op: FuncOp, storage: Storage):
         self.op = op
         self.storage = storage
 
-    def wrap_inputs(self, inputs:Dict[str, Any]) -> Dict[str, ValueRef]:
+    def wrap_inputs(self, inputs: Dict[str, Any]) -> Dict[str, ValueRef]:
         # "explicit" superops must always receive wrapped inputs
         if self.op.sig.is_super:
             assert all(isinstance(v, ValueRef) for v in inputs.values())
@@ -29,24 +30,25 @@ class FuncInterface:
             assert all(isinstance(v, ValueRef) for v in inputs.values())
             return inputs
 
-    def wrap_outputs(self, outputs:List[Any], call_uid:str) -> List[ValueRef]:
+    def wrap_outputs(self, outputs: List[Any], call_uid: str) -> List[ValueRef]:
         """
         Wrap the outputs of a call as value references.
-        
+
         If the function happens to return value references, they are returned as
         they are. Otherwise, a UID is assigned depending on the configuration
-        settings of the library. 
+        settings of the library.
         """
         wrapped_outputs = []
-        if Config.output_wrap_method == 'content':
-            uid_generator = lambda i, x: Hashing.get_content_hash(x) 
-        elif Config.output_wrap_method == 'causal':
+        if Config.output_wrap_method == "content":
+            uid_generator = lambda i, x: Hashing.get_content_hash(x)
+        elif Config.output_wrap_method == "causal":
             uid_generator = lambda i, x: Hashing.get_content_hash(obj=(call_uid, i))
         else:
             raise ValueError()
-        wrapped_outputs = [wrap(obj=x, uid=uid_generator(i, x)) 
-                           if not isinstance(x, ValueRef) else x 
-                           for i, x in enumerate(outputs)]
+        wrapped_outputs = [
+            wrap(obj=x, uid=uid_generator(i, x)) if not isinstance(x, ValueRef) else x
+            for i, x in enumerate(outputs)
+        ]
         return wrapped_outputs
 
     def bind_inputs(self, args, kwargs) -> Dict[str, Any]:
@@ -58,11 +60,12 @@ class FuncInterface:
         bound_args.apply_defaults()
         inputs_dict = dict(bound_args.arguments)
         # rename to internal names
-        inputs_dict = {self.op.sig.input_mapping[k]: v 
-                       for k, v in inputs_dict.items()}
+        inputs_dict = {self.op.sig.input_mapping[k]: v for k, v in inputs_dict.items()}
         return inputs_dict
 
-    def format_as_outputs(self, outputs:List[ValueRef]) -> Union[None, Any, Tuple[Any]]:
+    def format_as_outputs(
+        self, outputs: List[ValueRef]
+    ) -> Union[None, Any, Tuple[Any]]:
         if len(outputs) == 0:
             return None
         elif len(outputs) == 1:
@@ -70,15 +73,21 @@ class FuncInterface:
         else:
             return tuple(outputs)
 
-    def call_run(self, inputs:Dict[str, Union[Any, ValueRef]]) -> Tuple[List[ValueRef], Call]:
+    def call_run(
+        self, inputs: Dict[str, Union[Any, ValueRef]]
+    ) -> Tuple[List[ValueRef], Call]:
         """
         Run the function and return the outputs and the call object.
         """
         # wrap inputs
-        wrapped_inputs = self.wrap_inputs(inputs) 
+        wrapped_inputs = self.wrap_inputs(inputs)
         # get call UID
-        call_uid = Hashing.get_content_hash(obj=[{k: v.uid for k, v in wrapped_inputs.items()},
-                                             self.op.sig.internal_name])
+        call_uid = Hashing.get_content_hash(
+            obj=[
+                {k: v.uid for k, v in wrapped_inputs.items()},
+                self.op.sig.internal_name,
+            ]
+        )
         # check if call UID exists in call storage
         if self.storage.calls.exists(call_uid):
             # get call from call storage
@@ -86,7 +95,7 @@ class FuncInterface:
             # get outputs from obj storage
             wrapped_outputs = [self.storage.objs.get(v.uid) for v in call.outputs]
             # return outputs and call
-            return wrapped_outputs, call 
+            return wrapped_outputs, call
         else:
             # compute op
             if Config.autounwrap_inputs:
@@ -97,22 +106,27 @@ class FuncInterface:
             # wrap outputs
             wrapped_outputs = self.wrap_outputs(outputs, call_uid=call_uid)
             # create call
-            call = Call(uid=call_uid, inputs=wrapped_inputs, outputs=wrapped_outputs, op=self.op)
+            call = Call(
+                uid=call_uid, inputs=wrapped_inputs, outputs=wrapped_outputs, op=self.op
+            )
             # save *detached* call in call storage
             self.storage.calls.temp.set(k=call_uid, v=call.detached())
             # set inputs and outputs in obj storage
             for v in itertools.chain(wrapped_outputs, wrapped_inputs.values()):
                 self.storage.objs.set(k=v.uid, v=v)
             # return outputs and call
-            return wrapped_outputs, call 
+            return wrapped_outputs, call
 
-    def call_query(self, inputs:Dict[str, ValQuery]) -> List[ValQuery]:
+    def call_query(self, inputs: Dict[str, ValQuery]) -> List[ValQuery]:
         if not all(isinstance(inp, ValQuery) for inp in inputs.values()):
             raise NotImplementedError()
         func_query = FuncQuery(op=self.op, inputs=inputs)
         for k, v in inputs.items():
             v.add_consumer(consumer=func_query, consumed_as=k)
-        outputs = [ValQuery(creator=func_query, created_as=i) for i in range(self.op.sig.n_outputs)]
+        outputs = [
+            ValQuery(creator=func_query, created_as=i)
+            for i in range(self.op.sig.n_outputs)
+        ]
         func_query.set_outputs(outputs=outputs)
         return outputs
 
@@ -120,7 +134,7 @@ class FuncInterface:
         inputs = self.bind_inputs(args, kwargs)
         context = GlobalContext.current
         if context is None:
-            raise RuntimeError('No context to call from')
+            raise RuntimeError("No context to call from")
         mode = context.mode
         if mode == MODES.run:
             outputs, call = self.call_run(inputs)
@@ -130,20 +144,21 @@ class FuncInterface:
         else:
             raise ValueError()
 
-        
+
 class FuncDecorator:
     """
     This is the `@op` decorator internally
     """
-    def __init__(self, storage:Storage, is_super:bool=False):
+
+    def __init__(self, storage: Storage, is_super: bool = False):
         self.storage = storage
         self.super = is_super
-         
-    def __call__(self, func) -> 'FuncInterface':
-        op = FuncOp(func=func, is_super=self.super) 
+
+    def __call__(self, func) -> "FuncInterface":
+        op = FuncOp(func=func, is_super=self.super)
         op.sig = self.storage.synchronize(sig=op.sig)
         return FuncInterface(op=op, storage=self.storage)
-    
+
 
 def Query() -> ValQuery:
     return ValQuery(creator=None, created_as=None)

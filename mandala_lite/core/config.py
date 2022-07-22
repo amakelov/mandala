@@ -10,18 +10,18 @@ class Config:
     # whether to automatically unwrap inputs when an op is actually executed
     autounwrap_inputs = True
     # how to assign UIDs to outputs
-    output_wrap_method = 'content'
+    output_wrap_method = "content"
 
     ### constants
-    uid_col = '__uid__'
+    uid_col = "__uid__"
 
 
 class Prov:
-    relname = '__provenance__'
-    call_uid = 'call_uid'
-    op_name = 'op_name'
-    op_version = 'op_version'
-    is_super = 'is_super'
-    vref_name = 'vref_name'
-    vref_uid = 'vref_uid'
-    is_input = 'is_input'
+    relname = "__provenance__"
+    call_uid = "call_uid"
+    op_name = "op_name"
+    op_version = "op_version"
+    is_super = "is_super"
+    vref_name = "vref_name"
+    vref_uid = "vref_uid"
+    is_input = "is_input"
