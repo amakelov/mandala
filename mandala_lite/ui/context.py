@@ -1,5 +1,8 @@
 from ..common_imports import *
+from ..core.model import unwrap
 from ..storages.main import Storage
+from ..queries.weaver import ValQuery
+from ..queries.compiler import traverse_all, solve_query
 
 class MODES:
     run = 'run'
@@ -62,9 +65,19 @@ class Context:
             raise exc_type(exc_value).with_traceback(exc_traceback)
         return None
     
-    def __call__(self, **updates):
-        self.updates = updates
+    def __call__(self, storage:Storage, **updates):
+        self.updates = {'storage': storage, **updates}
         return self
+    
+    def get_table(self, *queries:ValQuery) -> pd.DataFrame:
+        select_queries = list(queries)
+        val_queries, op_queries = traverse_all(select_queries)
+        df = solve_query(data=self.storage.rel_storage.relations, 
+                    selection=select_queries, 
+                    val_queries=val_queries, op_queries=op_queries)
+        # now, evaluate the table
+        result = df.applymap(lambda x: unwrap(self.storage.objs.get(k=x)))
+        return result
 
 
 class RunContext(Context):

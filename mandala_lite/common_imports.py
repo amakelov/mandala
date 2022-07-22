@@ -1,3 +1,4 @@
+import itertools
 import copy
 import hashlib
 import io

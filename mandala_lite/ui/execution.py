@@ -3,6 +3,7 @@ from ..core.config import Config
 from ..core.model import FuncOp, ValueRef, Call, wrap
 from ..core.utils import Hashing
 from ..storages.main import Storage
+from ..queries.weaver import ValQuery, FuncQuery
 from .context import GlobalContext, MODES
 
 
@@ -49,6 +50,10 @@ class FuncInterface:
         return wrapped_outputs
 
     def bind_inputs(self, args, kwargs) -> Dict[str, Any]:
+        """
+        Given args and kwargs passed by the user from python, this adds defaults
+        and returns a dict where they are indexed via internal names.
+        """
         bound_args = self.op.py_sig.bind(*args, **kwargs)
         bound_args.apply_defaults()
         inputs_dict = dict(bound_args.arguments)
@@ -95,26 +100,33 @@ class FuncInterface:
             call = Call(uid=call_uid, inputs=wrapped_inputs, outputs=wrapped_outputs, op=self.op)
             # save *detached* call in call storage
             self.storage.calls.temp.set(k=call_uid, v=call.detached())
-            # set outputs in obj storage
-            for v in wrapped_outputs:
+            # set inputs and outputs in obj storage
+            for v in itertools.chain(wrapped_outputs, wrapped_inputs.values()):
                 self.storage.objs.set(k=v.uid, v=v)
             # return outputs and call
             return wrapped_outputs, call 
 
-    def call_query(self, inputs:Dict[str, Any]) -> pd.DataFrame:
-        raise NotImplementedError()
+    def call_query(self, inputs:Dict[str, ValQuery]) -> List[ValQuery]:
+        if not all(isinstance(inp, ValQuery) for inp in inputs.values()):
+            raise NotImplementedError()
+        func_query = FuncQuery(op=self.op, inputs=inputs)
+        for k, v in inputs.items():
+            v.add_consumer(consumer=func_query, consumed_as=k)
+        outputs = [ValQuery(creator=func_query, created_as=i) for i in range(self.op.sig.n_outputs)]
+        func_query.set_outputs(outputs=outputs)
+        return outputs
 
     def __call__(self, *args, **kwargs) -> List[ValueRef]:
+        inputs = self.bind_inputs(args, kwargs)
         context = GlobalContext.current
         if context is None:
             raise RuntimeError('No context to call from')
         mode = context.mode
         if mode == MODES.run:
-            inputs = self.bind_inputs(args, kwargs)
             outputs, call = self.call_run(inputs)
             return self.format_as_outputs(outputs=outputs)
         elif mode == MODES.query:
-            raise NotImplementedError()
+            return self.format_as_outputs(outputs=self.call_query(inputs))
         else:
             raise ValueError()
 
@@ -132,5 +144,9 @@ class FuncDecorator:
         op.sig = self.storage.synchronize(sig=op.sig)
         return FuncInterface(op=op, storage=self.storage)
     
+
+def Query() -> ValQuery:
+    return ValQuery(creator=None, created_as=None)
+
 
 op = FuncDecorator

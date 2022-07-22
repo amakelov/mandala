@@ -15,26 +15,45 @@ class ValQuery:
     this `ValQuery` object, but potentially many `consumers`, which are
     subsequent calls to operations that consume this `ValQuery` object.
     """
-    def __init__(self, creator:'OpQuery'=None, created_as:str=None, 
-                 consumers:List['OpQuery']=None, consumed_as:List[str]=None):
+    def __init__(self, creator:'FuncQuery', created_as:int):
         self.creator = creator
         self.created_as = created_as
-        self.consumers = [] if consumers is None else consumers
-        self.consumed_as = [] if consumed_as is None else consumed_as
+        self.consumers:List['FuncQuery'] = [] 
+        self.consumed_as:List[str] = [] 
         self.aliases = []
+    
+    def add_consumer(self, consumer:'FuncQuery', consumed_as:str):
+        self.consumers.append(consumer)
+        self.consumed_as.append(consumed_as)
 
+    def neighbors(self) -> List['FuncQuery']:
+        res = []
+        if self.creator is not None:
+            res.append(self.creator)
+        for cons in self.consumers:
+            res.append(cons)
+        return res
 
-class OpQuery:
+class FuncQuery:
     """
     Represents a call to an operation under the `query` interpretation of code.
 
     This is the equivalent to a `Call` when in a query context. In SQL terms, it
     points to the memoization table of some function. The `inputs` and `outputs`
     connected to it are the `ValQuery` objects that represent the inputs and
-    outputs of this call.
+    outputs of this call. They are indexed by *internal* names. See `core.sig.Signature`
+    for an explanation.
     """
-    def __init__(self, inputs:Dict[str, ValQuery], outputs:List[ValQuery], 
-                 op:FuncOp):
+    def __init__(self, inputs:Dict[str, ValQuery], op:FuncOp):
         self.inputs = inputs
-        self.outputs = outputs
+        self.outputs = []
         self.op = op
+    
+    def set_outputs(self, outputs:List[ValQuery]):
+        self.outputs = outputs
+
+    def neighbors(self) -> List[ValQuery]:
+        return [x for x in itertools.chain(self.inputs.values(), 
+                                           self.outputs if self.outputs 
+                                           is not None else [])]
+    

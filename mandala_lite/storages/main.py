@@ -56,7 +56,7 @@ class Storage:
             res = sig.generate_internal()
             self.sigs[(res.name, res.version)] = res
             # create relation
-            columns = [Config.uid_col] + list(res.input_names) + [f'output_{i}' for i in range(res.n_outputs)]
+            columns = [Config.uid_col] + list(res.internal_input_names) + [f'output_{i}' for i in range(res.n_outputs)]
             self.rel_storage.create_relation(name=res.internal_name, columns=columns)
             return res
         else:

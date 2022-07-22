@@ -35,10 +35,10 @@ class Signature:
     external to internal names is performed as close as possible to the
     user-facing code.
     """
-    def __init__(self, name:str, input_names:Set[str], n_outputs:int, 
+    def __init__(self, name:str, external_input_names:Set[str], n_outputs:int, 
                  defaults:Dict[str, Any], version:int, is_super:bool=False):
         self.name = name
-        self.input_names = input_names
+        self.external_input_names = external_input_names
         self.defaults = defaults
         self.n_outputs = n_outputs
         self.version = version
@@ -46,6 +46,10 @@ class Signature:
         self.is_super = is_super
         # external name -> internal name
         self.input_mapping = {}
+    
+    @property
+    def internal_input_names(self) -> Set[str]:
+        return set(self.input_mapping.values())
     
     ############################################################################ 
     ### PURE methods for manipulating the signature 
@@ -65,7 +69,7 @@ class Signature:
         Assign internal names to random UIDs. 
         """
         res = copy.deepcopy(self)
-        res.internal_name, res.input_mapping = get_uid(), {k: get_uid() for k in self.input_names}
+        res.internal_name, res.input_mapping = get_uid(), {k: get_uid() for k in self.external_input_names}
         return res
 
     def update(self, new:'Signature') -> 'Signature':
@@ -76,7 +80,7 @@ class Signature:
             - checking that the new signature is compatible with the old one
             - generating names for new inputs.
         """ 
-        if not set.issubset(set(self.input_names), set(new.input_names)):
+        if not set.issubset(set(self.external_input_names), set(new.external_input_names)):
             raise ValueError('Removing inputs is not supported')
         if not self.n_outputs == new.n_outputs:
             raise ValueError('Changing the number of outputs is not supported')
@@ -86,8 +90,8 @@ class Signature:
         if self.is_super != new.is_super:
             raise ValueError('Changing superop status is not supported')
         res = copy.deepcopy(self)
-        for k in new.input_names:
-            if k not in res.input_names:
+        for k in new.external_input_names:
+            if k not in res.external_input_names:
                 res.create_input(name=k, default=new_defaults.get(k, DefaultSentinel))
         return res
         
@@ -96,7 +100,7 @@ class Signature:
         Add an input to this signature, with optional default value
         """
         res = copy.deepcopy(self)
-        res.input_names.add(name)
+        res.external_input_names.add(name)
         internal_name = get_uid()
         res.input_mapping[name] = internal_name
         if default is not DefaultSentinel:
@@ -117,8 +121,8 @@ class Signature:
         """
         res = copy.deepcopy(self)
         internal_name = self.input_mapping[name]
-        res.input_names.remove(name)
-        res.input_names.add(new_name)
+        res.external_input_names.remove(name)
+        res.external_input_names.add(new_name)
         res.input_mapping[new_name] = internal_name
         return res
 
@@ -137,6 +141,6 @@ class Signature:
         else:
             n_outputs = 1
         defaults = {param.name:param.default for param in sig.parameters.values() if param.default is not inspect.Parameter.empty}
-        return Signature(name=name, input_names=input_names,
+        return Signature(name=name, external_input_names=input_names,
                          n_outputs=n_outputs, defaults=defaults, 
                          version=version, is_super=is_super) 
