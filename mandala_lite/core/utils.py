@@ -1,6 +1,10 @@
 from ..common_imports import *
 
 def get_uid() -> str:
+    """
+    Generate a sequence of 32 hexadecimal characters using the operating
+    system's "randomness". 
+    """
     return '{}'.format(binascii.hexlify(os.urandom(16)).decode('utf-8'))
 
 class Hashing:
@@ -10,7 +14,7 @@ class Hashing:
     @staticmethod
     def get_content_hash(obj:Any) -> str:
         """
-        A deterministic hash function for python objects, one would hope
+        Get deterministic content hash of an object, one would hope.
         """
         stream = io.BytesIO()
         joblib.dump(value=obj, filename=stream)

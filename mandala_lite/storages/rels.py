@@ -5,54 +5,87 @@ from ..core.config import Config, Prov
 from ..core.model import Call
 
 def upsert_df(current:pd.DataFrame, new:pd.DataFrame) -> pd.DataFrame:
+    """
+    Upsert for dataframes with the same columns
+    """
     return pd.concat([current, new[~new.index.isin(current.index)]])
 
 class RelStorage:
     """
     Responsible for the low-level (i.e., unaware of mandala-specific concepts)
-    interactions with the RDBMS part of the storage, such as creating and
+    interactions with the relational part of the storage, such as creating and
     extending tables, running queries, etc. This is intended to be a pretty
-    generic database interface supporting just the things we need.
+    generic, minimal database interface, supporting just the things we need.
+    
+    It's deliberately referred to as "relational storage" as opposed to a
+    "relational database" because simpler implementations exist.
     """
     def __init__(self):
         # internal name -> dataframe
         self.relations:Dict[str, pd.DataFrame] = {}
 
-    ### 
+    ############################################################################ 
+    ### schema management
+    ############################################################################ 
     def create_relation(self, name:str, columns:List[str]):
+        """
+        Create a (memoization) table with given columns
+        """
         assert Config.uid_col in columns
         self.relations[name] = pd.DataFrame(columns=columns).set_index(Config.uid_col)
     
     def delete_relation(self, name:str):
+        """
+        Delete a (memoization) table
+        """
         del self.relations[name]
 
     def create_column(self, relation:str, name:str, default_value:str):
+        """
+        Add a new column to a table.
+        """
         assert name not in self.relations[relation].columns
         self.relations[relation][name] = default_value
         
-    ### 
+    ############################################################################ 
+    ### instance management
+    ############################################################################ 
     def insert(self, name:str, df:pd.DataFrame):
+        """
+        Append rows to a table
+        """
         self.relations[name] = self.relations[name].append(df.set_index(Config.uid_col),
                                                            verify_integrity=True)
     
     def upsert(self, name:str, df:pd.DataFrame):
+        """
+        Upsert rows in a table based on index
+        """
         current = self.relations[name]
         df = df.set_index(Config.uid_col)
         self.relations[name] = upsert_df(current=current, new=df)
 
     def delete(self, name:str, index:List[str]):
+        """
+        Delete rows from a table based on index
+        """
         self.relations[name] = self.relations[name].drop(labels=index)
 
-    ### 
+    ############################################################################ 
+    ### queries
+    ############################################################################ 
     def select(self, query:Any) -> pd.DataFrame:
         raise NotImplementedError()
     
 
 class RelAdapter:
     """
-    Responsible for high-level RDBMS interactions, such as taking a bunch of
-    calls and putting their data inside the database; uses `RelStorage` to do
-    the actual work. 
+    Responsible for high-level RDBMS interactions, such as 
+        - taking a bunch of calls and putting their data inside the database; 
+        - keeping track of data provenance (i.e., putting calls in a table that
+          makes it easier to derive the history of a value reference)
+        
+    Uses `RelStorage` to do the actual work. 
     """
     def __init__(self, rel_storage:RelStorage):
         self.rel_storage = rel_storage 
@@ -62,8 +95,24 @@ class RelAdapter:
                                              Prov.is_input])
         self.prov_df.set_index([Prov.call_uid, Prov.vref_name, Prov.is_input])
 
+    def upsert_calls(self, calls:List[Call]):
+        """
+        Upserts calls in the relational storage so that they will show up in
+        declarative queries.
+        """
+        if calls:
+            for name, df in self.tabulate_calls(calls).items():
+                self.rel_storage.upsert(name, df)
+            # update provenance table
+            new_prov_df = self.get_provenance_table(calls=calls)
+            self.prov_df = upsert_df(current=self.prov_df, new=new_prov_df)
+
     @staticmethod
     def tabulate_calls(calls:List[Call]) -> Dict[str, pd.DataFrame]:
+        """
+        Converts call objects to a dictionary of {relation name: table
+        to upsert} pairs.
+        """
         # split by operation internal name
         calls_by_op = defaultdict(list)
         for call in calls:
@@ -76,16 +125,16 @@ class RelAdapter:
                                    for call in v])
         return res
     
-    def upsert_calls(self, calls:List[Call]):
-        if calls:
-            for name, df in self.tabulate_calls(calls).items():
-                self.rel_storage.upsert(name, df)
-            # update provenance table
-            new_prov_df = self.get_provenance_table(calls=calls)
-            self.prov_df = upsert_df(current=self.prov_df, new=new_prov_df)
-
+    ############################################################################ 
+    ### provenance 
+    ############################################################################ 
     @staticmethod
     def get_provenance_table(calls:List[Call]) -> pd.DataFrame:
+        """
+        Converts call objects to a dataframe of provenance information. Calls to
+        all operations are in the same table. Traversing "backward" in this
+        table allows you to reconstruct the history of any value reference. 
+        """
         dfs = []
         for call in calls:
             call_uid = call.uid

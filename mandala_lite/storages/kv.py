@@ -2,7 +2,7 @@ from ..common_imports import *
 
 class KVStore:
     """
-    Interface for key-value stores for Python objects (keyed by UID).
+    Interface for key-value stores for Python objects (keyed by strings).
     """
     def exists(self, k:str) -> bool:
         raise NotImplementedError()
@@ -40,6 +40,8 @@ class KVStore:
 class JoblibStorage(KVStore):
     """
     Simple file-based implementation for local testing
+
+    NOTE: delegates error handling
     """
     def __init__(self, root:Path):
         self.root = root
@@ -65,7 +67,9 @@ class JoblibStorage(KVStore):
 
 class InMemoryStorage(KVStore):
     """
-    In-memory implementation
+    Simple in-memory implementation for local testing and/or buffering
+
+    NOTE: delegates error handling
     """
     def __init__(self):
         self.data = {}
