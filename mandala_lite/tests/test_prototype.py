@@ -1,9 +1,5 @@
 from mandala_lite.all import *
-
-def test_invariants():
-    # TODO
-    pass
-
+from mandala_lite.tests.utils import *
 
 def test_func_creation():
     storage = Storage()
@@ -15,6 +11,7 @@ def test_func_creation():
     assert add.op.sig.n_outputs == 1
     assert add.op.sig.external_input_names == {'x', 'y'}
     assert add.op.sig.defaults == {'y': 42}
+    check_invariants(storage)
 
 
 def test_computation():
@@ -33,11 +30,13 @@ def test_computation():
         x = 23
         y = inc(x)
         z = add(x, y)
+    check_invariants(storage)
     # run it again
     with run(storage=storage):
         x = 23
         y = inc(x)
         z = add(x, y)
+    check_invariants(storage)
     # do some more things
     with run(storage=storage):
         x = 42
@@ -45,6 +44,7 @@ def test_computation():
         z = add(x, y)
         for i in range(10):
             z = add(z, i)
+    check_invariants(storage)
 
 
 def test_nosuperops():
@@ -71,6 +71,7 @@ def test_nosuperops():
     with run(storage=storage):
         n = add(x=wrap(23), y=wrap(42))
         a = inc_n_times(x=wrap(23), n=n)
+    check_invariants(storage)
     
     # re-enable for isolation
     Config.autowrap_inputs = True

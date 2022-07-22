@@ -1,4 +1,5 @@
 from mandala_lite.all import *
+from mandala_lite.tests.utils import *
 
 
 def test_basics():
@@ -24,3 +25,4 @@ def test_basics():
         df = q.get_table(i, j)
         assert set(df['i']) == {i for i in range(20, 25)}
         assert all(df['j'] == df['i'] + 1)
+    check_invariants(storage)

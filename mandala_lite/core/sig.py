@@ -35,9 +35,9 @@ class Signature:
     external to internal names is performed as close as possible to the
     user-facing code.
     """
-    def __init__(self, name:str, external_input_names:Set[str], n_outputs:int, 
+    def __init__(self, external_name:str, external_input_names:Set[str], n_outputs:int, 
                  defaults:Dict[str, Any], version:int, is_super:bool=False):
-        self.name = name
+        self.external_name = external_name
         self.external_input_names = external_input_names
         self.defaults = defaults
         self.n_outputs = n_outputs
@@ -79,6 +79,8 @@ class Signature:
         This takes care of
             - checking that the new signature is compatible with the old one
             - generating names for new inputs.
+        
+        TODO: return a description of the updates for downstream needs
         """ 
         if not set.issubset(set(self.external_input_names), set(new.external_input_names)):
             raise ValueError('Removing inputs is not supported')
@@ -112,7 +114,7 @@ class Signature:
         Change the external name 
         """
         res = copy.deepcopy(self)
-        res.name = new_name
+        res.external_name = new_name
         return res
 
     def rename_input(self, name:str, new_name:str) -> 'Signature':
@@ -141,6 +143,6 @@ class Signature:
         else:
             n_outputs = 1
         defaults = {param.name:param.default for param in sig.parameters.values() if param.default is not inspect.Parameter.empty}
-        return Signature(name=name, external_input_names=input_names,
+        return Signature(external_name=name, external_input_names=input_names,
                          n_outputs=n_outputs, defaults=defaults, 
                          version=version, is_super=is_super) 

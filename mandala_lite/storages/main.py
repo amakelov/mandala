@@ -28,7 +28,7 @@ class Storage:
         self.rel_adapter = RelAdapter(rel_storage=self.rel_storage) 
         # stores the signatures of the operations connected to this storage
         # (external name, version) -> signature
-        self.sigs = {}
+        self.sigs:Dict[Tuple[str, int], Signature] = {}
     
     def commit(self):
         """
@@ -52,15 +52,15 @@ class Storage:
             created in the relation for this op.
             - otherwise, an error is raised
         """
-        if (sig.name, sig.version) not in self.sigs:
+        if (sig.external_name, sig.version) not in self.sigs:
             res = sig.generate_internal()
-            self.sigs[(res.name, res.version)] = res
+            self.sigs[(res.external_name, res.version)] = res
             # create relation
             columns = [Config.uid_col] + list(res.internal_input_names) + [f'output_{i}' for i in range(res.n_outputs)]
             self.rel_storage.create_relation(name=res.internal_name, columns=columns)
             return res
         else:
-            current = self.sigs[(sig.name, sig.version)]
+            current = self.sigs[(sig.external_name, sig.version)]
             res = current.update(new=sig)
             # TODO: update relation if a new input was created
             return res

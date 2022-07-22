@@ -36,3 +36,9 @@ class CallStorage:
         if self.temp.exists(k=uid):
             return self.temp.get(k=uid)
         return self.main.get(k=uid)
+    
+    def keys(self) -> List[str]:
+        """
+        Get all call UIDs.
+        """
+        return self.temp.keys() + self.main.keys()
