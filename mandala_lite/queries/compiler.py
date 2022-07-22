@@ -84,10 +84,15 @@ def solve_query(data:Dict[str, pd.DataFrame],
     if len(op_queries) == 1:
         op_query = op_queries[0]
         df = data[op_query.op.sig.internal_name]
-        select_cols = [col for col in df.columns if op_query.inputs.get(col) in selection] +\
-                      [f'output_{i}' for i, output in enumerate(op_query.outputs)
-                       if output in selection]
-        return df[select_cols]
+        column_names = []
+        for select_query in selection:
+            for k, v in op_query.inputs.items():
+                if v is select_query:
+                    column_names.append(k)
+            for i, output in enumerate(op_query.outputs):
+                if output is select_query:
+                    column_names.append(f'output_{i}')
+        return df[column_names]
     else:
         raise NotImplementedError()
 

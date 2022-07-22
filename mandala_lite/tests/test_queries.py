@@ -18,7 +18,7 @@ def test_basics():
             final = add(i, j)
 
     with query(storage) as q:
-        i = Query()
-        j = inc(i)
+        i = Query().named('i')
+        j = inc(i).named('j')
         # final = add(i, j)
         df = q.get_table(i, j)

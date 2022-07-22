@@ -77,6 +77,8 @@ class Context:
                     val_queries=val_queries, op_queries=op_queries)
         # now, evaluate the table
         result = df.applymap(lambda x: unwrap(self.storage.objs.get(k=x)))
+        # finally, name the columns
+        result.columns = [f'unnamed_{i}' if query.column_name is None else query.column_name for i, query in zip(range(len((result.columns))), queries)]
         return result
 
 

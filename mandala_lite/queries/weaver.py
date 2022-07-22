@@ -21,6 +21,7 @@ class ValQuery:
         self.consumers:List['FuncQuery'] = [] 
         self.consumed_as:List[str] = [] 
         self.aliases = []
+        self.column_name = None
     
     def add_consumer(self, consumer:'FuncQuery', consumed_as:str):
         self.consumers.append(consumer)
@@ -33,6 +34,11 @@ class ValQuery:
         for cons in self.consumers:
             res.append(cons)
         return res
+    
+    def named(self, name:str) -> 'ValQuery':
+        self.column_name = name
+        return self
+
 
 class FuncQuery:
     """
