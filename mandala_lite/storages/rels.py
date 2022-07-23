@@ -16,6 +16,7 @@ class RelStorage(ABC):
     It's deliberately referred to as "relational storage" as opposed to a
     "relational database" because simpler implementations exist.
     """
+
     @abstractmethod
     def create_relation(self, name: str, columns: List[str]):
         """
@@ -26,11 +27,11 @@ class RelStorage(ABC):
     @abstractmethod
     def delete_relation(self, name: str):
         raise NotImplementedError()
-    
+
     @abstractmethod
     def create_column(self, relation: str, name: str, default_value: str):
         raise NotImplementedError()
-    
+
     @abstractmethod
     def insert(self, name: str, df: pd.DataFrame):
         """
@@ -102,6 +103,7 @@ class RelAdapter:
         for call in calls:
             calls_by_op[call.op.sig.internal_name].append(call)
         res = {}
+        vref_uids = []
         for k, v in calls_by_op.items():
             res[k] = pd.DataFrame(
                 [
@@ -113,6 +115,10 @@ class RelAdapter:
                     for call in v
                 ]
             )
+            for call in v:
+                vref_uids += [v.uid for v in call.inputs.values()]
+                vref_uids += [v.uid for v in call.outputs]
+        res[Config.vref_table] = pd.DataFrame({Config.uid_col: list(set(vref_uids))})
         return res
 
     ############################################################################

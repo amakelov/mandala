@@ -14,6 +14,7 @@ class Config:
 
     ### constants
     uid_col = "__uid__"
+    vref_table = "__vrefs__"
 
 
 class Prov:

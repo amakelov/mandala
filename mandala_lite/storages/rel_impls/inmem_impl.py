@@ -3,7 +3,6 @@ from ...core.config import Config
 from ..rels import RelStorage, upsert_df
 
 
-
 class InMemRelStorage(RelStorage):
     """
     Responsible for the low-level (i.e., unaware of mandala-specific concepts)
@@ -72,4 +71,3 @@ class InMemRelStorage(RelStorage):
     ############################################################################
     def select(self, query: Any) -> pd.DataFrame:
         raise NotImplementedError()
-

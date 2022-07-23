@@ -2,7 +2,7 @@ from ..common_imports import *
 from ..core.model import unwrap
 from ..storages.main import Storage
 from ..queries.weaver import ValQuery
-from ..queries.compiler import traverse_all, solve_query
+from ..queries.compiler import traverse_all, solve_query, Compiler
 
 
 class MODES:
@@ -73,13 +73,21 @@ class Context:
 
     def get_table(self, *queries: ValQuery) -> pd.DataFrame:
         select_queries = list(queries)
-        val_queries, op_queries = traverse_all(select_queries)
-        df = solve_query(
-            data=self.storage.rel_storage.relations,
-            selection=select_queries,
-            val_queries=val_queries,
-            op_queries=op_queries,
-        )
+        val_queries, func_queries = traverse_all(select_queries)
+        implementation = "duck"
+        if implementation == "lame":
+            df = solve_query(
+                data=self.storage.rel_storage.relations,
+                selection=select_queries,
+                val_queries=val_queries,
+                op_queries=func_queries,
+            )
+        elif implementation == "duck":
+            compiler = Compiler(val_queries=val_queries, func_queries=func_queries)
+            query = compiler.compile(select_queries=select_queries)
+            df = self.storage.rel_storage.execute(query=str(query))
+        else:
+            raise ValueError()
         # now, evaluate the table
         result = df.applymap(lambda x: unwrap(self.storage.objs.get(k=x)))
         # finally, name the columns

@@ -18,11 +18,11 @@ def test_basics():
             j = inc(i)
             final = add(i, j)
 
-    # with query(storage) as q:
-    #     i = Query().named("i")
-    #     j = inc(i).named("j")
-    #     # final = add(i, j)
-    #     df = q.get_table(i, j)
-    #     assert set(df["i"]) == {i for i in range(20, 25)}
-    #     assert all(df["j"] == df["i"] + 1)
+    with query(storage) as q:
+        i = Query().named("i")
+        j = inc(i).named("j")
+        final = add(i, j)
+        df = q.get_table(i, j, final)
+        assert set(df["i"]) == {i for i in range(20, 25)}
+        assert all(df["j"] == df["i"] + 1)
     check_invariants(storage)

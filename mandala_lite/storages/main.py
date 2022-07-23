@@ -19,6 +19,7 @@ class Storage:
         - synchronizing: connecting an operation with the storage and performing
         any necessary updates
     """
+
     def __init__(self, root: Optional[Path] = None):
         self.root = root
         self.calls = CallStorage()

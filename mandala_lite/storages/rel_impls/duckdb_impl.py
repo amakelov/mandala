@@ -33,7 +33,7 @@ transaction = Transaction
 
 class DuckDBRelStorage(RelStorage):
     UID_DTYPE = "VARCHAR"  # TODO - change this
-    VREF_TABLE = "__vrefs__"
+    VREF_TABLE = Config.vref_table
     TEMP_PANDAS_TABLE = "__pandas__"
 
     def __init__(self, address: str = ":memory:"):
@@ -66,17 +66,17 @@ class DuckDBRelStorage(RelStorage):
             columns=[],
             conn=conn,
         )
-    
+
     @transaction()
-    def get_tables(self, conn:Connection=None) -> List[str]:
-        return conn.execute('SHOW TABLES;').fetchdf()['name'].values.tolist()
-        
+    def get_tables(self, conn: Connection = None) -> List[str]:
+        return conn.execute("SHOW TABLES;").fetchdf()["name"].values.tolist()
+
     @transaction()
-    def get_data(self, conn:Connection=None) -> Dict[str, pd.DataFrame]:
+    def get_data(self, conn: Connection = None) -> Dict[str, pd.DataFrame]:
         tables = self.get_tables(conn=conn)
         data = {}
         for table in tables:
-            data[table] = conn.execute(f'SELECT * FROM {table};').fetchdf()
+            data[table] = conn.execute(f"SELECT * FROM {table};").fetchdf()
         return data
 
     ############################################################################
@@ -90,8 +90,8 @@ class DuckDBRelStorage(RelStorage):
         conn: Connection = None,
     ):
         """
-        Create a (memoization) table with given columns. 
-        
+        Create a (memoization) table with given columns.
+
         Importantly, this *always* creates a primary key on the UID column.
         """
         query = (
@@ -165,5 +165,6 @@ class DuckDBRelStorage(RelStorage):
     ############################################################################
     ### queries
     ############################################################################
-    def select(self, query: Any) -> pd.DataFrame:
-        raise NotImplementedError()
+    @transaction()
+    def execute(self, query: str, conn: Connection = None) -> pd.DataFrame:
+        return conn.execute(query).fetchdf()
