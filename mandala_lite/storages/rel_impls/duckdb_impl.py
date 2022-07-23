@@ -1,10 +1,12 @@
+import functools
+
+import duckdb
+from duckdb import DuckDBPyConnection as Connection
+from pypika import Query, Column
+
+from ..rels import RelStorage
 from ...common_imports import *
 from ...core.config import Config
-from ..rels import RelStorage
-import duckdb
-from pypika import Query, Table, Field, Column
-import functools
-from duckdb import DuckDBPyConnection as Connection
 
 
 class Transaction:

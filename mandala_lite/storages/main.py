@@ -1,11 +1,10 @@
 from .kv import InMemoryStorage
-from .rels import RelStorage, RelAdapter
+from .rels import RelAdapter
 from .rel_impls.duckdb_impl import DuckDBRelStorage
 from .calls import CallStorage
 
 from ..common_imports import *
 from ..core.sig import Signature
-from ..core.config import Config
 
 
 class Storage:
