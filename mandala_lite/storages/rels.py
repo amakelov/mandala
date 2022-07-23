@@ -1,5 +1,7 @@
-from collections import defaultdict
 from abc import ABC, abstractmethod
+from collections import defaultdict
+
+from pypika import Query, Table
 
 from ..common_imports import *
 from ..core.config import Config, Prov
@@ -53,6 +55,16 @@ class RelStorage(ABC):
         """
         raise NotImplementedError()
 
+    @abstractmethod
+    def get_data(self, table: str) -> pd.DataFrame:
+        """
+        Fetch data from a table.
+        """
+        raise NotImplementedError()
+
+
+RemoteEventLogEntry = dict[str, bytes]
+
 
 class RelAdapter:
     """
@@ -63,6 +75,8 @@ class RelAdapter:
 
     Uses `RelStorage` to do the actual work.
     """
+
+    EVENT_LOG_TABLE = "__event_log__"
 
     def __init__(self, rel_storage: RelStorage):
         self.rel_storage = rel_storage
@@ -79,6 +93,9 @@ class RelAdapter:
             ]
         )
         self.prov_df.set_index([Prov.call_uid, Prov.vref_name, Prov.is_input])
+        # Initialize the event log.
+        # The event log is just a list of UIDs that changed, for now.
+        self.rel_storage.create_relation(self.EVENT_LOG_TABLE, ["table"])
 
     def upsert_calls(self, calls: List[Call]):
         """
@@ -86,11 +103,53 @@ class RelAdapter:
         declarative queries.
         """
         if len(calls) > 0:
+            # Write changes to the event log table.
+
             for name, df in self.tabulate_calls(calls).items():
                 self.rel_storage.upsert(name, df)
+                self.rel_storage.upsert(
+                    self.EVENT_LOG_TABLE,
+                    pd.DataFrame.from_dict(
+                        {Config.uid_col: df[Config.uid_col], "table": [name] * len(df)}
+                    ),
+                )
             # update provenance table
             new_prov_df = self.get_provenance_table(calls=calls)
             self.prov_df = upsert_df(current=self.prov_df, new=new_prov_df)
+
+    def bundle_to_remote(self) -> RemoteEventLogEntry:
+        # TODO do this transactionally
+
+        # Bundle event log and referenced calls into tables.
+        event_log_df = self.rel_storage.get_data(self.EVENT_LOG_TABLE)
+        tables_with_changes = {}
+        table_names_with_changes = event_log_df["table"].unique()
+
+        event_log_table = Table(self.EVENT_LOG_TABLE)
+        for table_name in table_names_with_changes:
+            table = Table(table_name)
+            tables_with_changes[table_name] = self.rel_storage.execute(
+                Query.from_(table)
+                .join(event_log_table)
+                .on(table[Config.uid_col] == event_log_table[Config.uid_col])
+            )
+
+        output = {}
+        for table_name in tables_with_changes:
+            buffer = io.BytesIO()
+            tables_with_changes[table_name].to_parquet(buffer)
+            output[table_name] = buffer.getbuffer()
+
+        self.rel_storage.execute(Query.from_(event_log_table).delete())
+        return output
+
+    def apply_from_remote(self, changes: list[RemoteEventLogEntry]):
+        # TODO do this in a transaction
+        for raw_changeset in changes:
+            for table_name in raw_changeset:
+                buffer = io.BytesIO(raw_changeset[table_name])
+                table = pd.read_parquet(buffer)
+                self.rel_storage.upsert(table_name, table)
 
     @staticmethod
     def tabulate_calls(calls: List[Call]) -> Dict[str, pd.DataFrame]:
