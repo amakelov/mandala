@@ -1,5 +1,6 @@
 from .kv import InMemoryStorage
 from .rels import RelStorage, RelAdapter
+from .rel_impls.duckdb_impl import DuckDBRelStorage
 from .calls import CallStorage
 
 from ..common_imports import *
@@ -18,14 +19,14 @@ class Storage:
         - synchronizing: connecting an operation with the storage and performing
         any necessary updates
     """
-
     def __init__(self, root: Optional[Path] = None):
         self.root = root
         self.calls = CallStorage()
         # all objects (inputs and outputs to operations, defaults) are saved here
         self.objs = InMemoryStorage()
         # stores the memoization tables
-        self.rel_storage = RelStorage()
+        # self.rel_storage = RelStorage()
+        self.rel_storage = DuckDBRelStorage()
         # manipulates the memoization tables
         self.rel_adapter = RelAdapter(rel_storage=self.rel_storage)
         # stores the signatures of the operations connected to this storage
@@ -59,7 +60,8 @@ class Storage:
             self.sigs[(res.external_name, res.version)] = res
             # create relation
             columns = (
-                [Config.uid_col]
+                # [Config.uid_col]
+                []
                 + list(res.internal_input_names)
                 + [f"output_{i}" for i in range(res.n_outputs)]
             )

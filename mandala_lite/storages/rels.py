@@ -1,18 +1,12 @@
 from collections import defaultdict
+from abc import ABC, abstractmethod
 
 from ..common_imports import *
 from ..core.config import Config, Prov
 from ..core.model import Call
 
 
-def upsert_df(current: pd.DataFrame, new: pd.DataFrame) -> pd.DataFrame:
-    """
-    Upsert for dataframes with the same columns
-    """
-    return pd.concat([current, new[~new.index.isin(current.index)]])
-
-
-class RelStorage:
+class RelStorage(ABC):
     """
     Responsible for the low-level (i.e., unaware of mandala-specific concepts)
     interactions with the relational part of the storage, such as creating and
@@ -22,63 +16,40 @@ class RelStorage:
     It's deliberately referred to as "relational storage" as opposed to a
     "relational database" because simpler implementations exist.
     """
-
-    def __init__(self):
-        # internal name -> dataframe
-        self.relations: Dict[str, pd.DataFrame] = {}
-
-    ############################################################################
-    ### schema management
-    ############################################################################
+    @abstractmethod
     def create_relation(self, name: str, columns: List[str]):
         """
-        Create a (memoization) table with given columns
+        Create a relation with the given name and columns.
         """
-        assert Config.uid_col in columns
-        self.relations[name] = pd.DataFrame(columns=columns).set_index(Config.uid_col)
+        raise NotImplementedError()
 
+    @abstractmethod
     def delete_relation(self, name: str):
-        """
-        Delete a (memoization) table
-        """
-        del self.relations[name]
-
+        raise NotImplementedError()
+    
+    @abstractmethod
     def create_column(self, relation: str, name: str, default_value: str):
-        """
-        Add a new column to a table.
-        """
-        assert name not in self.relations[relation].columns
-        self.relations[relation][name] = default_value
-
-    ############################################################################
-    ### instance management
-    ############################################################################
+        raise NotImplementedError()
+    
+    @abstractmethod
     def insert(self, name: str, df: pd.DataFrame):
         """
         Append rows to a table
         """
-        self.relations[name] = self.relations[name].append(
-            df.set_index(Config.uid_col), verify_integrity=True
-        )
+        raise NotImplementedError()
 
+    @abstractmethod
     def upsert(self, name: str, df: pd.DataFrame):
         """
         Upsert rows in a table based on index
         """
-        current = self.relations[name]
-        df = df.set_index(Config.uid_col)
-        self.relations[name] = upsert_df(current=current, new=df)
+        raise NotImplementedError()
 
+    @abstractmethod
     def delete(self, name: str, index: List[str]):
         """
         Delete rows from a table based on index
         """
-        self.relations[name] = self.relations[name].drop(labels=index)
-
-    ############################################################################
-    ### queries
-    ############################################################################
-    def select(self, query: Any) -> pd.DataFrame:
         raise NotImplementedError()
 
 
@@ -188,3 +159,10 @@ class RelAdapter:
             df = pd.concat([in_table, out_table], ignore_index=True)
             dfs.append(df)
         return pd.concat(dfs, ignore_index=True)
+
+
+def upsert_df(current: pd.DataFrame, new: pd.DataFrame) -> pd.DataFrame:
+    """
+    Upsert for dataframes with the same columns
+    """
+    return pd.concat([current, new[~new.index.isin(current.index)]])

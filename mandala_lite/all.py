@@ -7,4 +7,5 @@ from .ui.execution import op, Query
 from .ui.context import Context, run, query
 
 ### testing stuff
-from .storages.rel_impls.duckdb_impl import DuckDBStorage
+from .storages.rel_impls.duckdb_impl import DuckDBRelStorage
+from .tests.utils import check_invariants
