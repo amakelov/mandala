@@ -85,7 +85,7 @@ class RelAdapter:
         Upserts calls in the relational storage so that they will show up in
         declarative queries.
         """
-        if calls:
+        if len(calls) > 0:
             for name, df in self.tabulate_calls(calls).items():
                 self.rel_storage.upsert(name, df)
             # update provenance table
