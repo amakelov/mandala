@@ -5,6 +5,8 @@ install_requires = [
     "numpy >= 1.18",
     "pandas >= 1.0",
     "joblib >= 1.0",
+    "duckdb >= 0.4",
+    "pypika >= 0.48",
 ]
 
 extras_require = {
