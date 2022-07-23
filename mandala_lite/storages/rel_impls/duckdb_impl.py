@@ -1,6 +1,7 @@
 import functools
 
 import duckdb
+import pandas as pd
 from duckdb import DuckDBPyConnection as Connection
 from pypika import Query, Column
 
@@ -74,11 +75,15 @@ class DuckDBRelStorage(RelStorage):
         return conn.execute("SHOW TABLES;").fetchdf()["name"].values.tolist()
 
     @transaction()
-    def get_data(self, conn: Connection = None) -> Dict[str, pd.DataFrame]:
+    def get_data(self, table: str, conn: Connection = None) -> pd.DataFrame:
+        return conn.execute(f"SELECT * FROM {table};").fetchdf()
+
+    @transaction()
+    def get_all_data(self, conn: Connection = None) -> Dict[str, pd.DataFrame]:
         tables = self.get_tables(conn=conn)
         data = {}
         for table in tables:
-            data[table] = conn.execute(f"SELECT * FROM {table};").fetchdf()
+            data[table] = self.get_data(table, conn)
         return data
 
     ############################################################################
