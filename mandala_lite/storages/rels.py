@@ -103,7 +103,7 @@ class RelAdapter:
     def log_change(self, table: str, key: str):
         self.rel_storage.upsert(
             self.EVENT_LOG_TABLE,
-            pa.Table.from_pylist([{Config.uid_col: key, "table": table}])
+            pa.Table.from_pylist([{Config.uid_col: key, "table": table}]),
         )
 
     def upsert_calls(self, calls: List[Call]):
@@ -148,7 +148,9 @@ class RelAdapter:
         return Call.from_row(results.iloc[0])
 
     def call_set(self, call_uid: str, call: Call) -> None:
-        self.obj_sets({vref.uid: vref.obj for vref in list(call.inputs.values()) + call.outputs})
+        self.obj_sets(
+            {vref.uid: vref.obj for vref in list(call.inputs.values()) + call.outputs}
+        )
         self.upsert_calls([call])
 
     def obj_exists(self, keys: Union[str, list[str]]) -> Union[bool, list[bool]]:
@@ -189,13 +191,23 @@ class RelAdapter:
         joblib.dump(value, buffer)
         query = Query.into(Config.vref_table).insert(Parameter("$1"), Parameter("$2"))
         self.rel_storage.execute(query, parameters=[key, buffer.getvalue()])
+        log_query = Query.into(self.EVENT_LOG_TABLE).insert(
+            Parameter("$1"), Parameter("$2")
+        )
+        self.rel_storage.execute(log_query, parameters=[key, Config.vref_table])
 
     def obj_sets(self, kvs: dict[str, Any]) -> None:
         keys = list(kvs.keys())
         indicators = self.obj_exists(keys)
         new_keys = [key for key, indicator in zip(keys, indicators) if not indicator]
-        df = pa.Table.from_pylist([{Config.uid_col: key, 'value': serialize(kvs[key])} for key in new_keys])
+        df = pa.Table.from_pylist(
+            [{Config.uid_col: key, "value": serialize(kvs[key])} for key in new_keys]
+        )
         self.rel_storage.upsert(Config.vref_table, df)
+        log_df = pa.Table.from_pylist(
+            [{Config.uid_col: key, "table": Config.vref_table} for key in new_keys]
+        )
+        self.rel_storage.upsert(self.EVENT_LOG_TABLE, log_df)
 
     def bundle_to_remote(self) -> RemoteEventLogEntry:
         # TODO do this transactionally

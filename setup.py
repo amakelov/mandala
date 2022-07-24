@@ -7,7 +7,7 @@ install_requires = [
     "joblib >= 1.0",
     "duckdb >= 0.4",
     "pypika >= 0.48",
-    "pyarrow >= 8.0.0"
+    "pyarrow >= 8.0.0",
 ]
 
 extras_require = {
