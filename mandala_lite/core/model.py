@@ -120,11 +120,13 @@ class Call:
         return Call(
             uid=row[Config.uid_col],
             inputs={
-                k: ValueRef(row[k], obj=None, in_memory=False) for k in input_columns
+                k: ValueRef(row[k].item(), obj=None, in_memory=False)
+                for k in input_columns
             },
-            output={
-                k: ValueRef(row[k], obj=None, in_memory=False) for k in output_columns
-            },
+            outputs=[
+                ValueRef(row[k].item(), obj=None, in_memory=False)
+                for k in sorted(output_columns, key=lambda x: int(x[7:]))
+            ],
             op=None,
         )
 

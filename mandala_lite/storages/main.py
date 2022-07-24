@@ -49,15 +49,15 @@ class Storage:
     def obj_get(self, obj_uid: str) -> Any:
         if self.obj_cache.exists(obj_uid):
             return self.obj_cache.get(obj_uid)
-        return self.rel_adapter.obj_get(self)
+        return self.rel_adapter.obj_get(obj_uid)
 
     def obj_set(self, obj_uid: str, value: Any) -> None:
         self.obj_cache.set(obj_uid, value)
 
     def preload_objs(self, keys: list[str]):
         keys_not_in_cache = [key for key in keys if not self.obj_cache.exists(key)]
-        for row in self.rel_adapter.obj_gets(keys_not_in_cache).iterrows():
-            self.obj_cache[row[Config.uid_col]] = row["value"]
+        for idx, row in self.rel_adapter.obj_gets(keys_not_in_cache).iterrows():
+            self.obj_cache.set(k=row[Config.uid_col], v=row["value"])
 
     def commit(self):
         """
@@ -69,6 +69,11 @@ class Storage:
         new_calls = [self.call_cache.get(key) for key in self.call_cache.dirty_entries]
         self.rel_adapter.obj_sets(new_objs)
         self.rel_adapter.upsert_calls(new_calls)
+        if Config.evict_on_commit:
+            for k in self.call_cache.keys():
+                self.call_cache.delete(k=k)
+            for k in self.obj_cache.keys():
+                self.obj_cache.delete(k=k)
 
     def synchronize(self, sig: Signature) -> Signature:
         """

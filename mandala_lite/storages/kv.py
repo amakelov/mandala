@@ -1,10 +1,4 @@
-from typing import Generic
-
-from pypika import Table, Query, Parameter
-
-from .rels import RelStorage, RelAdapter
 from ..common_imports import *
-from ..core.config import Config
 
 
 class KVStore:
@@ -68,6 +62,7 @@ class InMemoryStorage(KVStore):
 
     def delete(self, k: str):
         del self.data[k]
+        self.dirty_entries.remove(k)
 
     def keys(self) -> List[str]:
         return list(self.data.keys())

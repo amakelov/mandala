@@ -9,61 +9,7 @@ from pypika.terms import LiteralValue
 from ..common_imports import *
 from ..core.config import Config, Prov
 from ..core.model import Call
-
-
-class RelStorage(ABC):
-    """
-    Responsible for the low-level (i.e., unaware of mandala-specific concepts)
-    interactions with the relational part of the storage, such as creating and
-    extending tables, running queries, etc. This is intended to be a pretty
-    generic, minimal database interface, supporting just the things we need.
-
-    It's deliberately referred to as "relational storage" as opposed to a
-    "relational database" because simpler implementations exist.
-    """
-
-    @abstractmethod
-    def create_relation(self, name: str, columns: List[tuple[str, str]]):
-        """
-        Create a relation with the given name and columns.
-        """
-        raise NotImplementedError()
-
-    @abstractmethod
-    def delete_relation(self, name: str):
-        raise NotImplementedError()
-
-    @abstractmethod
-    def create_column(self, relation: str, name: str, default_value: str):
-        raise NotImplementedError()
-
-    @abstractmethod
-    def insert(self, name: str, df: pd.DataFrame):
-        """
-        Append rows to a table
-        """
-        raise NotImplementedError()
-
-    @abstractmethod
-    def upsert(self, name: str, df: pa.Table):
-        """
-        Upsert rows in a table based on index
-        """
-        raise NotImplementedError()
-
-    @abstractmethod
-    def delete(self, name: str, index: List[str]):
-        """
-        Delete rows from a table based on index
-        """
-        raise NotImplementedError()
-
-    @abstractmethod
-    def get_data(self, table: str) -> pd.DataFrame:
-        """
-        Fetch data from a table.
-        """
-        raise NotImplementedError()
+from .rel_impls.duckdb_impl import DuckDBRelStorage
 
 
 RemoteEventLogEntry = dict[str, bytes]
@@ -79,9 +25,9 @@ class RelAdapter:
     Uses `RelStorage` to do the actual work.
     """
 
-    EVENT_LOG_TABLE = "__event_log__"
+    EVENT_LOG_TABLE = Config.event_log_table
 
-    def __init__(self, rel_storage: RelStorage):
+    def __init__(self, rel_storage: DuckDBRelStorage):
         self.rel_storage = rel_storage
         # initialize provenance table
         self.prov_df = pd.DataFrame(
@@ -131,21 +77,26 @@ class RelAdapter:
             Query.from_(table_name)
             .where(Table(table_name)[Config.uid_col] == Parameter("$1"))
             .select(Table(table_name)[Config.uid_col], LiteralValue(f"'{table_name}'"))
-            for table_name in self.rel_storage.get_tables()
+            for table_name in self.rel_storage.get_call_tables()
         ]
         query = sum(all_tables[1:], start=all_tables[0])
         return self.rel_storage.execute(query, [call_uid])
 
     def call_exists(self, call_uid: str) -> bool:
-        return len(self._query_call(call_uid))
+        return len(self._query_call(call_uid)) > 0
 
     def call_get(self, call_uid: str) -> Call:
         row = self._query_call(call_uid).iloc[0]
         table_name = row[1]
         table = Table(table_name)
-        query = Query.from_(table).where(table[Config.uid_col] == Parameter("$1"))
+        query = (
+            Query.from_(table)
+            .where(table[Config.uid_col] == Parameter("$1"))
+            .select(table.star)
+        )
         results = self.rel_storage.execute(query, [call_uid])
-        return Call.from_row(results.iloc[0])
+        sess.d = locals()
+        return Call.from_row(results)
 
     def call_set(self, call_uid: str, call: Call) -> None:
         self.obj_sets(

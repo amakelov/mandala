@@ -96,6 +96,7 @@ class FuncInterface:
             self.storage.preload_objs([v.uid for v in call.outputs])
             wrapped_outputs = [self.storage.obj_get(v.uid) for v in call.outputs]
             # return outputs and call
+            sess.d = locals()
             return wrapped_outputs, call
         else:
             # compute op
@@ -161,7 +162,13 @@ class FuncDecorator:
         return FuncInterface(op=op, storage=self.storage)
 
 
-def Query() -> ValQuery:
+def Q() -> ValQuery:
+    """
+    Create a `ValQuery` instance.
+
+    Later on, we can add parameters to this to enforce query constraints in a
+    more natural way.
+    """
     return ValQuery(creator=None, created_as=None)
 
 

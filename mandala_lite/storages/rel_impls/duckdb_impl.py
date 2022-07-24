@@ -7,7 +7,7 @@ from duckdb import DuckDBPyConnection as Connection
 from pypika import Query, Column
 from pypika.queries import QueryBuilder
 
-from ..rels import RelStorage
+from .bases import RelStorage
 from ...common_imports import *
 from ...core.config import Config
 
@@ -40,6 +40,7 @@ class DuckDBRelStorage(RelStorage):
     UID_DTYPE = "VARCHAR"  # TODO - change this
     VREF_TABLE = Config.vref_table
     TEMP_ARROW_TABLE = "__arrow__"
+    EVENT_LOG_TABLE = Config.event_log_table
 
     def __init__(self, address: str = ":memory:"):
         self.address = address
@@ -73,6 +74,17 @@ class DuckDBRelStorage(RelStorage):
         )
 
     @transaction()
+    def get_call_tables(self, conn: Connection = None) -> List[str]:
+        tables = self.get_tables(conn=conn)
+        return [
+            t
+            for t in tables
+            if t != self.VREF_TABLE
+            and t != self.TEMP_ARROW_TABLE
+            and t != self.EVENT_LOG_TABLE
+        ]
+
+    @transaction()
     def get_tables(self, conn: Connection = None) -> List[str]:
         return conn.execute("SHOW TABLES;").fetchdf()["name"].values.tolist()
 
@@ -99,9 +111,7 @@ class DuckDBRelStorage(RelStorage):
         conn: Connection = None,
     ):
         """
-        Create a (memoization) table with given columns.
-
-        Importantly, this *always* creates a primary key on the UID column.
+        Create a table with given columns, with a primary key named `Config.uid_col`.
         """
         query = (
             Query.create_table(table=name)
