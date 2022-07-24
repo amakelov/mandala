@@ -2,6 +2,7 @@ import functools
 
 import duckdb
 import pandas as pd
+import pyarrow
 from duckdb import DuckDBPyConnection as Connection
 from pypika import Query, Column
 from pypika.queries import QueryBuilder
@@ -38,7 +39,7 @@ transaction = Transaction
 class DuckDBRelStorage(RelStorage):
     UID_DTYPE = "VARCHAR"  # TODO - change this
     VREF_TABLE = Config.vref_table
-    TEMP_PANDAS_TABLE = "__pandas__"
+    TEMP_ARROW_TABLE = "__arrow__"
 
     def __init__(self, address: str = ":memory:"):
         self.address = address
@@ -148,19 +149,22 @@ class DuckDBRelStorage(RelStorage):
         """
         Append rows to a table
         """
-        conn.register(view_name=self.TEMP_PANDAS_TABLE, python_object=df)
-        conn.execute(f"INSERT INTO '{name}' SELECT * FROM {self.TEMP_PANDAS_TABLE}")
-        conn.unregister(view_name=self.TEMP_PANDAS_TABLE)
+        conn.register(view_name=self.TEMP_ARROW_TABLE, python_object=df)
+        conn.execute(f"INSERT INTO '{name}' SELECT * FROM {self.TEMP_ARROW_TABLE}")
+        conn.unregister(view_name=self.TEMP_ARROW_TABLE)
 
     @transaction()
-    def upsert(self, name: str, df: pd.DataFrame, conn: Connection = None):
+    def upsert(self, name: str, df: pyarrow.Table, conn: Connection = None):
         """
         Upsert rows in a table based on index
         """
-        conn.register(view_name=self.TEMP_PANDAS_TABLE, python_object=df)
-        query = f'INSERT INTO "{name}" SELECT * FROM {self.TEMP_PANDAS_TABLE} WHERE "{Config.uid_col}" NOT IN (SELECT "{Config.uid_col}" FROM "{name}")'
+        if len(df) == 0:
+            return
+
+        conn.register(view_name=self.TEMP_ARROW_TABLE, python_object=df)
+        query = f'INSERT INTO "{name}" SELECT * FROM {self.TEMP_ARROW_TABLE} WHERE "{Config.uid_col}" NOT IN (SELECT "{Config.uid_col}" FROM "{name}")'
         conn.execute(query)
-        conn.unregister(view_name=self.TEMP_PANDAS_TABLE)
+        conn.unregister(view_name=self.TEMP_ARROW_TABLE)
 
     @transaction()
     def delete(self, name: str, index: List[str], conn: Connection = None):

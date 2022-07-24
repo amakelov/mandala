@@ -1,7 +1,8 @@
 from abc import ABC, abstractmethod
 from collections import defaultdict
 
-import pandas as pd
+import pyarrow as pa
+import pyarrow.parquet as pq
 from pypika import Query, Table, Parameter
 from pypika.terms import LiteralValue
 
@@ -44,7 +45,7 @@ class RelStorage(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    def upsert(self, name: str, df: pd.DataFrame):
+    def upsert(self, name: str, df: pa.Table):
         """
         Upsert rows in a table based on index
         """
@@ -102,7 +103,7 @@ class RelAdapter:
     def log_change(self, table: str, key: str):
         self.rel_storage.upsert(
             self.EVENT_LOG_TABLE,
-            pd.DataFrame.from_dict({Config.uid_col: [key], "table": [table]}),
+            pa.Table.from_pylist([{Config.uid_col: key, "table": table}])
         )
 
     def upsert_calls(self, calls: List[Call]):
@@ -117,7 +118,7 @@ class RelAdapter:
                 self.rel_storage.upsert(name, df)
                 self.rel_storage.upsert(
                     self.EVENT_LOG_TABLE,
-                    pd.DataFrame.from_dict(
+                    pa.Table.from_pydict(
                         {Config.uid_col: df[Config.uid_col], "table": [name] * len(df)}
                     ),
                 )
@@ -147,15 +148,20 @@ class RelAdapter:
         return Call.from_row(results.iloc[0])
 
     def call_set(self, call_uid: str, call: Call) -> None:
-        for vref in call.inputs.values():
-            self.obj_set(vref.uid, vref.obj)
-        for vref in call.outputs:
-            self.obj_set(vref.uid, vref.obj)
+        self.obj_sets({vref.uid: vref.obj for vref in list(call.inputs.values()) + call.outputs})
         self.upsert_calls([call])
 
-    def obj_exists(self, key):
-        df = self.obj_gets([key])
-        return len(df) > 0
+    def obj_exists(self, keys: Union[str, list[str]]) -> Union[bool, list[bool]]:
+        if isinstance(keys, str):
+            all_keys = [keys]
+        else:
+            all_keys = keys
+        df = self.obj_gets(all_keys)
+        results = [len(df[df[Config.uid_col] == key]) > 0 for key in all_keys]
+        if isinstance(keys, str):
+            return results[0]
+        else:
+            return results
 
     def obj_gets(self, keys: list[str]) -> pd.DataFrame:
         if len(keys) == 0:
@@ -182,7 +188,14 @@ class RelAdapter:
         buffer = io.BytesIO()
         joblib.dump(value, buffer)
         query = Query.into(Config.vref_table).insert(Parameter("$1"), Parameter("$2"))
-        self.rel_storage.execute(query, parameters=[key, buffer.getbuffer()])
+        self.rel_storage.execute(query, parameters=[key, buffer.getvalue()])
+
+    def obj_sets(self, kvs: dict[str, Any]) -> None:
+        keys = list(kvs.keys())
+        indicators = self.obj_exists(keys)
+        new_keys = [key for key, indicator in zip(keys, indicators) if not indicator]
+        df = pa.Table.from_pylist([{Config.uid_col: key, 'value': serialize(kvs[key])} for key in new_keys])
+        self.rel_storage.upsert(Config.vref_table, df)
 
     def bundle_to_remote(self) -> RemoteEventLogEntry:
         # TODO do this transactionally
@@ -215,11 +228,11 @@ class RelAdapter:
         for raw_changeset in changes:
             for table_name in raw_changeset:
                 buffer = io.BytesIO(raw_changeset[table_name])
-                table = pd.read_parquet(buffer)
+                table = pq.read_table(buffer)
                 self.rel_storage.upsert(table_name, table)
 
     @staticmethod
-    def tabulate_calls(calls: List[Call]) -> Dict[str, pd.DataFrame]:
+    def tabulate_calls(calls: List[Call]) -> Dict[str, pa.Table]:
         """
         Converts call objects to a dictionary of {relation name: table
         to upsert} pairs.
@@ -229,9 +242,8 @@ class RelAdapter:
         for call in calls:
             calls_by_op[call.op.sig.internal_name].append(call)
         res = {}
-        vrefs = {}
         for k, v in calls_by_op.items():
-            res[k] = pd.DataFrame(
+            res[k] = pa.Table.from_pylist(
                 [
                     {
                         Config.uid_col: call.uid,
@@ -241,13 +253,7 @@ class RelAdapter:
                     for call in v
                 ]
             )
-            for call in v:
-                for v in list(call.inputs.values()) + call.outputs:
-                    vrefs[v.uid] = v.obj
 
-        # res[Config.vref_table] = pd.DataFrame.from_records(
-        #    [{Config.uid_col: k, "value": serialize(v)} for k, v in vrefs.items()]
-        # )
         return res
 
     ############################################################################
@@ -306,7 +312,7 @@ def upsert_df(current: pd.DataFrame, new: pd.DataFrame) -> pd.DataFrame:
 def serialize(obj: Any) -> bytes:
     buffer = io.BytesIO()
     joblib.dump(obj, buffer)
-    return buffer.getbuffer()
+    return buffer.getvalue()
 
 
 def deserialize(value: bytes) -> Any:
