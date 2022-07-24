@@ -96,7 +96,6 @@ class FuncInterface:
             self.storage.preload_objs([v.uid for v in call.outputs])
             wrapped_outputs = [self.storage.obj_get(v.uid) for v in call.outputs]
             # return outputs and call
-            sess.d = locals()
             return wrapped_outputs, call
         else:
             # compute op

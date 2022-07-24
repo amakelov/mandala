@@ -8,35 +8,14 @@ from pypika import Query, Column
 from pypika.queries import QueryBuilder
 
 from .bases import RelStorage
+from .utils import Transactable, transaction
 from ...common_imports import *
 from ...core.config import Config
 
 
-class Transaction:
-    def __init__(self):
-        pass
-
-    def __call__(self, method) -> "method":
-        @functools.wraps(method)
-        def inner(instance: "DuckDBStorage", *args, conn: Connection = None, **kwargs):
-            if conn is None:
-                # new transaction
-                conn = instance._get_connection()
-                result = method(instance, *args, conn=conn, **kwargs)
-                instance._end_transaction(conn=conn)
-                return result
-            else:
-                # nest in existing transaction
-                result = method(instance, *args, conn=conn, **kwargs)
-                return result
-
-        return inner
 
 
-transaction = Transaction
-
-
-class DuckDBRelStorage(RelStorage):
+class DuckDBRelStorage(RelStorage, Transactable):
     UID_DTYPE = "VARCHAR"  # TODO - change this
     VREF_TABLE = Config.vref_table
     TEMP_ARROW_TABLE = "__arrow__"
@@ -48,15 +27,6 @@ class DuckDBRelStorage(RelStorage):
         if self.in_memory:
             self._conn = duckdb.connect(self.address)
         self.init()
-        # if not self.exists_db(address=self.address):
-        #     self.init()
-
-    # @staticmethod
-    # def exists_db(address:str) -> bool:
-    #     if address == ":memory:":
-    #         return True
-    #     else:
-    #         return os.path.exists(address)
 
     def _get_connection(self) -> Connection:
         return self._conn if self.in_memory else duckdb.connect(database=self.address)
@@ -179,16 +149,16 @@ class DuckDBRelStorage(RelStorage):
         conn.unregister(view_name=self.TEMP_ARROW_TABLE)
 
     @transaction()
-    def upsert(self, name: str, pt: pyarrow.Table, conn: Connection = None):
+    def upsert(self, name: str, ta: pyarrow.Table, conn: Connection = None):
         """
         Upsert rows in a table based on index
         """
-        if len(pt) == 0:
+        if len(ta) == 0:
             return
         table_cols = self._get_cols(name=name, conn=conn)
-        assert set(pt.column_names) == set(table_cols)
-        cols_string = ", ".join([f'"{column_name}"' for column_name in pt.column_names])
-        conn.register(view_name=self.TEMP_ARROW_TABLE, python_object=pt)
+        assert set(ta.column_names) == set(table_cols)
+        cols_string = ", ".join([f'"{column_name}"' for column_name in ta.column_names])
+        conn.register(view_name=self.TEMP_ARROW_TABLE, python_object=ta)
         query = f'INSERT INTO "{name}" ({cols_string}) SELECT * FROM {self.TEMP_ARROW_TABLE} WHERE "{Config.uid_col}" NOT IN (SELECT "{Config.uid_col}" FROM "{name}")'
         conn.execute(query)
         conn.unregister(view_name=self.TEMP_ARROW_TABLE)
