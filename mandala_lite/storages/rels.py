@@ -111,7 +111,7 @@ class RelAdapter:
         Upserts calls in the relational storage so that they will show up in
         declarative queries.
         """
-        if len(calls) > 0:
+        if len(calls) > 0: # avoid dealing with empty dataframes
             # Write changes to the event log table.
 
             for name, df in self.tabulate_calls(calls).items():

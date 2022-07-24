@@ -120,7 +120,6 @@ class DuckDBRelStorage(RelStorage):
             )
             .primary_key(Config.uid_col)
         )
-        print(query)
         conn.execute(str(query))
 
     @transaction()
@@ -145,24 +144,38 @@ class DuckDBRelStorage(RelStorage):
     ### instance management
     ############################################################################
     @transaction()
-    def insert(self, name: str, df: pd.DataFrame, conn: Connection = None):
+    def _get_cols(self, name:str, conn:Connection=None) -> List[str]:
+        """
+        Duckdb-specific method to get the *ordered* columns of a table.
+        """
+        return self.execute(query=f'DESCRIBE "{name}";', conn=conn)['column_name'].values.tolist()
+
+    @transaction()
+    def insert(self, name: str, pt: pyarrow.Table, conn: Connection = None):
         """
         Append rows to a table
         """
-        conn.register(view_name=self.TEMP_ARROW_TABLE, python_object=df)
-        conn.execute(f"INSERT INTO '{name}' SELECT * FROM {self.TEMP_ARROW_TABLE}")
+        if pt.empty:
+            return
+        table_cols = self._get_cols(name=name, conn=conn)
+        assert set(pt.column_names) == set(table_cols)
+        cols_string = ", ".join([f'"{column_name}"' for column_name in pt.column_names])
+        conn.register(view_name=self.TEMP_ARROW_TABLE, python_object=pt)
+        conn.execute(f'INSERT INTO "{name}" ({cols_string}) SELECT * FROM {self.TEMP_ARROW_TABLE}')
         conn.unregister(view_name=self.TEMP_ARROW_TABLE)
 
     @transaction()
-    def upsert(self, name: str, df: pyarrow.Table, conn: Connection = None):
+    def upsert(self, name: str, pt: pyarrow.Table, conn: Connection = None):
         """
         Upsert rows in a table based on index
         """
-        if len(df) == 0:
+        if len(pt) == 0:
             return
-
-        conn.register(view_name=self.TEMP_ARROW_TABLE, python_object=df)
-        query = f'INSERT INTO "{name}" SELECT * FROM {self.TEMP_ARROW_TABLE} WHERE "{Config.uid_col}" NOT IN (SELECT "{Config.uid_col}" FROM "{name}")'
+        table_cols = self._get_cols(name=name, conn=conn)
+        assert set(pt.column_names) == set(table_cols)
+        cols_string = ", ".join([f'"{column_name}"' for column_name in pt.column_names])
+        conn.register(view_name=self.TEMP_ARROW_TABLE, python_object=pt)
+        query = f'INSERT INTO "{name}" ({cols_string}) SELECT * FROM {self.TEMP_ARROW_TABLE} WHERE "{Config.uid_col}" NOT IN (SELECT "{Config.uid_col}" FROM "{name}")'
         conn.execute(query)
         conn.unregister(view_name=self.TEMP_ARROW_TABLE)
 
@@ -171,7 +184,7 @@ class DuckDBRelStorage(RelStorage):
         """
         Delete rows from a table based on index
         """
-        conn.execute(f"DELETE FROM '{name}' WHERE {Config.uid_col} IN ({index})")
+        conn.execute(f'DELETE FROM "{name}" WHERE {Config.uid_col} IN ({index})')
 
     ############################################################################
     ### queries
