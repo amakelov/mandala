@@ -144,11 +144,13 @@ class DuckDBRelStorage(RelStorage):
     ### instance management
     ############################################################################
     @transaction()
-    def _get_cols(self, name:str, conn:Connection=None) -> List[str]:
+    def _get_cols(self, name: str, conn: Connection = None) -> List[str]:
         """
         Duckdb-specific method to get the *ordered* columns of a table.
         """
-        return self.execute(query=f'DESCRIBE "{name}";', conn=conn)['column_name'].values.tolist()
+        return self.execute(query=f'DESCRIBE "{name}";', conn=conn)[
+            "column_name"
+        ].values.tolist()
 
     @transaction()
     def insert(self, name: str, pt: pyarrow.Table, conn: Connection = None):
@@ -161,7 +163,9 @@ class DuckDBRelStorage(RelStorage):
         assert set(pt.column_names) == set(table_cols)
         cols_string = ", ".join([f'"{column_name}"' for column_name in pt.column_names])
         conn.register(view_name=self.TEMP_ARROW_TABLE, python_object=pt)
-        conn.execute(f'INSERT INTO "{name}" ({cols_string}) SELECT * FROM {self.TEMP_ARROW_TABLE}')
+        conn.execute(
+            f'INSERT INTO "{name}" ({cols_string}) SELECT * FROM {self.TEMP_ARROW_TABLE}'
+        )
         conn.unregister(view_name=self.TEMP_ARROW_TABLE)
 
     @transaction()
