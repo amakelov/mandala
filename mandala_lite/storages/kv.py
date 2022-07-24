@@ -1,6 +1,6 @@
 from pypika import Table, Query, Parameter
 
-from .rels import RelStorage
+from .rels import RelStorage, RelAdapter
 from ..common_imports import *
 from ..core.config import Config
 
@@ -99,8 +99,9 @@ class InMemoryStorage(KVStore):
 
 
 class RelKVStorage(KVStore):
-    def __init__(self, rel_storage: RelStorage, table_name: str):
-        self.rel_storage = rel_storage
+    def __init__(self, rel_adapter: RelAdapter, table_name: str):
+        self.rel_adapter = rel_adapter
+        self.rel_storage = self.rel_adapter.rel_storage
         self.table_name = table_name
         self.table = Table(table_name)
         self.key_clause = self.table[Config.uid_col] == Parameter("$1")
@@ -128,6 +129,7 @@ class RelKVStorage(KVStore):
         else:
             query = Query.into(self.table).insert(Parameter("$1"), Parameter("$2"))
         self.rel_storage.execute(query, parameters=[k, buffer.getbuffer()])
+        self.rel_adapter.log_change(self.table_name, k)
 
     def get(self, k: str) -> Any:
         query = (

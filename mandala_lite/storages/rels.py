@@ -1,7 +1,8 @@
 from abc import ABC, abstractmethod
 from collections import defaultdict
 
-from pypika import Query, Table
+import pandas as pd
+from pypika import Query, Table, Parameter
 
 from ..common_imports import *
 from ..core.config import Config, Prov
@@ -96,6 +97,9 @@ class RelAdapter:
         # Initialize the event log.
         # The event log is just a list of UIDs that changed, for now.
         self.rel_storage.create_relation(self.EVENT_LOG_TABLE, [("table", "varchar")])
+
+    def log_change(self, table: str, key: str):
+        self.rel_storage.upsert(self.EVENT_LOG_TABLE, pd.DataFrame.from_dict({Config.uid_col: [key], 'table': [table]}))
 
     def upsert_calls(self, calls: List[Call]):
         """

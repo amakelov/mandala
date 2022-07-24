@@ -26,9 +26,9 @@ class Storage:
         # stores the memoization tables
         # self.rel_storage = RelStorage()
         self.rel_storage = DuckDBRelStorage()
-        self.objs = RelKVStorage(self.rel_storage, "__objects__")
         # manipulates the memoization tables
         self.rel_adapter = RelAdapter(rel_storage=self.rel_storage)
+        self.objs = RelKVStorage(self.rel_adapter, "__objects__")
         # stores the signatures of the operations connected to this storage
         # (external name, version) -> signature
         self.sigs: Dict[Tuple[str, int], Signature] = {}
