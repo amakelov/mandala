@@ -5,7 +5,7 @@ from mandala_lite.tests.utils import *
 def test_func_creation():
     storage = Storage()
 
-    @op(storage=storage)
+    @op(storage)
     def add(x: int, y: int = 42) -> int:
         return x + y
 
@@ -21,28 +21,28 @@ def test_computation():
 
         storage = Storage()
 
-        @op(storage=storage)
+        @op(storage)
         def inc(x: int) -> int:
             return x + 1
 
-        @op(storage=storage)
+        @op(storage)
         def add(x: int, y: int) -> int:
             return x + y
 
         # chain some functions
-        with run(storage=storage):
+        with run(storage):
             x = 23
             y = inc(x)
             z = add(x, y)
         check_invariants(storage)
         # run it again
-        with run(storage=storage):
+        with run(storage):
             x = 23
             y = inc(x)
             z = add(x, y)
         check_invariants(storage)
         # do some more things
-        with run(storage=storage):
+        with run(storage):
             x = 42
             y = inc(x)
             z = add(x, y)
@@ -58,21 +58,21 @@ def test_nosuperops():
 
     storage = Storage()
 
-    @op(storage=storage)
+    @op(storage)
     def inc(x: int) -> int:
         return unwrap(x) + 1
 
-    @op(storage=storage)
+    @op(storage)
     def add(x: int, y: int) -> int:
         return unwrap(x) + unwrap(y)
 
-    @op(storage=storage)
+    @op(storage)
     def inc_n_times(x: int, n: int) -> int:
         for i in range(unwrap(n)):
             x = inc(x)
         return x
 
-    with run(storage=storage):
+    with run(storage):
         n = add(x=wrap(23), y=wrap(42))
         a = inc_n_times(x=wrap(23), n=n)
     check_invariants(storage)

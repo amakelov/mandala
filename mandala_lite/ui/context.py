@@ -72,27 +72,16 @@ class Context:
         return self
 
     def get_table(self, *queries: ValQuery) -> pd.DataFrame:
-        # EXTREMELY IMPORTANT
+        # ! EXTREMELY IMPORTANT
         # We must sync any dirty cache elements to the DuckDB store before performing a query.
         # If we don't, we'll query a store that might be missing calls and objs.
         self.storage.commit()
 
         select_queries = list(queries)
         val_queries, func_queries = traverse_all(select_queries)
-        implementation = "duck"
-        if implementation == "lame":
-            df = solve_query(
-                data=self.storage.rel_storage.relations,
-                selection=select_queries,
-                val_queries=val_queries,
-                op_queries=func_queries,
-            )
-        elif implementation == "duck":
-            compiler = Compiler(val_queries=val_queries, func_queries=func_queries)
-            query = compiler.compile(select_queries=select_queries)
-            df = self.storage.rel_storage.execute(query=str(query))
-        else:
-            raise ValueError()
+        compiler = Compiler(val_queries=val_queries, func_queries=func_queries)
+        query = compiler.compile(select_queries=select_queries)
+        df = self.storage.rel_storage.execute(query=str(query))
         # now, evaluate the table
         keys_to_collect = [
             item for _, column in df.iteritems() for _, item in column.iteritems()
