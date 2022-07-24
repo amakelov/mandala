@@ -115,11 +115,20 @@ class Compiler:
         func_aliases = {}
         for func_query in self.func_queries:
             op_table = Table(func_query.op.sig.internal_name)
-            func_aliases[func_query] = op_table.as_(f"_{id(func_query)}")
+            if Config.debug:
+                name = func_query.op.sig.external_name
+            else:
+                name = f"_{id(func_query)}"
+            func_aliases[func_query] = op_table.as_(name)
         val_aliases = {}
         for val_query in self.val_queries:
             val_table = Table(Config.vref_table)
-            val_aliases[val_query] = val_table.as_(f"_{id(val_query)}")
+            if Config.debug:
+                assert val_query.column_name is not None
+                name = val_query.column_name
+            else:
+                name = f"_{id(val_query)}"
+            val_aliases[val_query] = val_table.as_(name)
         return val_aliases, func_aliases
 
     def compile_func(self, op_query: FuncQuery) -> Tuple[list, list]:

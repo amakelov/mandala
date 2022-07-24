@@ -76,7 +76,7 @@ class DuckDBRelStorage(RelStorage):
         tables = self.get_tables(conn=conn)
         data = {}
         for table in tables:
-            data[table] = conn.execute(f"SELECT * FROM {table};").fetchdf()
+            data[table] = conn.execute(f"SELECT * FROM '{table}';").fetchdf()
         return data
 
     ############################################################################

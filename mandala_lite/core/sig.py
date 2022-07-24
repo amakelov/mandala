@@ -1,4 +1,5 @@
 from ..common_imports import *
+from .config import Config
 from .utils import get_uid
 
 
@@ -79,9 +80,13 @@ class Signature:
         Assign internal names to random UIDs.
         """
         res = copy.deepcopy(self)
-        res.internal_name, res.input_mapping = get_uid(), {
-            k: get_uid() for k in self.external_input_names
-        }
+        if Config.debug:
+            res.internal_name = self.external_name
+            res.input_mapping = {k: k for k in self.external_input_names}
+        else:
+            res.internal_name, res.input_mapping = get_uid(), {
+                k: get_uid() for k in self.external_input_names
+            }
         return res
 
     def update(self, new: "Signature") -> "Signature":

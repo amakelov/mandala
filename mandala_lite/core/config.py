@@ -11,6 +11,7 @@ class Config:
     autounwrap_inputs = True
     # how to assign UIDs to outputs
     output_wrap_method = "content"
+    debug = True
 
     ### constants
     uid_col = "__uid__"
