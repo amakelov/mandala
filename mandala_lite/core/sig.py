@@ -52,34 +52,41 @@ class Signature:
         self.defaults = defaults
         self.n_outputs = n_outputs
         self.version = version
-        self.internal_name = ""
+        self._internal_name = None
         self.is_super = is_super
         # external name -> internal name
-        self.input_mapping = {}
+        self._ext_to_int_input_map = None
+
+    @property
+    def internal_name(self) -> str:
+        if self._internal_name is None:
+            raise ValueError("Internal name not set")
+        return self._internal_name
+
+    @property
+    def ext_to_int_input_map(self) -> Dict[str, str]:
+        if self._ext_to_int_input_map is None:
+            raise ValueError("Internal name not set")
+        return self._ext_to_int_input_map
+
+    @property
+    def has_internal_data(self) -> bool:
+        return self._internal_name is not None
 
     @property
     def internal_input_names(self) -> Set[str]:
-        return set(self.input_mapping.values())
+        return set(self.ext_to_int_input_map.values())
 
     ############################################################################
     ### PURE methods for manipulating the signature
     ### to avoid broken state
     ############################################################################
-    def set_internal(self, internal_name: str, input_mapping: dict) -> "Signature":
-        """
-        Set the internal names for this signature. This is used when
-        synchronizing with storage.
-        """
-        res = copy.deepcopy(self)
-        res.internal_name, res.input_mapping = internal_name, input_mapping
-        return res
-
-    def generate_internal(self) -> "Signature":
+    def _generate_internal(self) -> "Signature":
         """
         Assign internal names to random UIDs.
         """
         res = copy.deepcopy(self)
-        res.internal_name, res.input_mapping = get_uid(), {
+        res._internal_name, res._ext_to_int_input_map = get_uid(), {
             k: get_uid() for k in self.external_input_names
         }
         return res
@@ -94,6 +101,9 @@ class Signature:
 
         TODO: return a description of the updates for downstream needs
         """
+        # it is an internal error if you call this on signatures of different
+        # versions
+        assert new.version == self.version
         if not set.issubset(
             set(self.external_input_names), set(new.external_input_names)
         ):
@@ -101,6 +111,8 @@ class Signature:
         if not self.n_outputs == new.n_outputs:
             raise ValueError("Changing the number of outputs is not supported")
         new_defaults = new.defaults
+        if any({k not in new_defaults for k in self.defaults}):
+            raise ValueError("Dropping defaults is not supported")
         if {k: new_defaults[k] for k in self.defaults} != self.defaults:
             raise ValueError("Changing defaults is not supported")
         if self.is_super != new.is_super:
@@ -115,10 +127,14 @@ class Signature:
         """
         Add an input to this signature, with optional default value
         """
+        if name in self.external_input_names:
+            raise ValueError(f'Input "{name}" already exists')
+        if not self.has_internal_data:
+            raise ValueError("Cannot add inputs to a signature without internal data")
         res = copy.deepcopy(self)
         res.external_input_names.add(name)
         internal_name = get_uid()
-        res.input_mapping[name] = internal_name
+        res.ext_to_int_input_map[name] = internal_name
         if default is not DefaultSentinel:
             res.defaults[name] = default
         return res
@@ -136,10 +152,10 @@ class Signature:
         Change the external name of an input
         """
         res = copy.deepcopy(self)
-        internal_name = self.input_mapping[name]
+        internal_name = self.ext_to_int_input_map[name]
         res.external_input_names.remove(name)
         res.external_input_names.add(new_name)
-        res.input_mapping[new_name] = internal_name
+        res.ext_to_int_input_map[new_name] = internal_name
         return res
 
     @staticmethod

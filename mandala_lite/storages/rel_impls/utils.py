@@ -5,7 +5,6 @@ from duckdb import DuckDBPyConnection as Connection
 
 
 class Transactable(ABC):
-
     @abstractmethod
     def _get_connection(self) -> Connection:
         raise NotImplementedError()

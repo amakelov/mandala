@@ -56,12 +56,12 @@ class RelAdapter(Transactable):
 
     def _get_connection(self) -> Connection:
         return self.rel_storage._get_connection()
-    
+
     def _end_transaction(self, conn: Connection):
         return self.rel_storage._end_transaction(conn=conn)
 
     @transaction()
-    def upsert_calls(self, calls: List[Call], conn:Connection=None):
+    def upsert_calls(self, calls: List[Call], conn: Connection = None):
         """
         Upserts calls in the relational storage so that they will show up in
         declarative queries.
@@ -70,20 +70,20 @@ class RelAdapter(Transactable):
             # Write changes to the event log table.
 
             for name, ta in self.tabulate_calls(calls).items():
-                self.rel_storage.upsert(name=name, ta=ta, conn=conn)
+                self.rel_storage.upsert(relation=name, ta=ta, conn=conn)
                 self.rel_storage.upsert(
-                    name=self.EVENT_LOG_TABLE,
+                    relation=self.EVENT_LOG_TABLE,
                     ta=pa.Table.from_pydict(
                         {Config.uid_col: ta[Config.uid_col], "table": [name] * len(ta)}
                     ),
-                    conn=conn
+                    conn=conn,
                 )
             # update provenance table
             new_prov_df = self.get_provenance_table(calls=calls)
             self.prov_df = upsert_df(current=self.prov_df, new=new_prov_df)
 
     @transaction()
-    def _query_call(self, call_uid: str, conn:Connection=None) -> pd.DataFrame:
+    def _query_call(self, call_uid: str, conn: Connection = None) -> pd.DataFrame:
         all_tables = [
             Query.from_(table_name)
             .where(Table(table_name)[Config.uid_col] == Parameter("$1"))
@@ -94,11 +94,11 @@ class RelAdapter(Transactable):
         return self.rel_storage.execute(query, [call_uid], conn=conn)
 
     @transaction()
-    def call_exists(self, call_uid: str, conn:Connection=None) -> bool:
+    def call_exists(self, call_uid: str, conn: Connection = None) -> bool:
         return len(self._query_call(call_uid, conn=conn)) > 0
 
     @transaction()
-    def call_get(self, call_uid: str, conn:Connection=None) -> Call:
+    def call_get(self, call_uid: str, conn: Connection = None) -> Call:
         row = self._query_call(call_uid, conn=conn).iloc[0]
         table_name = row[1]
         table = Table(table_name)
@@ -111,14 +111,14 @@ class RelAdapter(Transactable):
         return Call.from_row(results)
 
     @transaction()
-    def call_set(self, call_uid: str, call: Call, conn:Connection=None) -> None:
+    def call_set(self, call_uid: str, call: Call, conn: Connection = None) -> None:
         self.obj_sets(
             {vref.uid: vref.obj for vref in list(call.inputs.values()) + call.outputs}
         )
         self.upsert_calls([call], conn=conn)
 
     @transaction()
-    def obj_gets(self, keys: list[str], conn:Connection=None) -> pd.DataFrame:
+    def obj_gets(self, keys: list[str], conn: Connection = None) -> pd.DataFrame:
         if len(keys) == 0:
             return pd.DataFrame()
 
@@ -133,7 +133,9 @@ class RelAdapter(Transactable):
         return output
 
     @transaction()
-    def obj_exists(self, keys: Union[str, list[str]], conn:Connection=None) -> Union[bool, list[bool]]:
+    def obj_exists(
+        self, keys: Union[str, list[str]], conn: Connection = None
+    ) -> Union[bool, list[bool]]:
         if isinstance(keys, str):
             all_keys = [keys]
         else:
@@ -146,40 +148,44 @@ class RelAdapter(Transactable):
             return results
 
     @transaction()
-    def obj_get(self, key: str, conn:Connection=None) -> Any:
+    def obj_get(self, key: str, conn: Connection = None) -> Any:
         df = self.obj_gets(keys=[key], conn=conn)
         return df.loc[0, "value"]
 
     @transaction()
-    def obj_set(self, key: str, value: Any, conn:Connection=None) -> None:
+    def obj_set(self, key: str, value: Any, conn: Connection = None) -> None:
         if self.obj_exists(keys=[key], conn=conn):
             return
 
         buffer = io.BytesIO()
         joblib.dump(value=value, filename=buffer)
         query = Query.into(Config.vref_table).insert(Parameter("$1"), Parameter("$2"))
-        self.rel_storage.execute(query=query, parameters=[key, buffer.getvalue()], conn=conn)
+        self.rel_storage.execute(
+            query=query, parameters=[key, buffer.getvalue()], conn=conn
+        )
         log_query = Query.into(self.EVENT_LOG_TABLE).insert(
             Parameter("$1"), Parameter("$2")
         )
-        self.rel_storage.execute(log_query, parameters=[key, Config.vref_table], conn=conn)
+        self.rel_storage.execute(
+            log_query, parameters=[key, Config.vref_table], conn=conn
+        )
 
     @transaction()
-    def obj_sets(self, kvs: dict[str, Any], conn:Connection=None) -> None:
+    def obj_sets(self, kvs: dict[str, Any], conn: Connection = None) -> None:
         keys = list(kvs.keys())
         indicators = self.obj_exists(keys, conn=conn)
         new_keys = [key for key, indicator in zip(keys, indicators) if not indicator]
         ta = pa.Table.from_pylist(
             [{Config.uid_col: key, "value": serialize(kvs[key])} for key in new_keys]
         )
-        self.rel_storage.upsert(name=Config.vref_table, ta=ta, conn=conn)
+        self.rel_storage.upsert(relation=Config.vref_table, ta=ta, conn=conn)
         log_ta = pa.Table.from_pylist(
             [{Config.uid_col: key, "table": Config.vref_table} for key in new_keys]
         )
-        self.rel_storage.upsert(name=self.EVENT_LOG_TABLE, ta=log_ta, conn=conn)
+        self.rel_storage.upsert(relation=self.EVENT_LOG_TABLE, ta=log_ta, conn=conn)
 
     @transaction()
-    def bundle_to_remote(self, conn:Connection=None) -> RemoteEventLogEntry:
+    def bundle_to_remote(self, conn: Connection = None) -> RemoteEventLogEntry:
         # Bundle event log and referenced calls into tables.
         event_log_df = self.rel_storage.get_data(self.EVENT_LOG_TABLE, conn=conn)
         tables_with_changes = {}
@@ -188,11 +194,11 @@ class RelAdapter(Transactable):
         event_log_table = Table(self.EVENT_LOG_TABLE)
         for table_name in table_names_with_changes:
             table = Table(table_name)
-            tables_with_changes[table_name] = self.rel_storage.execute(query=
-                Query.from_(table)
+            tables_with_changes[table_name] = self.rel_storage.execute(
+                query=Query.from_(table)
                 .join(event_log_table)
                 .on(table[Config.uid_col] == event_log_table[Config.uid_col]),
-                conn=conn
+                conn=conn,
             )
 
         output = {}
@@ -205,7 +211,9 @@ class RelAdapter(Transactable):
         return output
 
     @transaction()
-    def apply_from_remote(self, changes: list[RemoteEventLogEntry], conn:Connection=None):
+    def apply_from_remote(
+        self, changes: list[RemoteEventLogEntry], conn: Connection = None
+    ):
         for raw_changeset in changes:
             for table_name in raw_changeset:
                 buffer = io.BytesIO(raw_changeset[table_name])

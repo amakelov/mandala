@@ -60,7 +60,9 @@ class FuncInterface:
         bound_args.apply_defaults()
         inputs_dict = dict(bound_args.arguments)
         # rename to internal names
-        inputs_dict = {self.op.sig.input_mapping[k]: v for k, v in inputs_dict.items()}
+        inputs_dict = {
+            self.op.sig.ext_to_int_input_map[k]: v for k, v in inputs_dict.items()
+        }
         return inputs_dict
 
     def format_as_outputs(

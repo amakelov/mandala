@@ -91,7 +91,7 @@ class Storage:
             - otherwise, an error is raised
         """
         if (sig.external_name, sig.version) not in self.sigs:
-            res = sig.generate_internal()
+            res = sig._generate_internal()
             self.sigs[(res.external_name, res.version)] = res
             # create relation
             columns = (

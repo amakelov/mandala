@@ -155,6 +155,7 @@ class FuncOp:
             version=version,
             is_super=is_super,
         )
+        # TODO: use this
         self.is_synchronized = False
 
     def compute(self, inputs: Dict[str, Any]) -> List[Any]:
@@ -162,7 +163,7 @@ class FuncOp:
         Computes the function with the given *unwrapped* inputs, named by
         internal input names.
         """
-        inv_mapping = {v: k for k, v in self.sig.input_mapping.items()}
+        inv_mapping = {v: k for k, v in self.sig.ext_to_int_input_map.items()}
         inputs = {inv_mapping[k]: v for k, v in inputs.items()}
         result = self.func(**inputs)
         if self.sig.n_outputs == 0:

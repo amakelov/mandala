@@ -13,8 +13,6 @@ from ...common_imports import *
 from ...core.config import Config
 
 
-
-
 class DuckDBRelStorage(RelStorage, Transactable):
     UID_DTYPE = "VARCHAR"  # TODO - change this
     VREF_TABLE = Config.vref_table
@@ -67,7 +65,7 @@ class DuckDBRelStorage(RelStorage, Transactable):
         tables = self.get_tables(conn=conn)
         data = {}
         for table in tables:
-            data[table] = self.get_data(table, conn)
+            data[table] = self.get_data(table=table, conn=conn)
         return data
 
     ############################################################################
@@ -124,51 +122,51 @@ class DuckDBRelStorage(RelStorage, Transactable):
     ### instance management
     ############################################################################
     @transaction()
-    def _get_cols(self, name: str, conn: Connection = None) -> List[str]:
+    def _get_cols(self, relation: str, conn: Connection = None) -> List[str]:
         """
         Duckdb-specific method to get the *ordered* columns of a table.
         """
-        return self.execute(query=f'DESCRIBE "{name}";', conn=conn)[
+        return self.execute(query=f'DESCRIBE "{relation}";', conn=conn)[
             "column_name"
         ].values.tolist()
 
     @transaction()
-    def insert(self, name: str, pt: pyarrow.Table, conn: Connection = None):
+    def insert(self, relation: str, pt: pyarrow.Table, conn: Connection = None):
         """
         Append rows to a table
         """
         if pt.empty:
             return
-        table_cols = self._get_cols(name=name, conn=conn)
+        table_cols = self._get_cols(relation=relation, conn=conn)
         assert set(pt.column_names) == set(table_cols)
         cols_string = ", ".join([f'"{column_name}"' for column_name in pt.column_names])
         conn.register(view_name=self.TEMP_ARROW_TABLE, python_object=pt)
         conn.execute(
-            f'INSERT INTO "{name}" ({cols_string}) SELECT * FROM {self.TEMP_ARROW_TABLE}'
+            f'INSERT INTO "{relation}" ({cols_string}) SELECT * FROM {self.TEMP_ARROW_TABLE}'
         )
         conn.unregister(view_name=self.TEMP_ARROW_TABLE)
 
     @transaction()
-    def upsert(self, name: str, ta: pyarrow.Table, conn: Connection = None):
+    def upsert(self, relation: str, ta: pyarrow.Table, conn: Connection = None):
         """
         Upsert rows in a table based on index
         """
         if len(ta) == 0:
             return
-        table_cols = self._get_cols(name=name, conn=conn)
+        table_cols = self._get_cols(relation=relation, conn=conn)
         assert set(ta.column_names) == set(table_cols)
         cols_string = ", ".join([f'"{column_name}"' for column_name in ta.column_names])
         conn.register(view_name=self.TEMP_ARROW_TABLE, python_object=ta)
-        query = f'INSERT INTO "{name}" ({cols_string}) SELECT * FROM {self.TEMP_ARROW_TABLE} WHERE "{Config.uid_col}" NOT IN (SELECT "{Config.uid_col}" FROM "{name}")'
+        query = f'INSERT INTO "{relation}" ({cols_string}) SELECT * FROM {self.TEMP_ARROW_TABLE} WHERE "{Config.uid_col}" NOT IN (SELECT "{Config.uid_col}" FROM "{relation}")'
         conn.execute(query)
         conn.unregister(view_name=self.TEMP_ARROW_TABLE)
 
     @transaction()
-    def delete(self, name: str, index: List[str], conn: Connection = None):
+    def delete(self, relation: str, index: List[str], conn: Connection = None):
         """
         Delete rows from a table based on index
         """
-        conn.execute(f'DELETE FROM "{name}" WHERE {Config.uid_col} IN ({index})')
+        conn.execute(f'DELETE FROM "{relation}" WHERE {Config.uid_col} IN ({index})')
 
     ############################################################################
     ### queries
