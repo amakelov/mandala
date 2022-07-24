@@ -45,35 +45,6 @@ class KVStore:
             self.delete(k=k)
 
 
-class JoblibStorage(KVStore):
-    """
-    Simple file-based implementation for local testing
-
-    NOTE: delegates error handling
-    """
-
-    def __init__(self, root: Path):
-        self.root = root
-
-    def get_obj_path(self, k: str) -> Path:
-        return self.root / f"{k}.joblib"
-
-    def exists(self, k: str) -> bool:
-        return self.get_obj_path(k).exists()
-
-    def set(self, k: str, v: Any):
-        joblib.dump(v, self.get_obj_path(k))
-
-    def get(self, k: str) -> Any:
-        return joblib.load(self.get_obj_path(k))
-
-    def delete(self, k: str):
-        os.remove(path=self.get_obj_path(k=k))
-
-    def keys(self) -> List[str]:
-        return [k.stem for k in self.root.glob("*.joblib")]
-
-
 class InMemoryStorage(KVStore):
     """
     Simple in-memory implementation for local testing and/or buffering
