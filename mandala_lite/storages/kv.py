@@ -1,3 +1,5 @@
+from typing import Generic
+
 from pypika import Table, Query, Parameter
 
 from .rels import RelStorage, RelAdapter
@@ -96,54 +98,3 @@ class InMemoryStorage(KVStore):
 
     def keys(self) -> List[str]:
         return list(self.data.keys())
-
-
-class RelKVStorage(KVStore):
-    def __init__(self, rel_adapter: RelAdapter, table_name: str):
-        self.rel_adapter = rel_adapter
-        self.rel_storage = self.rel_adapter.rel_storage
-        self.table_name = table_name
-        self.table = Table(table_name)
-        self.key_clause = self.table[Config.uid_col] == Parameter("$1")
-
-        if table_name not in self.rel_storage.get_tables():
-            self.rel_storage.create_relation(table_name, [("value", "blob")])
-
-    def exists(self, k: str) -> bool:
-        query = (
-            Query.from_(self.table)
-            .where(self.table[Config.uid_col] == k)
-            .select(self.table[Config.uid_col])
-        )
-        return len(self.rel_storage.execute(query)) > 0
-
-    def set(self, k: str, v: Any) -> None:
-        buffer = io.BytesIO()
-        joblib.dump(v, buffer)
-        if self.exists(k):
-            query = (
-                Query.update(self.table)
-                .set(self.table.value, Parameter("$2"))
-                .where(self.key_clause)
-            )
-        else:
-            query = Query.into(self.table).insert(Parameter("$1"), Parameter("$2"))
-        self.rel_storage.execute(query, parameters=[k, buffer.getbuffer()])
-        self.rel_adapter.log_change(self.table_name, k)
-
-    def get(self, k: str) -> Any:
-        query = (
-            Query.from_(self.table).where(self.key_clause).select(self.table["value"])
-        )
-        result = self.rel_storage.execute(query, [k])
-        result = io.BytesIO(bytes(result.iloc[(0, 0)]))
-        return joblib.load(result)
-
-    def delete(self, k: str) -> None:
-        query = Query.from_(self.table).where(self.key_clause).delete()
-        self.rel_storage.execute(query, parameters=[k])
-
-    def keys(self) -> List[str]:
-        query = Query.from_(self.table).select(Config.uid_col)
-        result = self.rel_storage.execute(query)
-        return list(result[Config.uid_col])

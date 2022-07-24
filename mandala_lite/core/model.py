@@ -1,3 +1,6 @@
+import pandas as pd
+
+from .config import Config
 from ..common_imports import *
 from .utils import Hashing
 from .sig import Signature
@@ -103,6 +106,26 @@ class Call:
             inputs={k: v.detached() for k, v in self.inputs.items()},
             outputs=[v.detached() for v in self.outputs],
             op=self.op,
+        )
+
+    @staticmethod
+    def from_row(row: pd.DataFrame) -> "Call":
+        columns = list(row.columns)
+        output_columns = [column for column in columns if column.startswith("output")]
+        input_columns = [
+            column
+            for column in columns
+            if column not in output_columns and column != Config.uid_col
+        ]
+        return Call(
+            uid=row[Config.uid_col],
+            inputs={
+                k: ValueRef(row[k], obj=None, in_memory=False) for k in input_columns
+            },
+            output={
+                k: ValueRef(row[k], obj=None, in_memory=False) for k in output_columns
+            },
+            op=None,
         )
 
 

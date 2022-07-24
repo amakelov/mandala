@@ -1,9 +1,9 @@
-from .kv import InMemoryStorage, RelKVStorage
-from .rels import RelAdapter
+from .kv import InMemoryStorage
 from .rel_impls.duckdb_impl import DuckDBRelStorage
-from .calls import CallStorage
-
+from .rels import RelAdapter
 from ..common_imports import *
+from ..core.config import Config
+from ..core.model import Call
 from ..core.sig import Signature
 
 
@@ -21,23 +21,52 @@ class Storage:
 
     def __init__(self, root: Optional[Path] = None):
         self.root = root
-        self.calls = CallStorage()
+        self.call_cache = InMemoryStorage()
+        self.obj_cache = InMemoryStorage()
         # all objects (inputs and outputs to operations, defaults) are saved here
         # stores the memoization tables
-        # self.rel_storage = RelStorage()
         self.rel_storage = DuckDBRelStorage()
         # manipulates the memoization tables
         self.rel_adapter = RelAdapter(rel_storage=self.rel_storage)
-        self.objs = RelKVStorage(self.rel_adapter, "__objects__")
         # stores the signatures of the operations connected to this storage
         # (external name, version) -> signature
         self.sigs: Dict[Tuple[str, int], Signature] = {}
+
+    def call_exists(self, call_uid: str) -> bool:
+        return self.call_cache.exists(call_uid) or self.rel_adapter.call_exists(
+            call_uid
+        )
+
+    def call_get(self, call_uid: str) -> Call:
+        if self.call_cache.exists(call_uid):
+            return self.call_cache.get(call_uid)
+        else:
+            return self.rel_adapter.call_get(call_uid)
+
+    def call_set(self, call_uid: str, call: Call) -> None:
+        self.rel_adapter.call_set(call_uid, call)
+        self.call_cache.set(call_uid, call)
+
+    def obj_get(self, obj_uid: str) -> Any:
+        if self.obj_cache.exists(obj_uid):
+            return self.obj_cache.get(obj_uid)
+        return self.rel_adapter.obj_get(self)
+
+    def obj_set(self, obj_uid: str, value: Any) -> None:
+        self.rel_adapter.obj_set(obj_uid, value)
+        self.obj_cache.set(obj_uid, value)
+
+    def preload_objs(self, keys: list[str]):
+        keys_not_in_cache = [key for key in keys if not self.obj_cache.exists(key)]
+        for row in self.rel_adapter.obj_gets(keys_not_in_cache).iterrows():
+            self.obj_cache[row[Config.uid_col]] = row["value"]
 
     def commit(self):
         """
         Move calls from the temp partition to the main partition, putting them
         in relational storage.
         """
+        return
         keys = self.calls.temp.keys()
         temp_calls = self.calls.temp.mget(keys)
         self.rel_adapter.upsert_calls(calls=temp_calls)

@@ -89,11 +89,12 @@ class FuncInterface:
             ]
         )
         # check if call UID exists in call storage
-        if self.storage.calls.exists(call_uid):
+        if self.storage.call_exists(call_uid):
             # get call from call storage
-            call = self.storage.calls.get(call_uid)
+            call = self.storage.call_get(call_uid)
             # get outputs from obj storage
-            wrapped_outputs = [self.storage.objs.get(v.uid) for v in call.outputs]
+            self.storage.preload_objs([v.uid for v in call.outputs])
+            wrapped_outputs = [self.storage.obj_get(v.uid) for v in call.outputs]
             # return outputs and call
             return wrapped_outputs, call
         else:
@@ -110,10 +111,10 @@ class FuncInterface:
                 uid=call_uid, inputs=wrapped_inputs, outputs=wrapped_outputs, op=self.op
             )
             # save *detached* call in call storage
-            self.storage.calls.temp.set(k=call_uid, v=call.detached())
+            self.storage.call_set(call_uid, call)
             # set inputs and outputs in obj storage
             for v in itertools.chain(wrapped_outputs, wrapped_inputs.values()):
-                self.storage.objs.set(k=v.uid, v=v)
+                self.storage.obj_set(v.uid, v)
             # return outputs and call
             return wrapped_outputs, call
 

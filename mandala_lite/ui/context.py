@@ -89,7 +89,11 @@ class Context:
         else:
             raise ValueError()
         # now, evaluate the table
-        result = df.applymap(lambda x: unwrap(self.storage.objs.get(k=x)))
+        keys_to_collect = [
+            item for _, column in df.iteritems() for _, item in column.iteritems()
+        ]
+        self.storage.preload_objs(keys_to_collect)
+        result = df.applymap(lambda key: unwrap(self.storage.obj_get(key)))
         # finally, name the columns
         result.columns = [
             f"unnamed_{i}" if query.column_name is None else query.column_name

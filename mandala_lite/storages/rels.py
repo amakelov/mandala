@@ -3,6 +3,7 @@ from collections import defaultdict
 
 import pandas as pd
 from pypika import Query, Table, Parameter
+from pypika.terms import LiteralValue
 
 from ..common_imports import *
 from ..core.config import Config, Prov
@@ -99,7 +100,10 @@ class RelAdapter:
         self.rel_storage.create_relation(self.EVENT_LOG_TABLE, [("table", "varchar")])
 
     def log_change(self, table: str, key: str):
-        self.rel_storage.upsert(self.EVENT_LOG_TABLE, pd.DataFrame.from_dict({Config.uid_col: [key], 'table': [table]}))
+        self.rel_storage.upsert(
+            self.EVENT_LOG_TABLE,
+            pd.DataFrame.from_dict({Config.uid_col: [key], "table": [table]}),
+        )
 
     def upsert_calls(self, calls: List[Call]):
         """
@@ -120,6 +124,65 @@ class RelAdapter:
             # update provenance table
             new_prov_df = self.get_provenance_table(calls=calls)
             self.prov_df = upsert_df(current=self.prov_df, new=new_prov_df)
+
+    def _query_call(self, call_uid: str) -> pd.DataFrame:
+        all_tables = [
+            Query.from_(table_name)
+            .where(Table(table_name)[Config.uid_col] == Parameter("$1"))
+            .select(Table(table_name)[Config.uid_col], LiteralValue(f"'{table_name}'"))
+            for table_name in self.rel_storage.get_tables()
+        ]
+        query = sum(all_tables[1:], start=all_tables[0])
+        return self.rel_storage.execute(query, [call_uid])
+
+    def call_exists(self, call_uid: str) -> bool:
+        return len(self._query_call(call_uid))
+
+    def call_get(self, call_uid: str) -> Call:
+        row = self._query_call(call_uid).iloc[0]
+        table_name = row[1]
+        table = Table(table_name)
+        query = Query.from_(table).where(table[Config.uid_col] == Parameter("$1"))
+        results = self.rel_storage.execute(query, [call_uid])
+        return Call.from_row(results.iloc[0])
+
+    def call_set(self, call_uid: str, call: Call) -> None:
+        for vref in call.inputs.values():
+            self.obj_set(vref.uid, vref.obj)
+        for vref in call.outputs:
+            self.obj_set(vref.uid, vref.obj)
+        self.upsert_calls([call])
+
+    def obj_exists(self, key):
+        df = self.obj_gets([key])
+        return len(df) > 0
+
+    def obj_gets(self, keys: list[str]) -> pd.DataFrame:
+        if len(keys) == 0:
+            return pd.DataFrame()
+
+        table = Table(Config.vref_table)
+        query = (
+            Query.from_(table)
+            .where(table[Config.uid_col].isin(keys))
+            .select(table[Config.uid_col], table.value)
+        )
+        output = self.rel_storage.execute(query)
+        output["value"] = output["value"].map(lambda x: deserialize(bytes(x)))
+        return output
+
+    def obj_get(self, key: str) -> Any:
+        df = self.obj_gets([key])
+        return df.loc[0, "value"]
+
+    def obj_set(self, key: str, value: Any) -> None:
+        if self.obj_exists(key):
+            return
+
+        buffer = io.BytesIO()
+        joblib.dump(value, buffer)
+        query = Query.into(Config.vref_table).insert(Parameter("$1"), Parameter("$2"))
+        self.rel_storage.execute(query, parameters=[key, buffer.getbuffer()])
 
     def bundle_to_remote(self) -> RemoteEventLogEntry:
         # TODO do this transactionally
@@ -166,7 +229,7 @@ class RelAdapter:
         for call in calls:
             calls_by_op[call.op.sig.internal_name].append(call)
         res = {}
-        vref_uids = []
+        vrefs = {}
         for k, v in calls_by_op.items():
             res[k] = pd.DataFrame(
                 [
@@ -179,9 +242,12 @@ class RelAdapter:
                 ]
             )
             for call in v:
-                vref_uids += [v.uid for v in call.inputs.values()]
-                vref_uids += [v.uid for v in call.outputs]
-        res[Config.vref_table] = pd.DataFrame({Config.uid_col: list(set(vref_uids))})
+                for v in list(call.inputs.values()) + call.outputs:
+                    vrefs[v.uid] = v.obj
+
+        # res[Config.vref_table] = pd.DataFrame.from_records(
+        #    [{Config.uid_col: k, "value": serialize(v)} for k, v in vrefs.items()]
+        # )
         return res
 
     ############################################################################
@@ -235,3 +301,14 @@ def upsert_df(current: pd.DataFrame, new: pd.DataFrame) -> pd.DataFrame:
     Upsert for dataframes with the same columns
     """
     return pd.concat([current, new[~new.index.isin(current.index)]])
+
+
+def serialize(obj: Any) -> bytes:
+    buffer = io.BytesIO()
+    joblib.dump(obj, buffer)
+    return buffer.getbuffer()
+
+
+def deserialize(value: bytes) -> Any:
+    buffer = io.BytesIO(value)
+    return joblib.load(buffer)

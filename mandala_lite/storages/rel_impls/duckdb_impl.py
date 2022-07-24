@@ -67,7 +67,7 @@ class DuckDBRelStorage(RelStorage):
     def init(self, conn: Connection = None):
         self.create_relation(
             name=self.VREF_TABLE,
-            columns=[],
+            columns=[("value", "blob")],
             conn=conn,
         )
 
@@ -158,7 +158,7 @@ class DuckDBRelStorage(RelStorage):
         Upsert rows in a table based on index
         """
         conn.register(view_name=self.TEMP_PANDAS_TABLE, python_object=df)
-        query = f"INSERT INTO '{name}' SELECT * FROM {self.TEMP_PANDAS_TABLE} WHERE '{Config.uid_col}' NOT IN (SELECT '{Config.uid_col}' FROM '{name}')"
+        query = f'INSERT INTO "{name}" SELECT * FROM {self.TEMP_PANDAS_TABLE} WHERE "{Config.uid_col}" NOT IN (SELECT "{Config.uid_col}" FROM "{name}")'
         conn.execute(query)
         conn.unregister(view_name=self.TEMP_PANDAS_TABLE)
 
@@ -179,6 +179,6 @@ class DuckDBRelStorage(RelStorage):
         parameters: list[Any] = [],
         conn: Connection = None,
     ) -> pd.DataFrame:
-        if isinstance(query, QueryBuilder):
+        if not isinstance(query, str):
             query = str(query)
         return conn.execute(query, parameters=parameters).fetchdf()
