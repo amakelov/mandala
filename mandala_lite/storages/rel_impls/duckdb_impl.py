@@ -4,6 +4,7 @@ import duckdb
 import pandas as pd
 from duckdb import DuckDBPyConnection as Connection
 from pypika import Query, Column
+from pypika.queries import QueryBuilder
 
 from ..rels import RelStorage
 from ...common_imports import *
@@ -93,7 +94,7 @@ class DuckDBRelStorage(RelStorage):
     def create_relation(
         self,
         name: str,
-        columns: List[str],
+        columns: List[tuple[str, str]],
         conn: Connection = None,
     ):
         """
@@ -111,9 +112,9 @@ class DuckDBRelStorage(RelStorage):
                 *[
                     Column(
                         column_name=c,
-                        column_type=self.UID_DTYPE,
+                        column_type=dtype if dtype is not None else self.UID_DTYPE,
                     )
-                    for c in columns
+                    for c, dtype in columns
                 ],
             )
             .primary_key(Config.uid_col)
@@ -173,5 +174,12 @@ class DuckDBRelStorage(RelStorage):
     ### queries
     ############################################################################
     @transaction()
-    def execute(self, query: str, conn: Connection = None) -> pd.DataFrame:
-        return conn.execute(query).fetchdf()
+    def execute(
+        self,
+        query: Union[str, Query],
+        parameters: list[Any] = [],
+        conn: Connection = None,
+    ) -> pd.DataFrame:
+        if isinstance(query, QueryBuilder):
+            query = str(query)
+        return conn.execute(query, parameters=parameters).fetchdf()

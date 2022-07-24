@@ -20,7 +20,7 @@ class RelStorage(ABC):
     """
 
     @abstractmethod
-    def create_relation(self, name: str, columns: List[str]):
+    def create_relation(self, name: str, columns: List[tuple[str, str]]):
         """
         Create a relation with the given name and columns.
         """
@@ -95,7 +95,7 @@ class RelAdapter:
         self.prov_df.set_index([Prov.call_uid, Prov.vref_name, Prov.is_input])
         # Initialize the event log.
         # The event log is just a list of UIDs that changed, for now.
-        self.rel_storage.create_relation(self.EVENT_LOG_TABLE, ["table"])
+        self.rel_storage.create_relation(self.EVENT_LOG_TABLE, [("table", "varchar")])
 
     def upsert_calls(self, calls: List[Call]):
         """
