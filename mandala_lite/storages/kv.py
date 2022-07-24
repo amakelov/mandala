@@ -53,13 +53,15 @@ class InMemoryStorage(KVStore):
     """
 
     def __init__(self):
-        self.data = {}
+        self.data: dict[str, Any] = {}
+        self.dirty_entries: set[str] = set()
 
     def exists(self, k: str) -> bool:
         return k in self.data
 
     def set(self, k: str, v: Any):
         self.data[k] = v
+        self.dirty_entries.add(k)
 
     def get(self, k: str) -> Any:
         return self.data[k]

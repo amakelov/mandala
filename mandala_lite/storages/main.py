@@ -44,7 +44,6 @@ class Storage:
             return self.rel_adapter.call_get(call_uid)
 
     def call_set(self, call_uid: str, call: Call) -> None:
-        self.rel_adapter.call_set(call_uid, call)
         self.call_cache.set(call_uid, call)
 
     def obj_get(self, obj_uid: str) -> Any:
@@ -53,7 +52,6 @@ class Storage:
         return self.rel_adapter.obj_get(self)
 
     def obj_set(self, obj_uid: str, value: Any) -> None:
-        self.rel_adapter.obj_set(obj_uid, value)
         self.obj_cache.set(obj_uid, value)
 
     def preload_objs(self, keys: list[str]):
@@ -63,15 +61,14 @@ class Storage:
 
     def commit(self):
         """
-        Move calls from the temp partition to the main partition, putting them
-        in relational storage.
+        Flush calls and objs from the cache that haven't yet been written to DuckDB.
         """
-        return
-        keys = self.calls.temp.keys()
-        temp_calls = self.calls.temp.mget(keys)
-        self.rel_adapter.upsert_calls(calls=temp_calls)
-        self.calls.main.mset(dict(zip(keys, temp_calls)))
-        self.calls.temp.mdelete(keys)
+        new_objs = {
+            key: self.obj_cache.get(key) for key in self.obj_cache.dirty_entries
+        }
+        new_calls = [self.call_cache.get(key) for key in self.call_cache.dirty_entries]
+        self.rel_adapter.obj_sets(new_objs)
+        self.rel_adapter.upsert_calls(new_calls)
 
     def synchronize(self, sig: Signature) -> Signature:
         """

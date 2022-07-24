@@ -72,6 +72,11 @@ class Context:
         return self
 
     def get_table(self, *queries: ValQuery) -> pd.DataFrame:
+        # EXTREMELY IMPORTANT
+        # We must sync any dirty cache elements to the DuckDB store before performing a query.
+        # If we don't, we'll query a store that might be missing calls and objs.
+        self.storage.commit()
+
         select_queries = list(queries)
         val_queries, func_queries = traverse_all(select_queries)
         implementation = "duck"
