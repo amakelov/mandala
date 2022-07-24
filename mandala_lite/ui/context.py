@@ -72,6 +72,11 @@ class Context:
         return self
 
     def get_table(self, *queries: ValQuery) -> pd.DataFrame:
+        # EXTREMELY IMPORTANT
+        # We must sync any dirty cache elements to the DuckDB store before performing a query.
+        # If we don't, we'll query a store that might be missing calls and objs.
+        self.storage.commit()
+
         select_queries = list(queries)
         val_queries, func_queries = traverse_all(select_queries)
         implementation = "duck"
@@ -89,7 +94,11 @@ class Context:
         else:
             raise ValueError()
         # now, evaluate the table
-        result = df.applymap(lambda x: unwrap(self.storage.objs.get(k=x)))
+        keys_to_collect = [
+            item for _, column in df.iteritems() for _, item in column.iteritems()
+        ]
+        self.storage.preload_objs(keys_to_collect)
+        result = df.applymap(lambda key: unwrap(self.storage.obj_get(key)))
         # finally, name the columns
         result.columns = [
             f"unnamed_{i}" if query.column_name is None else query.column_name

@@ -11,10 +11,13 @@ class Config:
     autounwrap_inputs = True
     # how to assign UIDs to outputs
     output_wrap_method = "content"
+    # whether to empty the call and vref caches upon committing to the RDBMS
+    evict_on_commit = True
 
     ### constants
     uid_col = "__uid__"
     vref_table = "__vrefs__"
+    event_log_table = "__event_log__"
 
 
 class Prov:

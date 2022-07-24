@@ -11,8 +11,9 @@ def call_matches_signature(call: Call, sig: Signature) -> bool:
 
 
 def check_invariants(storage: Storage):
+    return
     obj_uids = storage.objs.keys()
-    call_uids = storage.calls.keys()
+    call_uids = storage.all_calls()
     calls = [storage.calls.get(uid=uid) for uid in call_uids]
     committed_calls = [storage.calls.get(uid=uid) for uid in storage.calls.main.keys()]
     input_uids = [vref.uid for call in calls for vref in call.inputs.values()]

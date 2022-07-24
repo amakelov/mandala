@@ -1,73 +1,23 @@
 from abc import ABC, abstractmethod
 from collections import defaultdict
 
-import pandas as pd
+import pyarrow as pa
+import pyarrow.parquet as pq
 from pypika import Query, Table, Parameter
+from pypika.terms import LiteralValue
+from duckdb import DuckDBPyConnection as Connection
 
 from ..common_imports import *
 from ..core.config import Config, Prov
 from ..core.model import Call
-
-
-class RelStorage(ABC):
-    """
-    Responsible for the low-level (i.e., unaware of mandala-specific concepts)
-    interactions with the relational part of the storage, such as creating and
-    extending tables, running queries, etc. This is intended to be a pretty
-    generic, minimal database interface, supporting just the things we need.
-
-    It's deliberately referred to as "relational storage" as opposed to a
-    "relational database" because simpler implementations exist.
-    """
-
-    @abstractmethod
-    def create_relation(self, name: str, columns: List[tuple[str, str]]):
-        """
-        Create a relation with the given name and columns.
-        """
-        raise NotImplementedError()
-
-    @abstractmethod
-    def delete_relation(self, name: str):
-        raise NotImplementedError()
-
-    @abstractmethod
-    def create_column(self, relation: str, name: str, default_value: str):
-        raise NotImplementedError()
-
-    @abstractmethod
-    def insert(self, name: str, df: pd.DataFrame):
-        """
-        Append rows to a table
-        """
-        raise NotImplementedError()
-
-    @abstractmethod
-    def upsert(self, name: str, df: pd.DataFrame):
-        """
-        Upsert rows in a table based on index
-        """
-        raise NotImplementedError()
-
-    @abstractmethod
-    def delete(self, name: str, index: List[str]):
-        """
-        Delete rows from a table based on index
-        """
-        raise NotImplementedError()
-
-    @abstractmethod
-    def get_data(self, table: str) -> pd.DataFrame:
-        """
-        Fetch data from a table.
-        """
-        raise NotImplementedError()
+from .rel_impls.duckdb_impl import DuckDBRelStorage
+from .rel_impls.utils import Transactable, transaction
 
 
 RemoteEventLogEntry = dict[str, bytes]
 
 
-class RelAdapter:
+class RelAdapter(Transactable):
     """
     Responsible for high-level RDBMS interactions, such as
         - taking a bunch of calls and putting their data inside the database;
@@ -77,9 +27,9 @@ class RelAdapter:
     Uses `RelStorage` to do the actual work.
     """
 
-    EVENT_LOG_TABLE = "__event_log__"
+    EVENT_LOG_TABLE = Config.event_log_table
 
-    def __init__(self, rel_storage: RelStorage):
+    def __init__(self, rel_storage: DuckDBRelStorage):
         self.rel_storage = rel_storage
         # initialize provenance table
         self.prov_df = pd.DataFrame(
@@ -99,43 +49,150 @@ class RelAdapter:
         self.rel_storage.create_relation(self.EVENT_LOG_TABLE, [("table", "varchar")])
 
     def log_change(self, table: str, key: str):
-        self.rel_storage.upsert(self.EVENT_LOG_TABLE, pd.DataFrame.from_dict({Config.uid_col: [key], 'table': [table]}))
+        self.rel_storage.upsert(
+            self.EVENT_LOG_TABLE,
+            pa.Table.from_pylist([{Config.uid_col: key, "table": table}]),
+        )
 
-    def upsert_calls(self, calls: List[Call]):
+    def _get_connection(self) -> Connection:
+        return self.rel_storage._get_connection()
+    
+    def _end_transaction(self, conn: Connection):
+        return self.rel_storage._end_transaction(conn=conn)
+
+    @transaction()
+    def upsert_calls(self, calls: List[Call], conn:Connection=None):
         """
         Upserts calls in the relational storage so that they will show up in
         declarative queries.
         """
-        if len(calls) > 0:
+        if len(calls) > 0:  # avoid dealing with empty dataframes
             # Write changes to the event log table.
 
-            for name, df in self.tabulate_calls(calls).items():
-                self.rel_storage.upsert(name, df)
+            for name, ta in self.tabulate_calls(calls).items():
+                self.rel_storage.upsert(name=name, ta=ta, conn=conn)
                 self.rel_storage.upsert(
-                    self.EVENT_LOG_TABLE,
-                    pd.DataFrame.from_dict(
-                        {Config.uid_col: df[Config.uid_col], "table": [name] * len(df)}
+                    name=self.EVENT_LOG_TABLE,
+                    ta=pa.Table.from_pydict(
+                        {Config.uid_col: ta[Config.uid_col], "table": [name] * len(ta)}
                     ),
+                    conn=conn
                 )
             # update provenance table
             new_prov_df = self.get_provenance_table(calls=calls)
             self.prov_df = upsert_df(current=self.prov_df, new=new_prov_df)
 
-    def bundle_to_remote(self) -> RemoteEventLogEntry:
-        # TODO do this transactionally
+    @transaction()
+    def _query_call(self, call_uid: str, conn:Connection=None) -> pd.DataFrame:
+        all_tables = [
+            Query.from_(table_name)
+            .where(Table(table_name)[Config.uid_col] == Parameter("$1"))
+            .select(Table(table_name)[Config.uid_col], LiteralValue(f"'{table_name}'"))
+            for table_name in self.rel_storage.get_call_tables()
+        ]
+        query = sum(all_tables[1:], start=all_tables[0])
+        return self.rel_storage.execute(query, [call_uid], conn=conn)
 
+    @transaction()
+    def call_exists(self, call_uid: str, conn:Connection=None) -> bool:
+        return len(self._query_call(call_uid, conn=conn)) > 0
+
+    @transaction()
+    def call_get(self, call_uid: str, conn:Connection=None) -> Call:
+        row = self._query_call(call_uid, conn=conn).iloc[0]
+        table_name = row[1]
+        table = Table(table_name)
+        query = (
+            Query.from_(table)
+            .where(table[Config.uid_col] == Parameter("$1"))
+            .select(table.star)
+        )
+        results = self.rel_storage.execute(query, [call_uid], conn=conn)
+        return Call.from_row(results)
+
+    @transaction()
+    def call_set(self, call_uid: str, call: Call, conn:Connection=None) -> None:
+        self.obj_sets(
+            {vref.uid: vref.obj for vref in list(call.inputs.values()) + call.outputs}
+        )
+        self.upsert_calls([call], conn=conn)
+
+    @transaction()
+    def obj_gets(self, keys: list[str], conn:Connection=None) -> pd.DataFrame:
+        if len(keys) == 0:
+            return pd.DataFrame()
+
+        table = Table(Config.vref_table)
+        query = (
+            Query.from_(table)
+            .where(table[Config.uid_col].isin(keys))
+            .select(table[Config.uid_col], table.value)
+        )
+        output = self.rel_storage.execute(query, conn=conn)
+        output["value"] = output["value"].map(lambda x: deserialize(bytes(x)))
+        return output
+
+    @transaction()
+    def obj_exists(self, keys: Union[str, list[str]], conn:Connection=None) -> Union[bool, list[bool]]:
+        if isinstance(keys, str):
+            all_keys = [keys]
+        else:
+            all_keys = keys
+        df = self.obj_gets(all_keys, conn=conn)
+        results = [len(df[df[Config.uid_col] == key]) > 0 for key in all_keys]
+        if isinstance(keys, str):
+            return results[0]
+        else:
+            return results
+
+    @transaction()
+    def obj_get(self, key: str, conn:Connection=None) -> Any:
+        df = self.obj_gets(keys=[key], conn=conn)
+        return df.loc[0, "value"]
+
+    @transaction()
+    def obj_set(self, key: str, value: Any, conn:Connection=None) -> None:
+        if self.obj_exists(keys=[key], conn=conn):
+            return
+
+        buffer = io.BytesIO()
+        joblib.dump(value=value, filename=buffer)
+        query = Query.into(Config.vref_table).insert(Parameter("$1"), Parameter("$2"))
+        self.rel_storage.execute(query=query, parameters=[key, buffer.getvalue()], conn=conn)
+        log_query = Query.into(self.EVENT_LOG_TABLE).insert(
+            Parameter("$1"), Parameter("$2")
+        )
+        self.rel_storage.execute(log_query, parameters=[key, Config.vref_table], conn=conn)
+
+    @transaction()
+    def obj_sets(self, kvs: dict[str, Any], conn:Connection=None) -> None:
+        keys = list(kvs.keys())
+        indicators = self.obj_exists(keys, conn=conn)
+        new_keys = [key for key, indicator in zip(keys, indicators) if not indicator]
+        ta = pa.Table.from_pylist(
+            [{Config.uid_col: key, "value": serialize(kvs[key])} for key in new_keys]
+        )
+        self.rel_storage.upsert(name=Config.vref_table, ta=ta, conn=conn)
+        log_ta = pa.Table.from_pylist(
+            [{Config.uid_col: key, "table": Config.vref_table} for key in new_keys]
+        )
+        self.rel_storage.upsert(name=self.EVENT_LOG_TABLE, ta=log_ta, conn=conn)
+
+    @transaction()
+    def bundle_to_remote(self, conn:Connection=None) -> RemoteEventLogEntry:
         # Bundle event log and referenced calls into tables.
-        event_log_df = self.rel_storage.get_data(self.EVENT_LOG_TABLE)
+        event_log_df = self.rel_storage.get_data(self.EVENT_LOG_TABLE, conn=conn)
         tables_with_changes = {}
         table_names_with_changes = event_log_df["table"].unique()
 
         event_log_table = Table(self.EVENT_LOG_TABLE)
         for table_name in table_names_with_changes:
             table = Table(table_name)
-            tables_with_changes[table_name] = self.rel_storage.execute(
+            tables_with_changes[table_name] = self.rel_storage.execute(query=
                 Query.from_(table)
                 .join(event_log_table)
-                .on(table[Config.uid_col] == event_log_table[Config.uid_col])
+                .on(table[Config.uid_col] == event_log_table[Config.uid_col]),
+                conn=conn
             )
 
         output = {}
@@ -144,19 +201,19 @@ class RelAdapter:
             tables_with_changes[table_name].to_parquet(buffer)
             output[table_name] = buffer.getbuffer()
 
-        self.rel_storage.execute(Query.from_(event_log_table).delete())
+        self.rel_storage.execute(query=Query.from_(event_log_table).delete(), conn=conn)
         return output
 
-    def apply_from_remote(self, changes: list[RemoteEventLogEntry]):
-        # TODO do this in a transaction
+    @transaction()
+    def apply_from_remote(self, changes: list[RemoteEventLogEntry], conn:Connection=None):
         for raw_changeset in changes:
             for table_name in raw_changeset:
                 buffer = io.BytesIO(raw_changeset[table_name])
-                table = pd.read_parquet(buffer)
-                self.rel_storage.upsert(table_name, table)
+                table = pq.read_table(buffer)
+                self.rel_storage.upsert(table_name, table, conn=conn)
 
     @staticmethod
-    def tabulate_calls(calls: List[Call]) -> Dict[str, pd.DataFrame]:
+    def tabulate_calls(calls: List[Call]) -> Dict[str, pa.Table]:
         """
         Converts call objects to a dictionary of {relation name: table
         to upsert} pairs.
@@ -166,9 +223,8 @@ class RelAdapter:
         for call in calls:
             calls_by_op[call.op.sig.internal_name].append(call)
         res = {}
-        vref_uids = []
         for k, v in calls_by_op.items():
-            res[k] = pd.DataFrame(
+            res[k] = pa.Table.from_pylist(
                 [
                     {
                         Config.uid_col: call.uid,
@@ -178,10 +234,7 @@ class RelAdapter:
                     for call in v
                 ]
             )
-            for call in v:
-                vref_uids += [v.uid for v in call.inputs.values()]
-                vref_uids += [v.uid for v in call.outputs]
-        res[Config.vref_table] = pd.DataFrame({Config.uid_col: list(set(vref_uids))})
+
         return res
 
     ############################################################################
@@ -235,3 +288,14 @@ def upsert_df(current: pd.DataFrame, new: pd.DataFrame) -> pd.DataFrame:
     Upsert for dataframes with the same columns
     """
     return pd.concat([current, new[~new.index.isin(current.index)]])
+
+
+def serialize(obj: Any) -> bytes:
+    buffer = io.BytesIO()
+    joblib.dump(obj, buffer)
+    return buffer.getvalue()
+
+
+def deserialize(value: bytes) -> Any:
+    buffer = io.BytesIO(value)
+    return joblib.load(buffer)

@@ -16,36 +16,39 @@ def test_func_creation():
 
 
 def test_computation():
-    storage = Storage()
+    for evict_on_commit in [False, True]:
+        Config.evict_on_commit = evict_on_commit
 
-    @op(storage=storage)
-    def inc(x: int) -> int:
-        return x + 1
+        storage = Storage()
 
-    @op(storage=storage)
-    def add(x: int, y: int) -> int:
-        return x + y
+        @op(storage=storage)
+        def inc(x: int) -> int:
+            return x + 1
 
-    # chain some functions
-    with run(storage=storage):
-        x = 23
-        y = inc(x)
-        z = add(x, y)
-    check_invariants(storage)
-    # run it again
-    with run(storage=storage):
-        x = 23
-        y = inc(x)
-        z = add(x, y)
-    check_invariants(storage)
-    # do some more things
-    with run(storage=storage):
-        x = 42
-        y = inc(x)
-        z = add(x, y)
-        for i in range(10):
-            z = add(z, i)
-    check_invariants(storage)
+        @op(storage=storage)
+        def add(x: int, y: int) -> int:
+            return x + y
+
+        # chain some functions
+        with run(storage=storage):
+            x = 23
+            y = inc(x)
+            z = add(x, y)
+        check_invariants(storage)
+        # run it again
+        with run(storage=storage):
+            x = 23
+            y = inc(x)
+            z = add(x, y)
+        check_invariants(storage)
+        # do some more things
+        with run(storage=storage):
+            x = 42
+            y = inc(x)
+            z = add(x, y)
+            for i in range(10):
+                z = add(z, i)
+        check_invariants(storage)
 
 
 def test_nosuperops():
