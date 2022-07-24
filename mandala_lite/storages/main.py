@@ -75,6 +75,10 @@ class Storage:
             for k in self.obj_cache.keys():
                 self.obj_cache.delete(k=k)
 
+        # Remove dirty bits from cache.
+        self.obj_cache.dirty_entries.clear()
+        self.call_cache.dirty_entries.clear()
+
     def synchronize(self, sig: Signature) -> Signature:
         """
         Synchronize an op's signature with this storage.
