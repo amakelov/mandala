@@ -1,11 +1,7 @@
-import functools
-
 import duckdb
-import pandas as pd
-import pyarrow
+import pyarrow as pa
 from duckdb import DuckDBPyConnection as Connection
 from pypika import Query, Column
-from pypika.queries import QueryBuilder
 
 from .bases import RelStorage
 from .utils import Transactable, transaction
@@ -126,12 +122,12 @@ class DuckDBRelStorage(RelStorage, Transactable):
         """
         Duckdb-specific method to get the *ordered* columns of a table.
         """
-        return self.execute(query=f'DESCRIBE "{relation}";', conn=conn)[
-            "column_name"
-        ].values.tolist()
+        return self.execute_arrow(
+            query=f'DESCRIBE "{relation}";', conn=conn
+        ).column("column_name").to_pylist()
 
     @transaction()
-    def insert(self, relation: str, pt: pyarrow.Table, conn: Connection = None):
+    def insert(self, relation: str, pt: pa.Table, conn: Connection = None):
         """
         Append rows to a table
         """
@@ -147,7 +143,7 @@ class DuckDBRelStorage(RelStorage, Transactable):
         conn.unregister(view_name=self.TEMP_ARROW_TABLE)
 
     @transaction()
-    def upsert(self, relation: str, ta: pyarrow.Table, conn: Connection = None):
+    def upsert(self, relation: str, ta: pa.Table, conn: Connection = None):
         """
         Upsert rows in a table based on index
         """
@@ -172,11 +168,22 @@ class DuckDBRelStorage(RelStorage, Transactable):
     ### queries
     ############################################################################
     @transaction()
-    def execute(
+    def execute_arrow(
         self,
         query: Union[str, Query],
         parameters: list[Any] = [],
         conn: Connection = None,
+    ) -> pa.Table:
+        if not isinstance(query, str):
+            query = str(query)
+        return conn.execute(query, parameters=parameters).fetch_arrow_table()
+
+    @transaction()
+    def execute_df(
+            self,
+            query: Union[str, Query],
+            parameters: list[Any] = [],
+            conn: Connection = None,
     ) -> pd.DataFrame:
         if not isinstance(query, str):
             query = str(query)

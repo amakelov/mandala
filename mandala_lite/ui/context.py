@@ -81,7 +81,7 @@ class Context:
         val_queries, func_queries = traverse_all(select_queries)
         compiler = Compiler(val_queries=val_queries, func_queries=func_queries)
         query = compiler.compile(select_queries=select_queries)
-        df = self.storage.rel_storage.execute(query=str(query))
+        df = self.storage.rel_storage.execute_df(query=str(query))
         # now, evaluate the table
         keys_to_collect = [
             item for _, column in df.iteritems() for _, item in column.iteritems()

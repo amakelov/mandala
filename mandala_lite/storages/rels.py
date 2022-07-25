@@ -83,7 +83,7 @@ class RelAdapter(Transactable):
             self.prov_df = upsert_df(current=self.prov_df, new=new_prov_df)
 
     @transaction()
-    def _query_call(self, call_uid: str, conn: Connection = None) -> pd.DataFrame:
+    def _query_call(self, call_uid: str, conn: Connection = None) -> pa.Table:
         all_tables = [
             Query.from_(table_name)
             .where(Table(table_name)[Config.uid_col] == Parameter("$1"))
@@ -91,7 +91,7 @@ class RelAdapter(Transactable):
             for table_name in self.rel_storage.get_call_tables()
         ]
         query = sum(all_tables[1:], start=all_tables[0])
-        return self.rel_storage.execute(query, [call_uid], conn=conn)
+        return self.rel_storage.execute_arrow(query, [call_uid], conn=conn)
 
     @transaction()
     def call_exists(self, call_uid: str, conn: Connection = None) -> bool:
@@ -99,15 +99,15 @@ class RelAdapter(Transactable):
 
     @transaction()
     def call_get(self, call_uid: str, conn: Connection = None) -> Call:
-        row = self._query_call(call_uid, conn=conn).iloc[0]
-        table_name = row[1]
+        row = self._query_call(call_uid, conn=conn).take([0])
+        table_name = row.column(1)[0]
         table = Table(table_name)
         query = (
             Query.from_(table)
             .where(table[Config.uid_col] == Parameter("$1"))
             .select(table.star)
         )
-        results = self.rel_storage.execute(query, [call_uid], conn=conn)
+        results = self.rel_storage.execute_arrow(query, [call_uid], conn=conn)
         return Call.from_row(results)
 
     @transaction()
@@ -128,7 +128,10 @@ class RelAdapter(Transactable):
             .where(table[Config.uid_col].isin(keys))
             .select(table[Config.uid_col], table.value)
         )
-        output = self.rel_storage.execute(query, conn=conn)
+        try:
+            output = self.rel_storage.execute_arrow(query, conn=conn).to_pandas()
+        except:
+            x = 2
         output["value"] = output["value"].map(lambda x: deserialize(bytes(x)))
         return output
 
@@ -160,13 +163,13 @@ class RelAdapter(Transactable):
         buffer = io.BytesIO()
         joblib.dump(value=value, filename=buffer)
         query = Query.into(Config.vref_table).insert(Parameter("$1"), Parameter("$2"))
-        self.rel_storage.execute(
+        self.rel_storage.execute_arrow(
             query=query, parameters=[key, buffer.getvalue()], conn=conn
         )
         log_query = Query.into(self.EVENT_LOG_TABLE).insert(
             Parameter("$1"), Parameter("$2")
         )
-        self.rel_storage.execute(
+        self.rel_storage.execute_arrow(
             log_query, parameters=[key, Config.vref_table], conn=conn
         )
 
@@ -194,7 +197,7 @@ class RelAdapter(Transactable):
         event_log_table = Table(self.EVENT_LOG_TABLE)
         for table_name in table_names_with_changes:
             table = Table(table_name)
-            tables_with_changes[table_name] = self.rel_storage.execute(
+            tables_with_changes[table_name] = self.rel_storage.execute_arrow(
                 query=Query.from_(table)
                 .join(event_log_table)
                 .on(table[Config.uid_col] == event_log_table[Config.uid_col]),
@@ -207,7 +210,7 @@ class RelAdapter(Transactable):
             tables_with_changes[table_name].to_parquet(buffer)
             output[table_name] = buffer.getbuffer()
 
-        self.rel_storage.execute(query=Query.from_(event_log_table).delete(), conn=conn)
+        self.rel_storage.execute_arrow(query=Query.from_(event_log_table).delete(), conn=conn)
         return output
 
     @transaction()

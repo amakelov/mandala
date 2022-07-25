@@ -1,4 +1,4 @@
-import pandas as pd
+import pyarrow as pa
 
 from .config import Config
 from ..common_imports import *
@@ -109,8 +109,8 @@ class Call:
         )
 
     @staticmethod
-    def from_row(row: pd.DataFrame) -> "Call":
-        columns = list(row.columns)
+    def from_row(row: pa.Table) -> "Call":
+        columns = row.column_names
         output_columns = [column for column in columns if column.startswith("output")]
         input_columns = [
             column
@@ -118,13 +118,13 @@ class Call:
             if column not in output_columns and column != Config.uid_col
         ]
         return Call(
-            uid=row[Config.uid_col],
+            uid=row.column(Config.uid_col)[0].as_py(),
             inputs={
-                k: ValueRef(row[k].item(), obj=None, in_memory=False)
+                k: ValueRef(row.column(k)[0].as_py(), obj=None, in_memory=False)
                 for k in input_columns
             },
             outputs=[
-                ValueRef(row[k].item(), obj=None, in_memory=False)
+                ValueRef(row.column(k)[0].as_py(), obj=None, in_memory=False)
                 for k in sorted(output_columns, key=lambda x: int(x[7:]))
             ],
             op=None,
