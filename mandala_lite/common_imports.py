@@ -21,6 +21,7 @@ from typing import (
 from pathlib import Path
 
 import pandas as pd
+import pyarrow as pa
 import numpy as np
 
 

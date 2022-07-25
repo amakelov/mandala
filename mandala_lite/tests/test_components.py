@@ -9,8 +9,18 @@ def test_rel_storage():
                                 primary_key='a')
     assert set(rel_storage.get_tables()) == {'test'}
     assert rel_storage.get_data(table='test').empty
-
-
+    df = pd.DataFrame({'a': ['x', 'y'], 'b': ['z', 'w']})
+    ta = pa.Table.from_pandas(df)
+    rel_storage.insert(relation='test', ta=ta)
+    assert (rel_storage.get_data(table='test') == df).all().all()
+    rel_storage.upsert(relation='test', ta=ta)
+    assert (rel_storage.get_data(table='test') == df).all().all()
+    rel_storage.create_column(relation='test', name='c', default_value='a')
+    df['c'] = ['a', 'a']
+    assert (rel_storage.get_data(table='test') == df).all().all()
+    rel_storage.delete(relation='test', index=['x', 'y'])
+    assert rel_storage.get_data(table='test').empty
+    
 def test_signatures():
     sig = Signature(
         external_name="f",

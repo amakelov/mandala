@@ -86,7 +86,7 @@ class DuckDBRelStorage(RelStorage, Transactable):
         """
         Add a new column to a table.
         """
-        query = f"ALTER TABLE {relation} ADD COLUMN {name} {self.UID_DTYPE} DEFAULT {default_value}"
+        query = f"ALTER TABLE {relation} ADD COLUMN {name} {self.UID_DTYPE} DEFAULT '{default_value}'"
         conn.execute(query=query)
 
     ############################################################################
@@ -120,16 +120,16 @@ class DuckDBRelStorage(RelStorage, Transactable):
             raise NotImplementedError(f'Multiple primary keys for {relation}')
 
     @transaction()
-    def insert(self, relation: str, pt: pa.Table, conn: Connection = None):
+    def insert(self, relation: str, ta: pa.Table, conn: Connection = None):
         """
         Append rows to a table
         """
-        if pt.empty:
+        if len(ta) == 0:
             return
         table_cols = self._get_cols(relation=relation, conn=conn)
-        assert set(pt.column_names) == set(table_cols)
-        cols_string = ", ".join([f'"{column_name}"' for column_name in pt.column_names])
-        conn.register(view_name=self.TEMP_ARROW_TABLE, python_object=pt)
+        assert set(ta.column_names) == set(table_cols)
+        cols_string = ", ".join([f'"{column_name}"' for column_name in ta.column_names])
+        conn.register(view_name=self.TEMP_ARROW_TABLE, python_object=ta)
         conn.execute(
             f'INSERT INTO "{relation}" ({cols_string}) SELECT * FROM {self.TEMP_ARROW_TABLE}'
         )
@@ -163,7 +163,8 @@ class DuckDBRelStorage(RelStorage, Transactable):
         if len(primary_keys) != 1:
             raise NotImplementedError()
         primary_key = primary_keys[0]
-        conn.execute(f'DELETE FROM "{relation}" WHERE {primary_key} IN ({index})')
+        in_str = ", ".join([f"'{i}'" for i in index])
+        conn.execute(f'DELETE FROM "{relation}" WHERE {primary_key} IN ({in_str})')
 
     ############################################################################
     ### queries
