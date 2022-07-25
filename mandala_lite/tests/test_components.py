@@ -2,6 +2,11 @@ from mandala_lite.all import *
 from mandala_lite.tests.utils import *
 
 
+def test_rel_storage():
+    rel_storage = DuckDBRelStorage()
+    assert set(rel_storage.get_tables()) == {Config.vref_table, Config.event_log_table}
+
+
 def test_signatures():
     sig = Signature(
         external_name="f",

@@ -44,9 +44,6 @@ class RelAdapter(Transactable):
             ]
         )
         self.prov_df.set_index([Prov.call_uid, Prov.vref_name, Prov.is_input])
-        # Initialize the event log.
-        # The event log is just a list of UIDs that changed, for now.
-        self.rel_storage.create_relation(self.EVENT_LOG_TABLE, [("table", "varchar")])
 
     def log_change(self, table: str, key: str):
         self.rel_storage.upsert(
@@ -131,7 +128,7 @@ class RelAdapter(Transactable):
         try:
             output = self.rel_storage.execute_arrow(query, conn=conn).to_pandas()
         except:
-            x = 2
+            x = 2  # TODO
         output["value"] = output["value"].map(lambda x: deserialize(bytes(x)))
         return output
 

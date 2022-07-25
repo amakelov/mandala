@@ -12,8 +12,9 @@ from ...core.config import Config
 class DuckDBRelStorage(RelStorage, Transactable):
     UID_DTYPE = "VARCHAR"  # TODO - change this
     VREF_TABLE = Config.vref_table
-    TEMP_ARROW_TABLE = "__arrow__"
     EVENT_LOG_TABLE = Config.event_log_table
+    TEMP_ARROW_TABLE = "__arrow__"
+    SPECIAL_TABLES = (EVENT_LOG_TABLE, TEMP_ARROW_TABLE)
 
     def __init__(self, address: str = ":memory:"):
         self.address = address
@@ -36,16 +37,15 @@ class DuckDBRelStorage(RelStorage, Transactable):
             columns=[("value", "blob")],
             conn=conn,
         )
+        # Initialize the event log.
+        # The event log is just a list of UIDs that changed, for now.
+        self.create_relation(self.EVENT_LOG_TABLE, [("table", "varchar")])
 
     @transaction()
     def get_call_tables(self, conn: Connection = None) -> List[str]:
         tables = self.get_tables(conn=conn)
         return [
-            t
-            for t in tables
-            if t != self.VREF_TABLE
-            and t != self.TEMP_ARROW_TABLE
-            and t != self.EVENT_LOG_TABLE
+            t for t in tables if t not in self.SPECIAL_TABLES and t != self.VREF_TABLE
         ]
 
     @transaction()
@@ -173,9 +173,11 @@ class DuckDBRelStorage(RelStorage, Transactable):
     def execute_arrow(
         self,
         query: Union[str, Query],
-        parameters: list[Any] = [],
+        parameters: list[Any] = None,
         conn: Connection = None,
     ) -> pa.Table:
+        if parameters is None:
+            parameters = []
         if not isinstance(query, str):
             query = str(query)
         return conn.execute(query, parameters=parameters).fetch_arrow_table()
@@ -184,9 +186,11 @@ class DuckDBRelStorage(RelStorage, Transactable):
     def execute_df(
         self,
         query: Union[str, Query],
-        parameters: list[Any] = [],
+        parameters: list[Any] = None,
         conn: Connection = None,
     ) -> pd.DataFrame:
+        if parameters is None:
+            parameters = []
         if not isinstance(query, str):
             query = str(query)
         return conn.execute(query, parameters=parameters).fetchdf()
