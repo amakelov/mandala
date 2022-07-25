@@ -210,7 +210,9 @@ class RelAdapter(Transactable):
             tables_with_changes[table_name].to_parquet(buffer)
             output[table_name] = buffer.getbuffer()
 
-        self.rel_storage.execute_arrow(query=Query.from_(event_log_table).delete(), conn=conn)
+        self.rel_storage.execute_arrow(
+            query=Query.from_(event_log_table).delete(), conn=conn
+        )
         return output
 
     @transaction()

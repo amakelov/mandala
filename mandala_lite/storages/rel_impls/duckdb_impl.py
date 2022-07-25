@@ -122,9 +122,11 @@ class DuckDBRelStorage(RelStorage, Transactable):
         """
         Duckdb-specific method to get the *ordered* columns of a table.
         """
-        return self.execute_arrow(
-            query=f'DESCRIBE "{relation}";', conn=conn
-        ).column("column_name").to_pylist()
+        return (
+            self.execute_arrow(query=f'DESCRIBE "{relation}";', conn=conn)
+            .column("column_name")
+            .to_pylist()
+        )
 
     @transaction()
     def insert(self, relation: str, pt: pa.Table, conn: Connection = None):
@@ -180,10 +182,10 @@ class DuckDBRelStorage(RelStorage, Transactable):
 
     @transaction()
     def execute_df(
-            self,
-            query: Union[str, Query],
-            parameters: list[Any] = [],
-            conn: Connection = None,
+        self,
+        query: Union[str, Query],
+        parameters: list[Any] = [],
+        conn: Connection = None,
     ) -> pd.DataFrame:
         if not isinstance(query, str):
             query = str(query)
