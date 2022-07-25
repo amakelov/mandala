@@ -100,8 +100,9 @@ class Storage:
                 + list(res.internal_input_names)
                 + [f"output_{i}" for i in range(res.n_outputs)]
             )
-            columns = [(column, None) for column in columns]
-            self.rel_storage.create_relation(name=res.internal_name, columns=columns)
+            columns = [(Config.uid_col, None)] + [(column, None) for column in columns]
+            self.rel_storage.create_relation(name=res.internal_name, columns=columns, 
+                                             primary_key=Config.uid_col)
             return res
         else:
             current = self.sigs[(sig.external_name, sig.version)]

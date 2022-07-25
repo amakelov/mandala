@@ -28,9 +28,12 @@ class RelAdapter(Transactable):
     """
 
     EVENT_LOG_TABLE = Config.event_log_table
+    VREF_TABLE = Config.vref_table
+    SPECIAL_TABLES = (EVENT_LOG_TABLE, DuckDBRelStorage.TEMP_ARROW_TABLE)
 
     def __init__(self, rel_storage: DuckDBRelStorage):
         self.rel_storage = rel_storage
+        self.init()
         # initialize provenance table
         self.prov_df = pd.DataFrame(
             columns=[
@@ -44,6 +47,30 @@ class RelAdapter(Transactable):
             ]
         )
         self.prov_df.set_index([Prov.call_uid, Prov.vref_name, Prov.is_input])
+
+    @transaction()
+    def init(self, conn: Connection = None):
+        self.rel_storage.create_relation(
+            name=self.VREF_TABLE,
+            columns=[(Config.uid_col, None), ("value", "blob")],
+            primary_key=Config.uid_col,
+            conn=conn,
+        )
+        # Initialize the event log.
+        # The event log is just a list of UIDs that changed, for now.
+        self.rel_storage.create_relation(
+            name=self.EVENT_LOG_TABLE,
+            columns=[(Config.uid_col, None), ("table", "varchar")],
+            primary_key=Config.uid_col,
+            conn=conn
+            )
+
+    @transaction()
+    def get_call_tables(self, conn: Connection = None) -> List[str]:
+        tables = self.rel_storage.get_tables(conn=conn)
+        return [
+            t for t in tables if t not in self.SPECIAL_TABLES and t != self.VREF_TABLE
+        ]
 
     def log_change(self, table: str, key: str):
         self.rel_storage.upsert(
@@ -85,7 +112,7 @@ class RelAdapter(Transactable):
             Query.from_(table_name)
             .where(Table(table_name)[Config.uid_col] == Parameter("$1"))
             .select(Table(table_name)[Config.uid_col], LiteralValue(f"'{table_name}'"))
-            for table_name in self.rel_storage.get_call_tables()
+            for table_name in self.get_call_tables()
         ]
         query = sum(all_tables[1:], start=all_tables[0])
         return self.rel_storage.execute_arrow(query, [call_uid], conn=conn)

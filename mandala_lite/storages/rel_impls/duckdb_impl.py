@@ -6,22 +6,17 @@ from pypika import Query, Column
 from .bases import RelStorage
 from .utils import Transactable, transaction
 from ...common_imports import *
-from ...core.config import Config
 
 
 class DuckDBRelStorage(RelStorage, Transactable):
     UID_DTYPE = "VARCHAR"  # TODO - change this
-    VREF_TABLE = Config.vref_table
-    EVENT_LOG_TABLE = Config.event_log_table
     TEMP_ARROW_TABLE = "__arrow__"
-    SPECIAL_TABLES = (EVENT_LOG_TABLE, TEMP_ARROW_TABLE)
 
     def __init__(self, address: str = ":memory:"):
         self.address = address
         self.in_memory = address == ":memory:"
         if self.in_memory:
             self._conn = duckdb.connect(self.address)
-        self.init()
 
     def _get_connection(self) -> Connection:
         return self._conn if self.in_memory else duckdb.connect(database=self.address)
@@ -29,24 +24,6 @@ class DuckDBRelStorage(RelStorage, Transactable):
     def _end_transaction(self, conn: Connection):
         if not self.in_memory:
             conn.close()
-
-    @transaction()
-    def init(self, conn: Connection = None):
-        self.create_relation(
-            name=self.VREF_TABLE,
-            columns=[("value", "blob")],
-            conn=conn,
-        )
-        # Initialize the event log.
-        # The event log is just a list of UIDs that changed, for now.
-        self.create_relation(self.EVENT_LOG_TABLE, [("table", "varchar")])
-
-    @transaction()
-    def get_call_tables(self, conn: Connection = None) -> List[str]:
-        tables = self.get_tables(conn=conn)
-        return [
-            t for t in tables if t not in self.SPECIAL_TABLES and t != self.VREF_TABLE
-        ]
 
     @transaction()
     def get_tables(self, conn: Connection = None) -> List[str]:
@@ -71,19 +48,16 @@ class DuckDBRelStorage(RelStorage, Transactable):
     def create_relation(
         self,
         name: str,
-        columns: List[tuple[str, str]],
+        columns: List[tuple[str, Optional[str]]],
+        primary_key:Optional[str]=None,
         conn: Connection = None,
     ):
         """
-        Create a table with given columns, with a primary key named `Config.uid_col`.
+        Create a table with given columns, with an optional primary key
         """
         query = (
             Query.create_table(table=name)
             .columns(
-                Column(
-                    column_name=Config.uid_col,
-                    column_type=self.UID_DTYPE,
-                ),
                 *[
                     Column(
                         column_name=c,
@@ -92,8 +66,9 @@ class DuckDBRelStorage(RelStorage, Transactable):
                     for c, dtype in columns
                 ],
             )
-            .primary_key(Config.uid_col)
         )
+        if primary_key is not None:
+            query = query.primary_key(primary_key)
         conn.execute(str(query))
 
     @transaction()
@@ -127,6 +102,22 @@ class DuckDBRelStorage(RelStorage, Transactable):
             .column("column_name")
             .to_pylist()
         )
+    
+    @transaction()
+    def _get_primary_keys(self, relation: str, conn: Connection = None) -> List[str]:
+        """
+        Duckdb-specific method to get the primary key of a table.
+        """
+        constraint_type = 'PRIMARY KEY'
+        df = self.execute_df(query=f'SELECT * FROM duckdb_constraints();', conn=conn)
+        df = df[['table_name', 'constraint_type', 'constraint_column_names']]
+        df = df[(df['table_name'] == relation) & (df['constraint_type'] == constraint_type)]
+        if len(df) == 0:
+            return []
+        elif len(df) == 1:
+            return df['constraint_column_names'].item()
+        else:
+            raise NotImplementedError(f'Multiple primary keys for {relation}')
 
     @transaction()
     def insert(self, relation: str, pt: pa.Table, conn: Connection = None):
@@ -143,7 +134,7 @@ class DuckDBRelStorage(RelStorage, Transactable):
             f'INSERT INTO "{relation}" ({cols_string}) SELECT * FROM {self.TEMP_ARROW_TABLE}'
         )
         conn.unregister(view_name=self.TEMP_ARROW_TABLE)
-
+    
     @transaction()
     def upsert(self, relation: str, ta: pa.Table, conn: Connection = None):
         """
@@ -154,8 +145,12 @@ class DuckDBRelStorage(RelStorage, Transactable):
         table_cols = self._get_cols(relation=relation, conn=conn)
         assert set(ta.column_names) == set(table_cols)
         cols_string = ", ".join([f'"{column_name}"' for column_name in ta.column_names])
+        primary_keys = self._get_primary_keys(relation=relation, conn=conn)
+        if len(primary_keys) != 1:
+            raise NotImplementedError()
+        primary_key = primary_keys[0]
         conn.register(view_name=self.TEMP_ARROW_TABLE, python_object=ta)
-        query = f'INSERT INTO "{relation}" ({cols_string}) SELECT * FROM {self.TEMP_ARROW_TABLE} WHERE "{Config.uid_col}" NOT IN (SELECT "{Config.uid_col}" FROM "{relation}")'
+        query = f'INSERT INTO "{relation}" ({cols_string}) SELECT * FROM {self.TEMP_ARROW_TABLE} WHERE "{primary_key}" NOT IN (SELECT "{primary_key}" FROM "{relation}")'
         conn.execute(query)
         conn.unregister(view_name=self.TEMP_ARROW_TABLE)
 
@@ -164,7 +159,11 @@ class DuckDBRelStorage(RelStorage, Transactable):
         """
         Delete rows from a table based on index
         """
-        conn.execute(f'DELETE FROM "{relation}" WHERE {Config.uid_col} IN ({index})')
+        primary_keys = self._get_primary_keys(relation=relation, conn=conn)
+        if len(primary_keys) != 1:
+            raise NotImplementedError()
+        primary_key = primary_keys[0]
+        conn.execute(f'DELETE FROM "{relation}" WHERE {primary_key} IN ({index})')
 
     ############################################################################
     ### queries
