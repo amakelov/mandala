@@ -1,3 +1,5 @@
+import hashlib
+
 from ..common_imports import *
 
 
@@ -22,6 +24,6 @@ class Hashing:
         stream = io.BytesIO()
         joblib.dump(value=obj, filename=stream)
         stream.seek(0)
-        m = hashlib.md5()
+        m = hashlib.blake2b()
         m.update(str((stream.read())).encode())
         return m.hexdigest()
