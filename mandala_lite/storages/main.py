@@ -58,6 +58,12 @@ class Storage:
         keys_not_in_cache = [key for key in keys if not self.obj_cache.exists(key)]
         for idx, row in self.rel_adapter.obj_gets(keys_not_in_cache).iterrows():
             self.obj_cache.set(k=row[Config.uid_col], v=row["value"])
+        
+    def evict_caches(self):
+        for k in self.call_cache.keys():
+            self.call_cache.delete(k=k)
+        for k in self.obj_cache.keys():
+            self.obj_cache.delete(k=k)
 
     def commit(self):
         """
@@ -70,10 +76,7 @@ class Storage:
         self.rel_adapter.obj_sets(new_objs)
         self.rel_adapter.upsert_calls(new_calls)
         if Config.evict_on_commit:
-            for k in self.call_cache.keys():
-                self.call_cache.delete(k=k)
-            for k in self.obj_cache.keys():
-                self.obj_cache.delete(k=k)
+            self.evict_caches()
 
         # Remove dirty bits from cache.
         self.obj_cache.dirty_entries.clear()
@@ -95,9 +98,7 @@ class Storage:
             self.sigs[(res.external_name, res.version)] = res
             # create relation
             columns = (
-                # [Config.uid_col]
-                []
-                + list(res.internal_input_names)
+                list(res.internal_input_names)
                 + [f"output_{i}" for i in range(res.n_outputs)]
             )
             columns = [(Config.uid_col, None)] + [(column, None) for column in columns]

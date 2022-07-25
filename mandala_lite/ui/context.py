@@ -48,26 +48,38 @@ class Context:
         self._updates_stack.append(before_update)
         ### apply updates
         for k, v in updates.items():
-            self.__dict__[f"{k}"] = v
+            if v is not None:
+                self.__dict__[f"{k}"] = v
         return self
-
-    def __exit__(self, exc_type, exc_value, exc_traceback):
+    
+    def _undo_updates(self):
+        """
+        Roll back the updates from the current level
+        """
         if not self._updates_stack:
             raise RuntimeError("No context to exit from")
-        # commit calls from temp partition to main and tabulate them
-        self.storage.commit()
-        # undo updates
         ascent_updates = self._updates_stack.pop()
         for k, v in ascent_updates.items():
             self.__dict__[f"{k}"] = v
         # unlink from global if done
         if len(self._updates_stack) == 0:
             GlobalContext.current = None
+
+    def __exit__(self, exc_type, exc_value, exc_traceback):
+        exc = None
+        try:
+            # commit calls from temp partition to main and tabulate them
+            self.storage.commit()
+        except Exception as e:
+            exc = e
+        self._undo_updates()
+        if exc is not None:
+            raise exc
         if exc_type:
             raise exc_type(exc_value).with_traceback(exc_traceback)
         return None
 
-    def __call__(self, storage: Storage, **updates):
+    def __call__(self, storage: Optional[Storage]=None, **updates):
         self.updates = {"storage": storage, **updates}
         return self
 
@@ -77,17 +89,20 @@ class Context:
         # If we don't, we'll query a store that might be missing calls and objs.
         self.storage.commit()
 
+        # compile the computational graph to SQL and execute the query
         select_queries = list(queries)
         val_queries, func_queries = traverse_all(select_queries)
         compiler = Compiler(val_queries=val_queries, func_queries=func_queries)
         query = compiler.compile(select_queries=select_queries)
         df = self.storage.rel_storage.execute_df(query=str(query))
+
         # now, evaluate the table
         keys_to_collect = [
             item for _, column in df.iteritems() for _, item in column.iteritems()
         ]
         self.storage.preload_objs(keys_to_collect)
         result = df.applymap(lambda key: unwrap(self.storage.obj_get(key)))
+
         # finally, name the columns
         result.columns = [
             f"unnamed_{i}" if query.column_name is None else query.column_name
