@@ -20,6 +20,9 @@ def test_rel_storage():
     assert (rel_storage.get_data(table='test') == df).all().all()
     rel_storage.delete(relation='test', index=['x', 'y'])
     assert rel_storage.get_data(table='test').empty
+
+def test_main_storage():
+    storage = Storage()
     
 def test_signatures():
     sig = Signature(
