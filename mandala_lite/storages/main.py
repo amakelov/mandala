@@ -58,7 +58,7 @@ class Storage:
         keys_not_in_cache = [key for key in keys if not self.obj_cache.exists(key)]
         for idx, row in self.rel_adapter.obj_gets(keys_not_in_cache).iterrows():
             self.obj_cache.set(k=row[Config.uid_col], v=row["value"])
-        
+
     def evict_caches(self):
         for k in self.call_cache.keys():
             self.call_cache.delete(k=k)
@@ -97,13 +97,13 @@ class Storage:
             res = copy.deepcopy(sig)
             self.sigs[(res.name, res.version)] = res
             # create relation
-            columns = (
-                list(res.input_names)
-                + [f"output_{i}" for i in range(res.n_outputs)]
-            )
+            columns = list(res.input_names) + [
+                f"output_{i}" for i in range(res.n_outputs)
+            ]
             columns = [(Config.uid_col, None)] + [(column, None) for column in columns]
-            self.rel_storage.create_relation(name=res.name, columns=columns, 
-                                             primary_key=Config.uid_col)
+            self.rel_storage.create_relation(
+                name=res.name, columns=columns, primary_key=Config.uid_col
+            )
             return res
         else:
             current = self.sigs[(sig.name, sig.version)]

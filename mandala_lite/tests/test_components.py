@@ -5,25 +5,28 @@ from mandala_lite.tests.utils import *
 def test_rel_storage():
     rel_storage = DuckDBRelStorage()
     assert set(rel_storage.get_tables()) == set()
-    rel_storage.create_relation(name='test', columns=[('a', None), ('b', None)], 
-                                primary_key='a')
-    assert set(rel_storage.get_tables()) == {'test'}
-    assert rel_storage.get_data(table='test').empty
-    df = pd.DataFrame({'a': ['x', 'y'], 'b': ['z', 'w']})
+    rel_storage.create_relation(
+        name="test", columns=[("a", None), ("b", None)], primary_key="a"
+    )
+    assert set(rel_storage.get_tables()) == {"test"}
+    assert rel_storage.get_data(table="test").empty
+    df = pd.DataFrame({"a": ["x", "y"], "b": ["z", "w"]})
     ta = pa.Table.from_pandas(df)
-    rel_storage.insert(relation='test', ta=ta)
-    assert (rel_storage.get_data(table='test') == df).all().all()
-    rel_storage.upsert(relation='test', ta=ta)
-    assert (rel_storage.get_data(table='test') == df).all().all()
-    rel_storage.create_column(relation='test', name='c', default_value='a')
-    df['c'] = ['a', 'a']
-    assert (rel_storage.get_data(table='test') == df).all().all()
-    rel_storage.delete(relation='test', index=['x', 'y'])
-    assert rel_storage.get_data(table='test').empty
+    rel_storage.insert(relation="test", ta=ta)
+    assert (rel_storage.get_data(table="test") == df).all().all()
+    rel_storage.upsert(relation="test", ta=ta)
+    assert (rel_storage.get_data(table="test") == df).all().all()
+    rel_storage.create_column(relation="test", name="c", default_value="a")
+    df["c"] = ["a", "a"]
+    assert (rel_storage.get_data(table="test") == df).all().all()
+    rel_storage.delete(relation="test", index=["x", "y"])
+    assert rel_storage.get_data(table="test").empty
+
 
 def test_main_storage():
     storage = Storage()
-    
+
+
 def test_signatures():
     sig = Signature(
         name="f",

@@ -62,8 +62,8 @@ class RelAdapter(Transactable):
             name=self.EVENT_LOG_TABLE,
             columns=[(Config.uid_col, None), ("table", "varchar")],
             primary_key=Config.uid_col,
-            conn=conn
-            )
+            conn=conn,
+        )
 
     @transaction()
     def get_call_tables(self, conn: Connection = None) -> List[str]:

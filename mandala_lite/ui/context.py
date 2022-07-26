@@ -51,7 +51,7 @@ class Context:
             if v is not None:
                 self.__dict__[f"{k}"] = v
         return self
-    
+
     def _undo_updates(self):
         """
         Roll back the updates from the current level
@@ -79,7 +79,7 @@ class Context:
             raise exc_type(exc_value).with_traceback(exc_traceback)
         return None
 
-    def __call__(self, storage: Optional[Storage]=None, **updates):
+    def __call__(self, storage: Optional[Storage] = None, **updates):
         self.updates = {"storage": storage, **updates}
         return self
 

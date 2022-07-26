@@ -49,23 +49,20 @@ class DuckDBRelStorage(RelStorage, Transactable):
         self,
         name: str,
         columns: List[tuple[str, Optional[str]]],
-        primary_key:Optional[str]=None,
+        primary_key: Optional[str] = None,
         conn: Connection = None,
     ):
         """
         Create a table with given columns, with an optional primary key
         """
-        query = (
-            Query.create_table(table=name)
-            .columns(
-                *[
-                    Column(
-                        column_name=c,
-                        column_type=dtype if dtype is not None else self.UID_DTYPE,
-                    )
-                    for c, dtype in columns
-                ],
-            )
+        query = Query.create_table(table=name).columns(
+            *[
+                Column(
+                    column_name=c,
+                    column_type=dtype if dtype is not None else self.UID_DTYPE,
+                )
+                for c, dtype in columns
+            ],
         )
         if primary_key is not None:
             query = query.primary_key(primary_key)
@@ -102,22 +99,24 @@ class DuckDBRelStorage(RelStorage, Transactable):
             .column("column_name")
             .to_pylist()
         )
-    
+
     @transaction()
     def _get_primary_keys(self, relation: str, conn: Connection = None) -> List[str]:
         """
         Duckdb-specific method to get the primary key of a table.
         """
-        constraint_type = 'PRIMARY KEY'
-        df = self.execute_df(query=f'SELECT * FROM duckdb_constraints();', conn=conn)
-        df = df[['table_name', 'constraint_type', 'constraint_column_names']]
-        df = df[(df['table_name'] == relation) & (df['constraint_type'] == constraint_type)]
+        constraint_type = "PRIMARY KEY"
+        df = self.execute_df(query=f"SELECT * FROM duckdb_constraints();", conn=conn)
+        df = df[["table_name", "constraint_type", "constraint_column_names"]]
+        df = df[
+            (df["table_name"] == relation) & (df["constraint_type"] == constraint_type)
+        ]
         if len(df) == 0:
             return []
         elif len(df) == 1:
-            return df['constraint_column_names'].item()
+            return df["constraint_column_names"].item()
         else:
-            raise NotImplementedError(f'Multiple primary keys for {relation}')
+            raise NotImplementedError(f"Multiple primary keys for {relation}")
 
     @transaction()
     def insert(self, relation: str, ta: pa.Table, conn: Connection = None):
@@ -134,7 +133,7 @@ class DuckDBRelStorage(RelStorage, Transactable):
             f'INSERT INTO "{relation}" ({cols_string}) SELECT * FROM {self.TEMP_ARROW_TABLE}'
         )
         conn.unregister(view_name=self.TEMP_ARROW_TABLE)
-    
+
     @transaction()
     def upsert(self, relation: str, ta: pa.Table, conn: Connection = None):
         """

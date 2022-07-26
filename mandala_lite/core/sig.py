@@ -10,6 +10,7 @@ class DefaultSentinel:
 
     pass
 
+
 class Signature:
     """
     Holds the relevant metadata for a memoized function, which includes
@@ -23,12 +24,12 @@ class Signature:
 
     def __init__(
         self,
-        name:str, 
+        name: str,
         version: int,
-        input_names:Set[str],
-        n_outputs:int,
-        defaults:Dict[str, Any],
-        is_super:bool=False
+        input_names: Set[str],
+        n_outputs: int,
+        defaults: Dict[str, Any],
+        is_super: bool = False,
     ):
         self.name = name
         self.version = version
@@ -36,7 +37,7 @@ class Signature:
         self.n_outputs = n_outputs
         self.defaults = defaults
         self.is_super = is_super
-        
+
     ############################################################################
     ### PURE methods for manipulating the signature
     ### to avoid broken state
@@ -53,9 +54,7 @@ class Signature:
         # it is an internal error if you call this on signatures of different
         # versions
         assert new.version == self.version
-        if not set.issubset(
-            set(self.input_names), set(new.input_names)
-        ):
+        if not set.issubset(set(self.input_names), set(new.input_names)):
             raise ValueError("Removing inputs is not supported")
         if not self.n_outputs == new.n_outputs:
             raise ValueError("Changing the number of outputs is not supported")
