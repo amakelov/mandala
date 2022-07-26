@@ -70,6 +70,7 @@ class Context:
         try:
             # commit calls from temp partition to main and tabulate them
             self.storage.commit()
+            self.storage.sync_with_remote()
         except Exception as e:
             exc = e
         self._undo_updates()

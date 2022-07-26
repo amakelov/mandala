@@ -10,7 +10,7 @@ class MongoRemoteStorage(RemoteStorage):
     def __init__(self, db_name: str, client: pymongo.MongoClient):
         self.db_name = db_name
         self.client = client
-        self.log = client[self.db_name].event_log
+        self.log = client.experiment_data[self.db_name].event_log
 
     def save_event_log_entry(self, entry: RemoteEventLogEntry):
         response = self.log.insert_one(entry)

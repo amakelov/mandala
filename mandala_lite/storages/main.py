@@ -1,6 +1,7 @@
 from .kv import InMemoryStorage
 from .rel_impls.duckdb_impl import DuckDBRelStorage
 from .rels import RelAdapter
+from .remote_storage import RemoteStorage, RemoteSyncManager
 from ..common_imports import *
 from ..core.config import Config
 from ..core.model import Call
@@ -19,7 +20,7 @@ class Storage:
         any necessary updates
     """
 
-    def __init__(self, root: Optional[Path] = None):
+    def __init__(self, root: Optional[Union[Path, RemoteStorage]] = None):
         self.root = root
         self.call_cache = InMemoryStorage()
         self.obj_cache = InMemoryStorage()
@@ -31,6 +32,13 @@ class Storage:
         # stores the signatures of the operations connected to this storage
         # (name, version) -> signature
         self.sigs: Dict[Tuple[str, int], Signature] = {}
+
+        self.remote_sync_manager = None
+        # manage remote storage
+        if isinstance(root, RemoteStorage):
+            self.remote_sync_manager = RemoteSyncManager(
+                local_storage=self.rel_adapter, remote_storage=root
+            )
 
     def call_exists(self, call_uid: str) -> bool:
         return self.call_cache.exists(call_uid) or self.rel_adapter.call_exists(
@@ -81,6 +89,11 @@ class Storage:
         # Remove dirty bits from cache.
         self.obj_cache.dirty_entries.clear()
         self.call_cache.dirty_entries.clear()
+
+    def sync_with_remote(self):
+        if self.remote_sync_manager is not None:
+            self.remote_sync_manager.sync_to_remote()
+            self.remote_sync_manager.sync_from_remote()
 
     def synchronize(self, sig: Signature) -> Signature:
         """
