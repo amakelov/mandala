@@ -2,7 +2,7 @@ from ..common_imports import *
 from ..core.model import unwrap
 from ..storages.main import Storage
 from ..queries.weaver import ValQuery
-from ..queries.compiler import traverse_all, solve_query, Compiler
+from ..queries.compiler import traverse_all, Compiler
 
 
 class MODES:

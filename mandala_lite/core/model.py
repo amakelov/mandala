@@ -163,8 +163,8 @@ class FuncOp:
         Computes the function with the given *unwrapped* inputs, named by
         internal input names.
         """
-        inv_mapping = {v: k for k, v in self.sig.ext_to_int_input_map.items()}
-        inputs = {inv_mapping[k]: v for k, v in inputs.items()}
+        # inv_mapping = {v: k for k, v in self.sig.ext_to_int_input_map.items()}
+        # inputs = {inv_mapping[k]: v for k, v in inputs.items()}
         result = self.func(**inputs)
         if self.sig.n_outputs == 0:
             assert result is None, "Function returned non-None value"

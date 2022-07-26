@@ -258,7 +258,7 @@ class RelAdapter(Transactable):
         # split by operation internal name
         calls_by_op = defaultdict(list)
         for call in calls:
-            calls_by_op[call.op.sig.internal_name].append(call)
+            calls_by_op[call.op.sig.name].append(call)
         res = {}
         for k, v in calls_by_op.items():
             res[k] = pa.Table.from_pylist(
@@ -287,7 +287,7 @@ class RelAdapter(Transactable):
         dfs = []
         for call in calls:
             call_uid = call.uid
-            op_name = call.op.sig.internal_name
+            op_name = call.op.sig.name
             op_version = call.op.sig.version
             input_names = list(call.inputs.keys())
             input_uids = [call.inputs[k].uid for k in input_names]

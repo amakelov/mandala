@@ -61,7 +61,7 @@ class FuncInterface:
         inputs_dict = dict(bound_args.arguments)
         # rename to internal names
         inputs_dict = {
-            self.op.sig.ext_to_int_input_map[k]: v for k, v in inputs_dict.items()
+            k: v for k, v in inputs_dict.items()
         }
         return inputs_dict
 
@@ -87,7 +87,7 @@ class FuncInterface:
         call_uid = Hashing.get_content_hash(
             obj=[
                 {k: v.uid for k, v in wrapped_inputs.items()},
-                self.op.sig.internal_name,
+                self.op.sig.name,
             ]
         )
         # check if call UID exists in call storage

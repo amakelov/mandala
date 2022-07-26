@@ -10,94 +10,43 @@ class DefaultSentinel:
 
     pass
 
-
 class Signature:
     """
     Holds the relevant metadata for a memoized function, which includes
-        - the function's external (human-facing) and internal (used by storage)
-        name,
-        - the external and internal input names (and the mapping between them),
+        - the function's name
         - the version,
-        - and the default values.
+        - the input names, default values, and number of outputs
         - (optional) superop status
 
     Responsible for manipulating this state and keeping it consistent.
-
-    The internal name of the function is an immutable UID that is used to
-    identify the function throughout its entire lifetime for the storage it is
-    connected to. The external name is what the function is named in the source
-    code, and can be changed efficiently (i.e., without having to change all
-    stored calls, which refer to the internal name).
-
-    The internal input names are immutable UIDs generated at the time of
-    creation of each function input to similarly enable efficient renaming of
-    the human-facing (external) function arguments.
-
-    NOTE: in most of the core code, internal names are used. The mapping from
-    external to internal names is performed as close as possible to the
-    user-facing code.
     """
 
     def __init__(
         self,
-        external_name: str,
-        external_input_names: Set[str],
-        n_outputs: int,
-        defaults: Dict[str, Any],
+        name:str, 
         version: int,
-        is_super: bool = False,
+        input_names:Set[str],
+        n_outputs:int,
+        defaults:Dict[str, Any],
+        is_super:bool=False
     ):
-        self.external_name = external_name
-        self.external_input_names = external_input_names
-        self.defaults = defaults
-        self.n_outputs = n_outputs
+        self.name = name
         self.version = version
-        self._internal_name = None
+        self.input_names = input_names
+        self.n_outputs = n_outputs
+        self.defaults = defaults
         self.is_super = is_super
-        # external name -> internal name
-        self._ext_to_int_input_map = None
-
-    @property
-    def internal_name(self) -> str:
-        if self._internal_name is None:
-            raise ValueError("Internal name not set")
-        return self._internal_name
-
-    @property
-    def ext_to_int_input_map(self) -> Dict[str, str]:
-        if self._ext_to_int_input_map is None:
-            raise ValueError("Internal name not set")
-        return self._ext_to_int_input_map
-
-    @property
-    def has_internal_data(self) -> bool:
-        return self._internal_name is not None
-
-    @property
-    def internal_input_names(self) -> Set[str]:
-        return set(self.ext_to_int_input_map.values())
-
+        
     ############################################################################
     ### PURE methods for manipulating the signature
     ### to avoid broken state
     ############################################################################
-    def _generate_internal(self) -> "Signature":
-        """
-        Assign internal names to random UIDs.
-        """
-        res = copy.deepcopy(self)
-        res._internal_name, res._ext_to_int_input_map = get_uid(), {
-            k: get_uid() for k in self.external_input_names
-        }
-        return res
-
     def update(self, new: "Signature") -> "Signature":
         """
         Return an updated version of this signature based on a new signature.
 
         This takes care of
             - checking that the new signature is compatible with the old one
-            - generating names for new inputs.
 
         TODO: return a description of the updates for downstream needs
         """
@@ -105,7 +54,7 @@ class Signature:
         # versions
         assert new.version == self.version
         if not set.issubset(
-            set(self.external_input_names), set(new.external_input_names)
+            set(self.input_names), set(new.input_names)
         ):
             raise ValueError("Removing inputs is not supported")
         if not self.n_outputs == new.n_outputs:
@@ -118,8 +67,8 @@ class Signature:
         if self.is_super != new.is_super:
             raise ValueError("Changing superop status is not supported")
         res = copy.deepcopy(self)
-        for k in new.external_input_names:
-            if k not in res.external_input_names:
+        for k in new.input_names:
+            if k not in res.input_names:
                 res.create_input(name=k, default=new_defaults.get(k, DefaultSentinel))
         return res
 
@@ -127,35 +76,29 @@ class Signature:
         """
         Add an input to this signature, with optional default value
         """
-        if name in self.external_input_names:
+        if name in self.input_names:
             raise ValueError(f'Input "{name}" already exists')
-        if not self.has_internal_data:
-            raise ValueError("Cannot add inputs to a signature without internal data")
         res = copy.deepcopy(self)
-        res.external_input_names.add(name)
-        internal_name = get_uid()
-        res.ext_to_int_input_map[name] = internal_name
+        res.input_names.add(name)
         if default is not DefaultSentinel:
             res.defaults[name] = default
         return res
 
     def rename(self, new_name: str) -> "Signature":
         """
-        Change the external name
+        Change the name
         """
         res = copy.deepcopy(self)
-        res.external_name = new_name
+        res.name = new_name
         return res
 
     def rename_input(self, name: str, new_name: str) -> "Signature":
         """
-        Change the external name of an input
+        Change the name of an input
         """
         res = copy.deepcopy(self)
-        internal_name = self.ext_to_int_input_map[name]
-        res.external_input_names.remove(name)
-        res.external_input_names.add(new_name)
-        res.ext_to_int_input_map[new_name] = internal_name
+        res.input_names.remove(name)
+        res.input_names.add(new_name)
         return res
 
     @staticmethod
@@ -189,8 +132,8 @@ class Signature:
             if param.default is not inspect.Parameter.empty
         }
         return Signature(
-            external_name=name,
-            external_input_names=input_names,
+            name=name,
+            input_names=input_names,
             n_outputs=n_outputs,
             defaults=defaults,
             version=version,

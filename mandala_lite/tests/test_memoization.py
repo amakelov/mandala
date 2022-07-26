@@ -10,7 +10,7 @@ def test_func_creation():
         return x + y
 
     assert add.op.sig.n_outputs == 1
-    assert add.op.sig.external_input_names == {"x", "y"}
+    assert add.op.sig.input_names == {"x", "y"}
     assert add.op.sig.defaults == {"y": 42}
     check_invariants(storage)
 
