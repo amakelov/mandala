@@ -152,10 +152,7 @@ class RelAdapter(Transactable):
             .where(table[Config.uid_col].isin(keys))
             .select(table[Config.uid_col], table.value)
         )
-        try:
-            output = self.rel_storage.execute_arrow(query, conn=conn).to_pandas()
-        except:
-            x = 2  # TODO
+        output = self.rel_storage.execute_arrow(query, conn=conn).to_pandas()
         output["value"] = output["value"].map(lambda x: deserialize(bytes(x)))
         return output
 
@@ -224,17 +221,18 @@ class RelAdapter(Transactable):
             tables_with_changes[table_name] = self.rel_storage.execute_arrow(
                 query=Query.from_(table)
                 .join(event_log_table)
-                .on(table[Config.uid_col] == event_log_table[Config.uid_col]),
+                .on(table[Config.uid_col] == event_log_table[Config.uid_col])
+                .select(table.star),
                 conn=conn,
             )
 
         output = {}
         for table_name in tables_with_changes:
             buffer = io.BytesIO()
-            tables_with_changes[table_name].to_parquet(buffer)
-            output[table_name] = buffer.getbuffer()
+            pq.write_table(tables_with_changes[table_name], buffer)
+            output[table_name] = buffer.getvalue()
 
-        self.rel_storage.execute_arrow(
+        self.rel_storage.execute_no_results(
             query=Query.from_(event_log_table).delete(), conn=conn
         )
         return output

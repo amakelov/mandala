@@ -14,7 +14,7 @@ class RemoteStorage(abc.ABC):
     @abstractmethod
     def get_log_entries_since(
         self, timestamp: datetime.datetime
-    ) -> list[RemoteEventLogEntry]:
+    ) -> tuple[list[RemoteEventLogEntry], datetime.datetime]:
         raise NotImplementedError()
 
 
@@ -32,9 +32,11 @@ class RemoteSyncManager:
         )
 
     def sync_from_remote(self):
-        new_log_entries = self.remote_storage.log_entries_since(self.last_timestamp)
+        new_log_entries, timestamp = self.remote_storage.get_log_entries_since(
+            self.last_timestamp
+        )
         self.local_storage.apply_from_remote(new_log_entries)
-        self.last_timestamp = max(entry["timestamp"] for entry in new_log_entries)
+        self.last_timestamp = timestamp
 
     def sync_to_remote(self):
         changes = self.local_storage.bundle_to_remote()
