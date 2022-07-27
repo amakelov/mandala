@@ -1,12 +1,16 @@
+import mongomock
+
 from ..common_imports import *
 from mandala_lite.all import *
 from mandala_lite.ui.context import MODES
+from mandala_lite.storages.remote_impls.mongo_impl import MongoRemoteStorage
+from mandala_lite.storages.remote_impls.mongo_mock import MongoMockRemoteStorage
 
 
 def call_matches_signature(call: Call, sig: Signature) -> bool:
     return (
-        call.op.sig.internal_name == sig.internal_name
-        and set(call.inputs.keys()).issubset(sig.internal_input_names)
+        call.op.sig.name == sig.name
+        and set(call.inputs.keys()).issubset(sig.input_names)
         and len(call.outputs) == sig.n_outputs
     )
 

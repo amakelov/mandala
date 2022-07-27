@@ -13,6 +13,8 @@ class Config:
     output_wrap_method = "content"
     # whether to empty the call and vref caches upon committing to the RDBMS
     evict_on_commit = True
+    # whether to commit on context exit
+    autocommit = True
 
     ### constants
     uid_col = "__uid__"

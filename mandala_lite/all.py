@@ -8,4 +8,4 @@ from .ui.context import Context, run, query, MODES
 
 ### testing stuff
 from .storages.rel_impls.duckdb_impl import DuckDBRelStorage
-from .tests.utils import check_invariants
+from .tests.utils import *

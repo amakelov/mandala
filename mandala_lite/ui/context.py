@@ -1,5 +1,6 @@
 from ..common_imports import *
 from ..core.model import unwrap
+from ..core.config import Config
 from ..storages.main import Storage
 from ..queries.weaver import ValQuery
 from ..queries.compiler import traverse_all, Compiler
@@ -43,8 +44,6 @@ class Context:
         updates = self.updates
         if not all(k in ("storage", "mode", "lazy") for k in updates.keys()):
             raise ValueError(updates.keys())
-        # Load state from remote
-        updates['storage'].sync_with_remote()
         ### backup state
         before_update = self._backup_state(keys=updates.keys())
         self._updates_stack.append(before_update)
@@ -52,6 +51,9 @@ class Context:
         for k, v in updates.items():
             if v is not None:
                 self.__dict__[f"{k}"] = v
+        # Load state from remote
+        if self.storage is not None:
+            self.storage.sync_with_remote()
         return self
 
     def _undo_updates(self):
@@ -71,7 +73,8 @@ class Context:
         exc = None
         try:
             # commit calls from temp partition to main and tabulate them
-            self.storage.commit()
+            if Config.autocommit:
+                self.storage.commit()
             self.storage.sync_with_remote()
         except Exception as e:
             exc = e
