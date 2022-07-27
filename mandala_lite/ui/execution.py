@@ -4,7 +4,6 @@ from ..core.model import FuncOp, ValueRef, Call, wrap
 from ..core.utils import Hashing
 from ..storages.main import Storage
 from ..queries.weaver import ValQuery, FuncQuery
-from .context import GlobalContext, MODES
 
 
 class FuncInterface:
@@ -131,19 +130,16 @@ class FuncInterface:
         func_query.set_outputs(outputs=outputs)
         return outputs
 
-    def __call__(self, *args, **kwargs) -> List[ValueRef]:
+    def __call__(self, *args, **kwargs) -> Union[List[ValueRef], List[ValQuery]]:
         inputs = self.bind_inputs(args, kwargs)
-        context = GlobalContext.current
-        if context is None:
-            raise RuntimeError("No context to call from")
-        mode = context.mode
-        if mode == MODES.run:
-            outputs, call = self.call_run(inputs)
-            return self.format_as_outputs(outputs=outputs)
-        elif mode == MODES.query:
-            return self.format_as_outputs(outputs=self.call_query(inputs))
-        else:
-            raise ValueError()
+        for x in inputs.values():
+            if isinstance(x, ValQuery):
+                # Operate in query mode.
+                return self.format_as_outputs(outputs=self.call_query(inputs))
+
+        # Operate in run mode.
+        outputs, call = self.call_run(inputs)
+        return self.format_as_outputs(outputs=outputs)
 
 
 class FuncDecorator:

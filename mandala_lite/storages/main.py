@@ -4,8 +4,10 @@ from .rels import RelAdapter
 from .remote_storage import RemoteStorage, RemoteSyncManager
 from ..common_imports import *
 from ..core.config import Config
-from ..core.model import Call
+from ..core.model import Call, unwrap
 from ..core.sig import Signature
+from ..queries.weaver import ValQuery
+from ..queries.compiler import traverse_all, Compiler
 
 
 class Storage:
@@ -123,3 +125,30 @@ class Storage:
             res = current.update(new=sig)
             # TODO: update relation if a new input was created
             return res
+
+    def get_table(self, *queries: ValQuery) -> pd.DataFrame:
+        # ! EXTREMELY IMPORTANT
+        # We must sync any dirty cache elements to the DuckDB store before performing a query.
+        # If we don't, we'll query a store that might be missing calls and objs.
+        self.commit()
+
+        # compile the computational graph to SQL and execute the query
+        select_queries = list(queries)
+        val_queries, func_queries = traverse_all(select_queries)
+        compiler = Compiler(val_queries=val_queries, func_queries=func_queries)
+        query = compiler.compile(select_queries=select_queries)
+        df = self.rel_storage.execute_df(query=str(query))
+
+        # now, evaluate the table
+        keys_to_collect = [
+            item for _, column in df.iteritems() for _, item in column.iteritems()
+        ]
+        self.preload_objs(keys_to_collect)
+        result = df.applymap(lambda key: unwrap(self.obj_get(key)))
+
+        # finally, name the columns
+        result.columns = [
+            f"unnamed_{i}" if query.column_name is None else query.column_name
+            for i, query in zip(range(len(result.columns)), queries)
+        ]
+        return result

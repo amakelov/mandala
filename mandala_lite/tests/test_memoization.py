@@ -30,24 +30,21 @@ def test_computation():
             return x + y
 
         # chain some functions
-        with run(storage):
-            x = 23
-            y = inc(x)
-            z = add(x, y)
+        x = 23
+        y = inc(x)
+        z = add(x, y)
         check_invariants(storage)
         # run it again
-        with run(storage):
-            x = 23
-            y = inc(x)
-            z = add(x, y)
+        x = 23
+        y = inc(x)
+        z = add(x, y)
         check_invariants(storage)
         # do some more things
-        with run(storage):
-            x = 42
-            y = inc(x)
-            z = add(x, y)
-            for i in range(10):
-                z = add(z, i)
+        x = 42
+        y = inc(x)
+        z = add(x, y)
+        for i in range(10):
+            z = add(z, i)
         check_invariants(storage)
 
 
@@ -72,9 +69,8 @@ def test_nosuperops():
             x = inc(x)
         return x
 
-    with run(storage):
-        n = add(x=wrap(23), y=wrap(42))
-        a = inc_n_times(x=wrap(23), n=n)
+    n = add(x=wrap(23), y=wrap(42))
+    a = inc_n_times(x=wrap(23), n=n)
     check_invariants(storage)
 
     # re-enable for isolation

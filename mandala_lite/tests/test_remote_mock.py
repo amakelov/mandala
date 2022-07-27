@@ -1,7 +1,7 @@
 import mongomock
 
 from mandala_lite.all import *
-from mandala_lite.tests.utils import *
+from mandala_lite.storages.remote_impls.mongo_mock import MongoMockRemoteStorage
 
 
 def test_remote():
@@ -19,8 +19,7 @@ def test_remote():
     def add(x: int, y: int = 42) -> int:
         return x + y
 
-    with run(storage_1):
-        add(23, 42)
+    add(23, 42)
     storage_1.sync_with_remote()
 
     # sync with the other storage
