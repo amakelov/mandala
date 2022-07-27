@@ -182,6 +182,19 @@ class DuckDBRelStorage(RelStorage, Transactable):
         return conn.execute(query, parameters=parameters).fetch_arrow_table()
 
     @transaction()
+    def execute_no_results(
+        self,
+        query: Union[str, Query],
+        parameters: list[Any] = None,
+        conn: Connection = None,
+    ) -> None:
+        if parameters is None:
+            parameters = []
+        if not isinstance(query, str):
+            query = str(query)
+        return conn.execute(query, parameters=parameters)
+
+    @transaction()
     def execute_df(
         self,
         query: Union[str, Query],

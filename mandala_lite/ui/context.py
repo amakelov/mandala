@@ -43,6 +43,8 @@ class Context:
         updates = self.updates
         if not all(k in ("storage", "mode", "lazy") for k in updates.keys()):
             raise ValueError(updates.keys())
+        # Load state from remote
+        updates['storage'].sync_with_remote()
         ### backup state
         before_update = self._backup_state(keys=updates.keys())
         self._updates_stack.append(before_update)
