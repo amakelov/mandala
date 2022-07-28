@@ -143,7 +143,7 @@ in some sort of collection)
 Transient results are a feature in `mandala` that allows you to mark function
 outputs in order to prevent saving them to storage. For a motivating example,
 ```python
-@op()
+@op
 def inc_large_array(large_array:Array) -> Array:
     return AsTransient(large_array + 1)
 ```

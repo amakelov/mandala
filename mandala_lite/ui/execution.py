@@ -14,9 +14,8 @@ class FuncInterface:
     This is the object the `@op` decorator converts functions into.
     """
 
-    def __init__(self, op: FuncOp, storage: Storage):
+    def __init__(self, op: FuncOp):
         self.op = op
-        self.storage = storage
 
     def wrap_inputs(self, inputs: Dict[str, Any]) -> Dict[str, ValueRef]:
         # check if we allow implicit wrapping
@@ -70,7 +69,8 @@ class FuncInterface:
             return tuple(outputs)
 
     def call_run(
-        self, inputs: Dict[str, Union[Any, ValueRef]]
+        self, inputs: Dict[str, Union[Any, ValueRef]],
+            storage: Storage
     ) -> Tuple[List[ValueRef], Call]:
         """
         Run the function and return the outputs and the call object.
@@ -85,12 +85,12 @@ class FuncInterface:
             ]
         )
         # check if call UID exists in call storage
-        if self.storage.call_exists(call_uid):
+        if storage.call_exists(call_uid):
             # get call from call storage
-            call = self.storage.call_get(call_uid)
+            call = storage.call_get(call_uid)
             # get outputs from obj storage
-            self.storage.preload_objs([v.uid for v in call.outputs])
-            wrapped_outputs = [self.storage.obj_get(v.uid) for v in call.outputs]
+            storage.preload_objs([v.uid for v in call.outputs])
+            wrapped_outputs = [storage.obj_get(v.uid) for v in call.outputs]
             # return outputs and call
             return wrapped_outputs, call
         else:
@@ -107,10 +107,10 @@ class FuncInterface:
                 uid=call_uid, inputs=wrapped_inputs, outputs=wrapped_outputs, op=self.op
             )
             # save *detached* call in call storage
-            self.storage.call_set(call_uid, call)
+            storage.call_set(call_uid, call)
             # set inputs and outputs in obj storage
             for v in itertools.chain(wrapped_outputs, wrapped_inputs.values()):
-                self.storage.obj_set(v.uid, v)
+                storage.obj_set(v.uid, v)
             # return outputs and call
             return wrapped_outputs, call
 
@@ -130,30 +130,17 @@ class FuncInterface:
     def __call__(self, *args, **kwargs) -> List[ValueRef]:
         inputs = self.bind_inputs(args, kwargs)
         context = GlobalContext.current
+        context.storage.synchronize(sig=self.op.sig)
         if context is None:
             raise RuntimeError("No context to call from")
         mode = context.mode
         if mode == MODES.run:
-            outputs, call = self.call_run(inputs)
+            outputs, call = self.call_run(inputs, context.storage)
             return self.format_as_outputs(outputs=outputs)
         elif mode == MODES.query:
             return self.format_as_outputs(outputs=self.call_query(inputs))
         else:
             raise ValueError()
-
-
-class FuncDecorator:
-    """
-    This is the `@op` decorator internally
-    """
-
-    def __init__(self, storage: Storage):
-        self.storage = storage
-
-    def __call__(self, func) -> "FuncInterface":
-        op = FuncOp(func=func)
-        op.sig = self.storage.synchronize(sig=op.sig)
-        return FuncInterface(op=op, storage=self.storage)
 
 
 def Q() -> ValQuery:
@@ -166,4 +153,5 @@ def Q() -> ValQuery:
     return ValQuery(creator=None, created_as=None)
 
 
-op = FuncDecorator
+def op(func: Callable) -> FuncInterface:
+    return FuncInterface(FuncOp(func=func))

@@ -6,6 +6,7 @@ from pypika import Query, Column
 from .bases import RelStorage
 from .utils import Transactable, transaction
 from ...common_imports import *
+from ...core.config import Config
 
 
 class DuckDBRelStorage(RelStorage, Transactable):
@@ -28,6 +29,10 @@ class DuckDBRelStorage(RelStorage, Transactable):
     @transaction()
     def get_tables(self, conn: Connection = None) -> List[str]:
         return conn.execute("SHOW TABLES;").fetchdf()["name"].values.tolist()
+
+    @transaction ()
+    def table_exists(self, relation: str, conn: Connection = None) -> bool:
+        return relation in self.get_tables()
 
     @transaction()
     def get_data(self, table: str, conn: Connection = None) -> pd.DataFrame:
@@ -55,7 +60,7 @@ class DuckDBRelStorage(RelStorage, Transactable):
         """
         Create a table with given columns, with an optional primary key
         """
-        query = Query.create_table(table=name).columns(
+        query = Query.create_table(table=name).if_not_exists().columns(
             *[
                 Column(
                     column_name=c,
@@ -141,6 +146,9 @@ class DuckDBRelStorage(RelStorage, Transactable):
         """
         if len(ta) == 0:
             return
+        # TODO this a temporary hack until we get function signature sync working!
+        if not self.table_exists(relation):
+            self.create_relation(relation, [(col, None) for col in ta.column_names], primary_key=Config.uid_col)
         table_cols = self._get_cols(relation=relation, conn=conn)
         assert set(ta.column_names) == set(table_cols)
         cols_string = ", ".join([f'"{column_name}"' for column_name in ta.column_names])

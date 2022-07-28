@@ -5,7 +5,7 @@ from mandala_lite.tests.utils import *
 def test_func_creation():
     storage = Storage()
 
-    @op(storage)
+    @op
     def add(x: int, y: int = 42) -> int:
         return x + y
 
@@ -21,11 +21,11 @@ def test_computation():
 
         storage = Storage()
 
-        @op(storage)
+        @op
         def inc(x: int) -> int:
             return x + 1
 
-        @op(storage)
+        @op
         def add(x: int, y: int) -> int:
             return x + y
 
@@ -58,15 +58,15 @@ def test_nosuperops():
 
     storage = Storage()
 
-    @op(storage)
+    @op
     def inc(x: int) -> int:
         return unwrap(x) + 1
 
-    @op(storage)
+    @op
     def add(x: int, y: int) -> int:
         return unwrap(x) + unwrap(y)
 
-    @op(storage)
+    @op
     def inc_n_times(x: int, n: int) -> int:
         for i in range(unwrap(n)):
             x = inc(x)

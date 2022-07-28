@@ -15,7 +15,7 @@ def test_remote():
     storage_2 = Storage(root=MongoMockRemoteStorage(db_name="test", client=client))
 
     # do work with one storage
-    @op(storage_1)
+    @op
     def add(x: int, y: int = 42) -> int:
         return x + y
 
@@ -24,10 +24,6 @@ def test_remote():
     storage_1.sync_with_remote()
 
     # sync with the other storage
-    @op(storage_2)
-    def add(x: int, y: int = 42) -> int:
-        return x + y
-
     storage_2.sync_with_remote()
 
     # verify equality of relational data
