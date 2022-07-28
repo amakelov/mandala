@@ -16,6 +16,7 @@ class FuncInterface:
 
     def __init__(self, op: FuncOp):
         self.op = op
+        self.__name__ = self.op.func.__name__
 
     def wrap_inputs(self, inputs: Dict[str, Any]) -> Dict[str, ValueRef]:
         # check if we allow implicit wrapping
