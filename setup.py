@@ -16,6 +16,7 @@ extras_require = {
         "pytest >= 6.0.0",
         "scikit-learn >= 1.0.0",  # sklearn 1.0+ requires python 3.7+
         "ipython",
+        "mongomock",
     ],
 }
 
