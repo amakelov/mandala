@@ -19,10 +19,6 @@ class FuncInterface:
         self.storage = storage
 
     def wrap_inputs(self, inputs: Dict[str, Any]) -> Dict[str, ValueRef]:
-        # "explicit" superops must always receive wrapped inputs
-        if self.op.sig.is_super:
-            assert all(isinstance(v, ValueRef) for v in inputs.values())
-            return inputs
         # check if we allow implicit wrapping
         if Config.autowrap_inputs:
             return {k: wrap(v) for k, v in inputs.items()}
@@ -151,12 +147,11 @@ class FuncDecorator:
     This is the `@op` decorator internally
     """
 
-    def __init__(self, storage: Storage, is_super: bool = False):
+    def __init__(self, storage: Storage):
         self.storage = storage
-        self.super = is_super
 
     def __call__(self, func) -> "FuncInterface":
-        op = FuncOp(func=func, is_super=self.super)
+        op = FuncOp(func=func)
         op.sig = self.storage.synchronize(sig=op.sig)
         return FuncInterface(op=op, storage=self.storage)
 

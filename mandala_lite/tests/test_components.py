@@ -34,7 +34,6 @@ def test_signatures():
         n_outputs=1,
         defaults={"y": 42},
         version=0,
-        is_super=False,
     )
 
     ### invalid signature changes
@@ -45,7 +44,6 @@ def test_signatures():
         n_outputs=1,
         defaults={"y": 42},
         version=0,
-        is_super=False,
     )
     try:
         sig.update(new=new)
@@ -59,7 +57,6 @@ def test_signatures():
         n_outputs=2,
         defaults={"y": 42},
         version=0,
-        is_super=False,
     )
     try:
         sig.update(new=new)
@@ -73,7 +70,6 @@ def test_signatures():
         n_outputs=1,
         defaults={},
         version=0,
-        is_super=False,
     )
     try:
         sig.update(new=new)
@@ -87,7 +83,6 @@ def test_signatures():
         n_outputs=1,
         defaults={"y": 42},
         version=1,
-        is_super=False,
     )
     try:
         sig.update(new=new)

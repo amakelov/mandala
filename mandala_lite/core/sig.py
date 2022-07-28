@@ -28,15 +28,13 @@ class Signature:
         version: int,
         input_names: Set[str],
         n_outputs: int,
-        defaults: Dict[str, Any],
-        is_super: bool = False,
+        defaults: Dict[str, Any]
     ):
         self.name = name
         self.version = version
         self.input_names = input_names
         self.n_outputs = n_outputs
         self.defaults = defaults
-        self.is_super = is_super
 
     ############################################################################
     ### PURE methods for manipulating the signature
@@ -63,8 +61,6 @@ class Signature:
             raise ValueError("Dropping defaults is not supported")
         if {k: new_defaults[k] for k in self.defaults} != self.defaults:
             raise ValueError("Changing defaults is not supported")
-        if self.is_super != new.is_super:
-            raise ValueError("Changing superop status is not supported")
         res = copy.deepcopy(self)
         for k in new.input_names:
             if k not in res.input_names:
@@ -102,7 +98,7 @@ class Signature:
 
     @staticmethod
     def from_py(
-        name: str, version: int, sig: inspect.Signature, is_super: bool = False
+        name: str, version: int, sig: inspect.Signature
     ) -> "Signature":
         """
         Create a `Signature` from a Python function's signature and the other
@@ -136,5 +132,4 @@ class Signature:
             n_outputs=n_outputs,
             defaults=defaults,
             version=version,
-            is_super=is_super,
         )

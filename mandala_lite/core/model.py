@@ -146,14 +146,13 @@ class FuncOp:
         - `Signature`
     """
 
-    def __init__(self, func: Callable, version: int = 0, is_super: bool = False):
+    def __init__(self, func: Callable, version: int = 0):
         self.func = func
         self.py_sig = inspect.signature(self.func)
         self.sig = Signature.from_py(
             sig=inspect.signature(func),
             name=func.__name__,
-            version=version,
-            is_super=is_super,
+            version=version
         )
         # TODO: use this
         self.is_synchronized = False

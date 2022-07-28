@@ -27,7 +27,6 @@ class Prov:
     call_uid = "call_uid"
     op_name = "op_name"
     op_version = "op_version"
-    is_super = "is_super"
     vref_name = "vref_name"
     vref_uid = "vref_uid"
     is_input = "is_input"
