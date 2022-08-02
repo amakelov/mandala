@@ -95,13 +95,13 @@ class Storage:
             self.remote_sync_manager.sync_to_remote()
             self.remote_sync_manager.sync_from_remote()
 
-    ############################################################################ 
+    ############################################################################
     ### synchronization, renaming, refactoring
-    ############################################################################ 
+    ############################################################################
     @property
     def is_clean(self) -> bool:
-        return (self.call_cache.is_clean and self.obj_cache.is_clean)
-        
+        return self.call_cache.is_clean and self.obj_cache.is_clean
+
     def synchronize(self, sig: Signature) -> Signature:
         """
         Synchronize an op's signature with this storage.
@@ -114,7 +114,9 @@ class Storage:
             - otherwise, an error is raised
         """
         conn = self.rel_adapter._get_connection()
-        if not self.rel_adapter.has_signature(name=sig.name, version=sig.version, conn=conn):
+        if not self.rel_adapter.has_signature(
+            name=sig.name, version=sig.version, conn=conn
+        ):
             new_sig = sig._generate_internal()
             self.rel_adapter.write_signature(sig=new_sig, conn=conn)
             # create relation
@@ -123,20 +125,30 @@ class Storage:
             ]
             columns = [(Config.uid_col, None)] + [(column, None) for column in columns]
             self.rel_storage.create_relation(
-                name=new_sig.versioned_name, columns=columns, primary_key=Config.uid_col,
-                conn=conn
+                name=new_sig.versioned_name,
+                columns=columns,
+                primary_key=Config.uid_col,
+                conn=conn,
             )
         else:
-            current = self.rel_adapter.get_signature(name=sig.name, version=sig.version, conn=conn)
+            current = self.rel_adapter.get_signature(
+                name=sig.name, version=sig.version, conn=conn
+            )
             new_sig, updates = current.update(new=sig)
             # create new inputs, if any
             for new_input, default_value in updates.items():
                 default_uid = new_sig._new_input_defaults_uids[new_input]
-                self.rel_storage.create_column(relation=new_sig.versioned_name, name=new_input, 
-                                               default_value=default_uid, conn=conn)
+                self.rel_storage.create_column(
+                    relation=new_sig.versioned_name,
+                    name=new_input,
+                    default_value=default_uid,
+                    conn=conn,
+                )
                 # insert the default in the objects *in the database*, if it's
                 # not there already
-                self.rel_adapter.obj_set(key=default_uid, value=default_value, conn=conn)
+                self.rel_adapter.obj_set(
+                    key=default_uid, value=default_value, conn=conn
+                )
             self.rel_adapter.write_signature(sig=new_sig, conn=conn)
         self.rel_adapter._end_transaction(conn=conn)
         return new_sig

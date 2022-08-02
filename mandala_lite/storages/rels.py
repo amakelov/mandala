@@ -36,7 +36,8 @@ class RelAdapter(Transactable):
         EVENT_LOG_TABLE,
         DuckDBRelStorage.TEMP_ARROW_TABLE,
         SCHEMA_TABLE,
-        SCHEMA_EVENT_LOG_TABLE)
+        SCHEMA_EVENT_LOG_TABLE,
+    )
 
     def __init__(self, rel_storage: DuckDBRelStorage):
         self.rel_storage = rel_storage
@@ -74,9 +75,13 @@ class RelAdapter(Transactable):
         # connected to the storage
         self.rel_storage.create_relation(
             name=self.SCHEMA_TABLE,
-            columns=[(Config.uid_col, None), ("version", "integer"), ("signature", "blob")],
+            columns=[
+                (Config.uid_col, None),
+                ("version", "integer"),
+                ("signature", "blob"),
+            ],
             primary_key=Config.uid_col,
-            conn=conn
+            conn=conn,
         )
         # The schema event log is a list of descriptions of changes to
         # signatures
@@ -84,7 +89,7 @@ class RelAdapter(Transactable):
             name=self.SCHEMA_EVENT_LOG_TABLE,
             columns=[(Config.uid_col, None), ("change", "blob")],
             primary_key=Config.uid_col,
-            conn=conn
+            conn=conn,
         )
 
     @transaction()
@@ -94,31 +99,31 @@ class RelAdapter(Transactable):
             t for t in tables if t not in self.SPECIAL_TABLES and t != self.VREF_TABLE
         ]
 
-    ############################################################################ 
+    ############################################################################
     ### event log stuff
-    ############################################################################ 
+    ############################################################################
     def log_change(self, table: str, key: str):
         self.rel_storage.upsert(
             self.EVENT_LOG_TABLE,
             pa.Table.from_pylist([{Config.uid_col: key, "table": table}]),
         )
-    
+
     @transaction()
-    def event_log_is_clean(self, conn:Connection=None) -> bool:
+    def event_log_is_clean(self, conn: Connection = None) -> bool:
         return self.rel_storage.get_count(table=self.EVENT_LOG_TABLE, conn=conn) == 0
 
-    ############################################################################ 
-    ### `Transactable` interface 
-    ############################################################################ 
+    ############################################################################
+    ### `Transactable` interface
+    ############################################################################
     def _get_connection(self) -> Connection:
         return self.rel_storage._get_connection()
 
     def _end_transaction(self, conn: Connection):
         return self.rel_storage._end_transaction(conn=conn)
 
-    ############################################################################ 
+    ############################################################################
     ### call methods
-    ############################################################################ 
+    ############################################################################
     @staticmethod
     def tabulate_calls(calls: List[Call]) -> Dict[str, pa.Table]:
         """
@@ -201,9 +206,9 @@ class RelAdapter(Transactable):
         )
         self.upsert_calls([call], conn=conn)
 
-    ############################################################################ 
+    ############################################################################
     ### object methods
-    ############################################################################ 
+    ############################################################################
     @transaction()
     def obj_gets(self, keys: list[str], conn: Connection = None) -> pd.DataFrame:
         if len(keys) == 0:
@@ -271,46 +276,55 @@ class RelAdapter(Transactable):
         )
         self.rel_storage.upsert(relation=self.EVENT_LOG_TABLE, ta=log_ta, conn=conn)
 
-    ############################################################################ 
+    ############################################################################
     ### accessing signature data
-    ############################################################################ 
+    ############################################################################
     @transaction()
-    def load_signatures(self, conn:Connection=None) -> Dict[Tuple[str, int], Signature]:
-        df = self.rel_storage.execute_df(query=f'SELECT * FROM {self.SCHEMA_TABLE}', 
-                                    conn=conn)
-        df['signature'] = df['signature'].map(lambda x: deserialize(bytes(x)))
+    def load_signatures(
+        self, conn: Connection = None
+    ) -> Dict[Tuple[str, int], Signature]:
+        df = self.rel_storage.execute_df(
+            query=f"SELECT * FROM {self.SCHEMA_TABLE}", conn=conn
+        )
+        df["signature"] = df["signature"].map(lambda x: deserialize(bytes(x)))
         result = {}
-        for version, signature in df[['version', 'signature']].itertuples(index=False):
-            signature:Signature
+        for version, signature in df[["version", "signature"]].itertuples(index=False):
+            signature: Signature
             result[(signature.name, version)] = signature
         return result
-    
+
     @transaction()
-    def write_signature(self, sig: Signature, conn:Connection=None) -> None:
+    def write_signature(self, sig: Signature, conn: Connection = None) -> None:
         # delete existing
         query = f"DELETE FROM {self.SCHEMA_TABLE} WHERE {Config.uid_col} = '{sig.internal_name}' AND version = '{sig.version}'"
         conn.execute(query)
         # insert new
         serialized = serialize(obj=sig)
-        df = pd.DataFrame({Config.uid_col: [sig.internal_name], 
-                           'version': [sig.version], 
-                           'signature': [serialized]})
+        df = pd.DataFrame(
+            {
+                Config.uid_col: [sig.internal_name],
+                "version": [sig.version],
+                "signature": [serialized],
+            }
+        )
         ta = pa.Table.from_pandas(df)
         self.rel_storage.insert(relation=self.SCHEMA_TABLE, ta=ta, conn=conn)
-    
+
     @transaction()
-    def has_signature(self, name:str, version:int, conn:Connection=None) -> bool:
+    def has_signature(self, name: str, version: int, conn: Connection = None) -> bool:
         signatures = self.load_signatures(conn=conn)
         return (name, version) in signatures
-    
+
     @transaction()
-    def get_signature(self, name:str, version:int, conn:Connection=None) -> Signature:
+    def get_signature(
+        self, name: str, version: int, conn: Connection = None
+    ) -> Signature:
         signatures = self.load_signatures(conn=conn)
         return signatures[name, version]
 
-    ############################################################################ 
+    ############################################################################
     ### remote sync operations
-    ############################################################################ 
+    ############################################################################
     @transaction()
     def bundle_to_remote(self, conn: Connection = None) -> RemoteEventLogEntry:
         # Bundle event log and referenced calls into tables.

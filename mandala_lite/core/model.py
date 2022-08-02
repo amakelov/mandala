@@ -150,9 +150,7 @@ class FuncOp:
         self.func = func
         self.py_sig = inspect.signature(self.func)
         self.sig = Signature.from_py(
-            sig=inspect.signature(func),
-            name=func.__name__,
-            version=version
+            sig=inspect.signature(func), name=func.__name__, version=version
         )
         # TODO: use this
         self.is_synchronized = False

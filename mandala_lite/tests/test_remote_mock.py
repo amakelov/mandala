@@ -31,4 +31,6 @@ def test_remote():
     data_2 = storage_2.rel_storage.get_all_data()
     assert data_1.keys() == data_2.keys()
     # TODO: test for schema equality once we implement this in sync
-    assert all({k: (data_1[k]) == data_2[k] for k in data_1 if k != Config.schema_table})
+    assert all(
+        {k: (data_1[k]) == data_2[k] for k in data_1 if k != Config.schema_table}
+    )

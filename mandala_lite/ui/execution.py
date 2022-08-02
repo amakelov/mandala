@@ -71,8 +71,7 @@ class FuncInterface:
             return tuple(outputs)
 
     def call_run(
-        self, inputs: Dict[str, Union[Any, ValueRef]],
-            storage: Storage
+        self, inputs: Dict[str, Union[Any, ValueRef]], storage: Storage
     ) -> Tuple[List[ValueRef], Call]:
         """
         Run the function and return the outputs and the call object.
@@ -80,8 +79,11 @@ class FuncInterface:
         # wrap inputs
         wrapped_inputs = self.wrap_inputs(inputs)
         # get call UID
-        hashable_input_uids = {k: v.uid for k, v in wrapped_inputs.items()
-                               if k not in self.op.sig._new_input_defaults_uids.keys()}
+        hashable_input_uids = {
+            k: v.uid
+            for k, v in wrapped_inputs.items()
+            if k not in self.op.sig._new_input_defaults_uids.keys()
+        }
         call_uid = Hashing.get_content_hash(
             obj=[
                 hashable_input_uids,
@@ -147,7 +149,7 @@ class FuncInterface:
             return self.format_as_outputs(outputs=self.call_query(inputs))
         else:
             raise ValueError()
-        
+
     def get_table(self) -> pd.DataFrame:
         storage = GlobalContext.current.storage
         assert storage is not None

@@ -43,7 +43,7 @@ class Signature:
         self._ext_to_int_input_map = None
         # internal input name -> UID of default value
         self._new_input_defaults_uids = {}
-    
+
     @property
     def versioned_name(self) -> str:
         """
@@ -70,7 +70,7 @@ class Signature:
     @property
     def internal_input_names(self) -> Set[str]:
         return set(self.ext_to_int_input_map.values())
-    
+
     def __eq__(self, other: Any) -> bool:
         return (
             isinstance(other, Signature)
@@ -100,13 +100,13 @@ class Signature:
 
     def update(self, new: "Signature") -> Tuple["Signature", dict]:
         """
-        Return an updated version of this signature based on a new signature, 
+        Return an updated version of this signature based on a new signature,
         plus a description of the updates.
 
         This takes care of
             - checking that the new signature is compatible with the old one
             - generating names for new inputs.
-        
+
         Returns:
             - new `Signature` object
             - a dictionary of {new input name: default value} for any new inputs
@@ -115,9 +115,7 @@ class Signature:
         # it is an internal error if you call this on signatures of different
         # versions
         assert new.version == self.version
-        if not set.issubset(
-            set(self.input_names), set(new.input_names)
-        ):
+        if not set.issubset(set(self.input_names), set(new.input_names)):
             raise ValueError("Removing inputs is not supported")
         if not self.n_outputs == new.n_outputs:
             raise ValueError("Changing the number of outputs is not supported")
@@ -132,7 +130,9 @@ class Signature:
             if k not in new_sig.input_names:
                 # this means a new input is being created
                 if k not in new_defaults:
-                    raise ValueError(f'All new arguments must be created with defaults!')
+                    raise ValueError(
+                        f"All new arguments must be created with defaults!"
+                    )
                 new_sig = new_sig.create_input(name=k, default=new_defaults[k])
                 updates[k] = new_defaults[k]
         return new_sig, updates
@@ -176,7 +176,9 @@ class Signature:
 
     @staticmethod
     def from_py(
-        name: str, version: int, sig: inspect.Signature,
+        name: str,
+        version: int,
+        sig: inspect.Signature,
     ) -> "Signature":
         """
         Create a `Signature` from a Python function's signature and the other
@@ -212,7 +214,6 @@ class Signature:
             version=version,
         )
 
-        
 
 # class Signature:
 #     """
@@ -221,10 +222,10 @@ class Signature:
 #         - the version,
 #         - the input names, default values, and number of outputs
 #         - (optional) superop status
-# 
+#
 #     Responsible for manipulating this state and keeping it consistent.
 #     """
-# 
+#
 #     def __init__(
 #         self,
 #         name: str,
@@ -238,14 +239,14 @@ class Signature:
 #         self.input_names = input_names
 #         self.n_outputs = n_outputs
 #         self.defaults = defaults
-#     
+#
 #     @property
 #     def qualified_name(self) -> str:
 #         """
 #         Return the qualified name of this signature
 #         """
 #         return f"{self.name}_{self.version}"
-# 
+#
 #     ############################################################################
 #     ### PURE methods for manipulating the signature
 #     ### to avoid broken state
@@ -253,10 +254,10 @@ class Signature:
 #     def update(self, new: "Signature") -> "Signature":
 #         """
 #         Return an updated version of this signature based on a new signature.
-# 
+#
 #         This takes care of
 #             - checking that the new signature is compatible with the old one
-# 
+#
 #         TODO: return a description of the updates for downstream needs
 #         """
 #         # it is an internal error if you call this on signatures of different
@@ -276,7 +277,7 @@ class Signature:
 #             if k not in res.input_names:
 #                 res.create_input(name=k, default=new_defaults.get(k, DefaultSentinel))
 #         return res
-# 
+#
 #     def create_input(self, name: str, default: Any = DefaultSentinel) -> "Signature":
 #         """
 #         Add an input to this signature, with optional default value
@@ -288,7 +289,7 @@ class Signature:
 #         if default is not DefaultSentinel:
 #             res.defaults[name] = default
 #         return res
-# 
+#
 #     def rename(self, new_name: str) -> "Signature":
 #         """
 #         Change the name
@@ -296,7 +297,7 @@ class Signature:
 #         res = copy.deepcopy(self)
 #         res.name = new_name
 #         return res
-# 
+#
 #     def rename_input(self, name: str, new_name: str) -> "Signature":
 #         """
 #         Change the name of an input
@@ -305,7 +306,7 @@ class Signature:
 #         res.input_names.remove(name)
 #         res.input_names.add(new_name)
 #         return res
-# 
+#
 #     @staticmethod
 #     def from_py(
 #         name: str, version: int, sig: inspect.Signature

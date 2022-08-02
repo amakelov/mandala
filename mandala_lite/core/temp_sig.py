@@ -1,6 +1,7 @@
 from ..common_imports import *
 from .utils import get_uid
 
+
 class DefaultSentinel:
     """
     To distinguish a missing default value from a default value with the value
@@ -8,6 +9,7 @@ class DefaultSentinel:
     """
 
     pass
+
 
 class Signature:
     """
@@ -94,9 +96,7 @@ class Signature:
         # it is an internal error if you call this on signatures of different
         # versions
         assert new.version == self.version
-        if not set.issubset(
-            set(self.input_names), set(new.input_names)
-        ):
+        if not set.issubset(set(self.input_names), set(new.input_names)):
             raise ValueError("Removing inputs is not supported")
         if not self.n_outputs == new.n_outputs:
             raise ValueError("Changing the number of outputs is not supported")
@@ -148,7 +148,9 @@ class Signature:
 
     @staticmethod
     def from_py(
-        name: str, version: int, sig: inspect.Signature,
+        name: str,
+        version: int,
+        sig: inspect.Signature,
     ) -> "Signature":
         """
         Create a `Signature` from a Python function's signature and the other
