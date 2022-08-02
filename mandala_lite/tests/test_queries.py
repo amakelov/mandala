@@ -5,11 +5,11 @@ from mandala_lite.tests.utils import *
 def test_basics():
     storage = Storage()
 
-    @op(storage=storage)
+    @op
     def inc(x: int) -> int:
         return x + 1
 
-    @op(storage=storage)
+    @op
     def add(x: int, y: int) -> int:
         return x + y
 
@@ -39,15 +39,15 @@ def test_superops_basic():
 
     storage = Storage()
 
-    @op(storage=storage)
+    @op
     def inc(x: int) -> int:
         return unwrap(x) + 1
 
-    @op(storage=storage)
+    @op
     def add(x: int, y: int) -> int:
         return unwrap(x) + unwrap(y)
 
-    @op(storage=storage)
+    @op
     def inc_n_times(x: int, n: int) -> int:
         for i in range(unwrap(n)):
             x = inc(x)
@@ -72,11 +72,11 @@ def test_superops_multilevel():
 
     storage = Storage()
 
-    @op(storage)
+    @op
     def add(x: int, y: int) -> int:
         return unwrap(x) + unwrap(y)
 
-    @op(storage)
+    @op
     def add_many(xs: List[int], ys: List[int]) -> List[int]:
         result = []
         for x in unwrap(xs):
@@ -110,7 +110,7 @@ def test_superops_multilevel():
     ]
 
     # two levels of nesting
-    @op(storage)
+    @op
     def add_many_many(xs: List[int], ys: List[int], zs: List[int]) -> List[int]:
         intermediate = add_many(xs, ys)
         final = add_many(intermediate, zs)
