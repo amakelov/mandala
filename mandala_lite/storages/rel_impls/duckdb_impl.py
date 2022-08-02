@@ -32,7 +32,7 @@ class DuckDBRelStorage(RelStorage, Transactable):
 
     @transaction ()
     def table_exists(self, relation: str, conn: Connection = None) -> bool:
-        return relation in self.get_tables()
+        return relation in self.get_tables(conn=conn)
 
     @transaction()
     def get_data(self, table: str, conn: Connection = None) -> pd.DataFrame:
@@ -147,8 +147,8 @@ class DuckDBRelStorage(RelStorage, Transactable):
         if len(ta) == 0:
             return
         # TODO this a temporary hack until we get function signature sync working!
-        if not self.table_exists(relation):
-            self.create_relation(relation, [(col, None) for col in ta.column_names], primary_key=Config.uid_col)
+        if not self.table_exists(relation, conn=conn):
+            self.create_relation(relation, [(col, None) for col in ta.column_names], primary_key=Config.uid_col, conn=conn)
         table_cols = self._get_cols(relation=relation, conn=conn)
         assert set(ta.column_names) == set(table_cols)
         cols_string = ", ".join([f'"{column_name}"' for column_name in ta.column_names])
