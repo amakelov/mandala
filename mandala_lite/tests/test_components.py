@@ -36,6 +36,23 @@ def test_signatures():
         version=0,
     )
 
+    # if internal data has not been set, it should not be accessible
+    try:
+        sig.internal_name
+        assert False
+    except ValueError:
+        assert True
+
+    try:
+        sig.ext_to_int_input_map
+        assert False
+    except ValueError:
+        assert True
+
+    with_internal = sig._generate_internal()
+    assert not sig.has_internal_data
+    assert with_internal.has_internal_data
+
     ### invalid signature changes
     # remove input
     new = Signature(
@@ -91,6 +108,7 @@ def test_signatures():
         assert True
 
     # add input
+    sig = sig._generate_internal()
     try:
         sig.create_input(name="y", default=23)
         assert False

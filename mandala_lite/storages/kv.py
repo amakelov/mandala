@@ -66,3 +66,7 @@ class InMemoryStorage(KVStore):
 
     def keys(self) -> List[str]:
         return list(self.data.keys())
+    
+    @property
+    def is_clean(self) -> bool:
+        return len(self.dirty_entries) == 0

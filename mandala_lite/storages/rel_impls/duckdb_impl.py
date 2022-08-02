@@ -90,6 +90,33 @@ class DuckDBRelStorage(RelStorage, Transactable):
         """
         query = f"ALTER TABLE {relation} ADD COLUMN {name} {self.UID_DTYPE} DEFAULT '{default_value}'"
         conn.execute(query=query)
+    
+    @transaction()
+    def rename_relation(
+        self,
+        name: str,
+        new_name: str,
+        conn:Connection=None
+        ):
+        """
+        Rename a table
+        """
+        query = f'ALTER TABLE {name} RENAME TO {new_name};'
+        conn.execute(query)
+    
+    @transaction()
+    def rename_column(
+        self,
+        relation: str,
+        name: str,
+        new_name: str,
+        conn:Connection=None
+        ):
+        """
+        Rename a column
+        """
+        query = f'ALTER TABLE {relation} RENAME {name} TO {new_name};'
+        conn.execute(query)
 
     ############################################################################
     ### instance management

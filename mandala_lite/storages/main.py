@@ -95,6 +95,21 @@ class Storage:
             self.remote_sync_manager.sync_to_remote()
             self.remote_sync_manager.sync_from_remote()
 
+    ############################################################################ 
+    ### synchronization, renaming, refactoring
+    ############################################################################ 
+    @property
+    def is_clean(self) -> bool:
+        return (self.call_cache.is_clean and self.obj_cache.is_clean)
+        
+    def rename_func(self, name:str, new_name:str):
+        if not self.is_clean:
+            raise RuntimeError("Cannot rename function while there are uncommited changes.")
+        self.rel_storage.rename_table(name, new_name)
+    
+    def rename_arg(self, func_name:str, name:str, new_name:str):
+        pass
+
     def synchronize(self, sig: Signature) -> Signature:
         """
         Synchronize an op's signature with this storage.
@@ -107,7 +122,7 @@ class Storage:
             - otherwise, an error is raised
         """
         if (sig.name, sig.version) not in self.sigs:
-            res = copy.deepcopy(sig)
+            res = sig._generate_internal()
             self.sigs[(res.name, res.version)] = res
             # create relation
             columns = list(res.input_names) + [
