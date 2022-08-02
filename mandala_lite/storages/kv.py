@@ -49,6 +49,9 @@ class InMemoryStorage(KVStore):
     def __init__(self):
         self.data: dict[str, Any] = {}
         self.dirty_entries: set[str] = set()
+    
+    def __repr__(self):
+        return f"InMemoryStorage(data={self.data})"
 
     def exists(self, k: str) -> bool:
         return k in self.data

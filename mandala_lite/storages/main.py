@@ -4,7 +4,7 @@ from .rels import RelAdapter
 from .remote_storage import RemoteStorage, RemoteSyncManager
 from ..common_imports import *
 from ..core.config import Config
-from ..core.model import Call, FuncOp
+from ..core.model import Call
 from ..core.sig import Signature
 
 
@@ -115,21 +115,28 @@ class Storage:
         """
         conn = self.rel_adapter._get_connection()
         if not self.rel_adapter.has_signature(name=sig.name, version=sig.version, conn=conn):
-            res = sig._generate_internal()
-            self.rel_adapter.write_signature(sig=res, conn=conn)
+            new_sig = sig._generate_internal()
+            self.rel_adapter.write_signature(sig=new_sig, conn=conn)
             # create relation
-            columns = list(res.input_names) + [
-                f"output_{i}" for i in range(res.n_outputs)
+            columns = list(new_sig.input_names) + [
+                f"output_{i}" for i in range(new_sig.n_outputs)
             ]
             columns = [(Config.uid_col, None)] + [(column, None) for column in columns]
             self.rel_storage.create_relation(
-                name=res.versioned_name, columns=columns, primary_key=Config.uid_col,
+                name=new_sig.versioned_name, columns=columns, primary_key=Config.uid_col,
                 conn=conn
             )
         else:
             current = self.rel_adapter.get_signature(name=sig.name, version=sig.version, conn=conn)
-            res = current.update(new=sig)
-            # TODO: update relation if a new input was created
-            self.rel_adapter.write_signature(sig=res, conn=conn)
+            new_sig, updates = current.update(new=sig)
+            # create new inputs, if any
+            for new_input, default_value in updates.items():
+                default_uid = new_sig._new_input_defaults_uids[new_input]
+                self.rel_storage.create_column(relation=new_sig.versioned_name, name=new_input, 
+                                               default_value=default_uid, conn=conn)
+                # insert the default in the objects *in the database*, if it's
+                # not there already
+                self.rel_adapter.obj_set(key=default_uid, value=default_value, conn=conn)
+            self.rel_adapter.write_signature(sig=new_sig, conn=conn)
         self.rel_adapter._end_transaction(conn=conn)
-        return res
+        return new_sig

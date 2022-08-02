@@ -26,7 +26,6 @@ def rename_func(storage:Storage, func:FuncInterface, new_name:str):
     # rename in signature object
     sig = func.op.sig
     new_sig = sig.rename(new_name=new_name)
-    print('Doing the thing')
     storage.rel_adapter.write_signature(sig=new_sig, conn=conn)
     # rename table
     storage.rel_storage.rename_relation(name=func.op.sig.versioned_name, 
