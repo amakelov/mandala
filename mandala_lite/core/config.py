@@ -20,6 +20,8 @@ class Config:
     uid_col = "__uid__"
     vref_table = "__vrefs__"
     event_log_table = "__event_log__"
+    schema_event_log_table = "__schema_event_log__"
+    schema_table = "__schema__"
 
 
 class Prov:

@@ -183,6 +183,13 @@ class Signature:
         self._internal_name = None
         # external name -> internal name
         self._ext_to_int_input_map = None
+    
+    @property
+    def versioned_name(self) -> str:
+        """
+        Return the version-qualified name of this signature
+        """
+        return f"{self.name}_{self.version}"
 
     @property
     def internal_name(self) -> str:
@@ -203,6 +210,18 @@ class Signature:
     @property
     def internal_input_names(self) -> Set[str]:
         return set(self.ext_to_int_input_map.values())
+    
+    def __eq__(self, other: Any) -> bool:
+        return (
+            isinstance(other, Signature)
+            and self.name == other.name
+            and self.input_names == other.input_names
+            and self.n_outputs == other.n_outputs
+            and self.defaults == other.defaults
+            and self.version == other.version
+            and self._internal_name == other._internal_name
+            and self._ext_to_int_input_map == other._ext_to_int_input_map
+        )
 
     ############################################################################
     ### PURE methods for manipulating the signature
@@ -278,6 +297,7 @@ class Signature:
         internal_name = self.ext_to_int_input_map[name]
         res.input_names.remove(name)
         res.input_names.add(new_name)
+        del res.ext_to_int_input_map[name]
         res.ext_to_int_input_map[new_name] = internal_name
         return res
 

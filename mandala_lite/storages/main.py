@@ -4,7 +4,7 @@ from .rels import RelAdapter
 from .remote_storage import RemoteStorage, RemoteSyncManager
 from ..common_imports import *
 from ..core.config import Config
-from ..core.model import Call
+from ..core.model import Call, FuncOp
 from ..core.sig import Signature
 
 
@@ -102,14 +102,6 @@ class Storage:
     def is_clean(self) -> bool:
         return (self.call_cache.is_clean and self.obj_cache.is_clean)
         
-    def rename_func(self, name:str, new_name:str):
-        if not self.is_clean:
-            raise RuntimeError("Cannot rename function while there are uncommited changes.")
-        self.rel_storage.rename_table(name, new_name)
-    
-    def rename_arg(self, func_name:str, name:str, new_name:str):
-        pass
-
     def synchronize(self, sig: Signature) -> Signature:
         """
         Synchronize an op's signature with this storage.
@@ -121,20 +113,23 @@ class Storage:
             created in the relation for this op.
             - otherwise, an error is raised
         """
-        if (sig.name, sig.version) not in self.sigs:
+        conn = self.rel_adapter._get_connection()
+        if not self.rel_adapter.has_signature(name=sig.name, version=sig.version, conn=conn):
             res = sig._generate_internal()
-            self.sigs[(res.name, res.version)] = res
+            self.rel_adapter.write_signature(sig=res, conn=conn)
             # create relation
             columns = list(res.input_names) + [
                 f"output_{i}" for i in range(res.n_outputs)
             ]
             columns = [(Config.uid_col, None)] + [(column, None) for column in columns]
             self.rel_storage.create_relation(
-                name=res.name, columns=columns, primary_key=Config.uid_col
+                name=res.versioned_name, columns=columns, primary_key=Config.uid_col,
+                conn=conn
             )
-            return res
         else:
-            current = self.sigs[(sig.name, sig.version)]
+            current = self.rel_adapter.get_signature(name=sig.name, version=sig.version, conn=conn)
             res = current.update(new=sig)
             # TODO: update relation if a new input was created
-            return res
+            self.rel_adapter.write_signature(sig=res, conn=conn)
+        self.rel_adapter._end_transaction(conn=conn)
+        return res

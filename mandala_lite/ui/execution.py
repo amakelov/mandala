@@ -17,6 +17,7 @@ class FuncInterface:
     def __init__(self, op: FuncOp):
         self.op = op
         self.__name__ = self.op.func.__name__
+        self.is_synchronized = False
 
     def wrap_inputs(self, inputs: Dict[str, Any]) -> Dict[str, ValueRef]:
         # check if we allow implicit wrapping
@@ -56,7 +57,7 @@ class FuncInterface:
         bound_args.apply_defaults()
         inputs_dict = dict(bound_args.arguments)
         # rename to internal names
-        inputs_dict = {k: v for k, v in inputs_dict.items()}
+        # inputs_dict = {k: v for k, v in inputs_dict.items()}
         return inputs_dict
 
     def format_as_outputs(
@@ -82,7 +83,7 @@ class FuncInterface:
         call_uid = Hashing.get_content_hash(
             obj=[
                 {k: v.uid for k, v in wrapped_inputs.items()},
-                self.op.sig.name,
+                self.op.sig.internal_name,
             ]
         )
         # check if call UID exists in call storage
@@ -129,9 +130,11 @@ class FuncInterface:
         return outputs
 
     def __call__(self, *args, **kwargs) -> List[ValueRef]:
-        inputs = self.bind_inputs(args, kwargs)
         context = GlobalContext.current
-        context.storage.synchronize(sig=self.op.sig)
+        if not self.op.sig.has_internal_data:
+            self.op.sig = context.storage.synchronize(sig=self.op.sig)
+            self.is_synchronized = True
+        inputs = self.bind_inputs(args, kwargs)
         if context is None:
             raise RuntimeError("No context to call from")
         mode = context.mode

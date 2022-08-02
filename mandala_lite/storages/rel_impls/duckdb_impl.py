@@ -37,6 +37,10 @@ class DuckDBRelStorage(RelStorage, Transactable):
     @transaction()
     def get_data(self, table: str, conn: Connection = None) -> pd.DataFrame:
         return conn.execute(f"SELECT * FROM {table};").fetchdf()
+    
+    @transaction()
+    def get_count(self, table: str, conn: Connection=None) -> int:
+        return conn.execute(f"SELECT COUNT(*) FROM {table};").fetchdf()["count"].values[0]
 
     @transaction()
     def get_all_data(self, conn: Connection = None) -> Dict[str, pd.DataFrame]:
@@ -169,7 +173,9 @@ class DuckDBRelStorage(RelStorage, Transactable):
     @transaction()
     def upsert(self, relation: str, ta: pa.Table, conn: Connection = None):
         """
-        Upsert rows in a table based on index
+        Upsert rows in a table based on primary key.
+        
+        TODO: currently does NOT update matching rows
         """
         if len(ta) == 0:
             return
