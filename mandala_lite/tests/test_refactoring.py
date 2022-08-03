@@ -82,3 +82,27 @@ def test_arg_renaming():
     assert df.shape == (1, 3)
     # make sure we did not create a new function
     assert len(storage.rel_adapter.load_signatures()) == 1
+
+def test_versions():
+    storage = Storage()
+
+    @op
+    def inc(x: int) -> int:
+        return x + 1
+
+    with run(storage):
+        inc(23)
+
+    @op(version=1)
+    def inc(x: int) -> int:
+        return x + 1
+    
+    with run(storage):
+        inc(23)
+
+    assert len(storage.rel_adapter.load_signatures()) == 2
+    call_table_names = storage.rel_adapter.get_call_tables()
+    assert len(call_table_names) == 2
+    for table_name in call_table_names: 
+        df = storage.rel_storage.get_data(table=table_name)
+        assert df.shape[0] == 1

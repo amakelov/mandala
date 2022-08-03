@@ -3,7 +3,7 @@ from .core.model import ValueRef, Call, FuncOp, unwrap, wrap
 from .core.sig import Signature
 from .core.config import Config
 from .storages.main import Storage
-from .ui.execution import op, Q
+from .ui.execution import op, Q, synchronize
 from .ui.context import Context, run, query, MODES
 from .ui.refactoring import *
 

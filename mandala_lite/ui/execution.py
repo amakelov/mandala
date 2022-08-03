@@ -170,8 +170,26 @@ def Q() -> ValQuery:
     return ValQuery(creator=None, created_as=None)
 
 
-def op(func: Callable) -> FuncInterface:
-    return FuncInterface(FuncOp(func=func))
+class FuncDecorator:
+    # parametrized version of `@op` decorator
+    def __init__(self, version:int=0):
+        self.version = version
+        
+    def __call__(self, func:Callable) -> 'func':
+        op = FuncOp(func=func, version=self.version)
+        return FuncInterface(op=op)
+
+
+def op(*args, **kwargs) -> FuncInterface:
+    if len(args) == 1 and len(kwargs) == 0 and callable(args[0]):
+        # @op case
+        op = FuncOp(func=args[0])
+        return FuncInterface(op=op)
+    else:
+        # @op(...) case
+        version = kwargs.get('version', 0)
+        return FuncDecorator(version=version)
+
 
 def synchronize(func:FuncInterface, storage:Storage) -> FuncInterface:
     """
