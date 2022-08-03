@@ -23,6 +23,9 @@ def test_remote():
         add(23, 42)
     storage_1.sync_with_remote()
 
+    # TODO: this is a hack ensure that the function exists in the other storage
+    # too, with the right data
+    synchronize(func=add, storage=storage_2)
     # sync with the other storage
     storage_2.sync_with_remote()
 

@@ -36,12 +36,14 @@ class DuckDBRelStorage(RelStorage, Transactable):
 
     @transaction()
     def get_data(self, table: str, conn: Connection = None) -> pd.DataFrame:
-        return conn.execute(f"SELECT * FROM {table};").fetchdf()
+        return conn.execute(f"SELECT * FROM '{table}';").fetchdf()
 
     @transaction()
     def get_count(self, table: str, conn: Connection = None) -> int:
         return (
-            conn.execute(f"SELECT COUNT(*) FROM {table};").fetchdf()['count_star()'].item()
+            conn.execute(f"SELECT COUNT(*) FROM {table};")
+            .fetchdf()["count_star()"]
+            .item()
         )
 
     @transaction()

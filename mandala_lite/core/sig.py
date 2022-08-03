@@ -52,10 +52,19 @@ class Signature:
         return f"{self.name}_{self.version}"
 
     @property
+    def versioned_internal_name(self) -> str:
+        return f"{self.internal_name}_{self.version}"
+
+    @property
     def internal_name(self) -> str:
         if self._internal_name is None:
             raise ValueError("Internal name not set")
         return self._internal_name
+
+    @staticmethod
+    def parse_versioned_name(versioned_name: str) -> Tuple[str, int]:
+        name, version_string = versioned_name.rsplit("_", 1)
+        return name, int(version_string)
 
     @property
     def ext_to_int_input_map(self) -> Dict[str, str]:

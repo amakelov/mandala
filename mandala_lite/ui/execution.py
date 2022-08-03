@@ -78,7 +78,9 @@ class FuncInterface:
         Run the function and return the outputs and the call object.
         """
         if self.is_invalidated:
-            raise RuntimeError("This function has been invalidated due to a change in the signature, and cannot be called")
+            raise RuntimeError(
+                "This function has been invalidated due to a change in the signature, and cannot be called"
+            )
         # wrap inputs
         wrapped_inputs = self.wrap_inputs(inputs)
         # get call UID using *internal names* to guarantee the same UID will be
@@ -172,10 +174,10 @@ def Q() -> ValQuery:
 
 class FuncDecorator:
     # parametrized version of `@op` decorator
-    def __init__(self, version:int=0):
+    def __init__(self, version: int = 0):
         self.version = version
-        
-    def __call__(self, func:Callable) -> 'func':
+
+    def __call__(self, func: Callable) -> "func":
         op = FuncOp(func=func, version=self.version)
         return FuncInterface(op=op)
 
@@ -187,11 +189,11 @@ def op(*args, **kwargs) -> FuncInterface:
         return FuncInterface(op=op)
     else:
         # @op(...) case
-        version = kwargs.get('version', 0)
+        version = kwargs.get("version", 0)
         return FuncDecorator(version=version)
 
 
-def synchronize(func:FuncInterface, storage:Storage) -> FuncInterface:
+def synchronize(func: FuncInterface, storage: Storage) -> FuncInterface:
     """
     Manually synchronize a function
     """

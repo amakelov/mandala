@@ -2,6 +2,7 @@ from ..common_imports import *
 from ..storages.main import Storage
 from .execution import FuncInterface
 
+
 def _check_rename_precondition(storage: Storage, func: FuncInterface):
     """
     In order to rename function data, the function must be synced with the
@@ -11,6 +12,7 @@ def _check_rename_precondition(storage: Storage, func: FuncInterface):
         raise RuntimeError("Cannot rename while function is not synchronized.")
     if not storage.is_clean:
         raise RuntimeError("Cannot rename while there is uncommited work.")
+
 
 def rename_func(storage: Storage, func: FuncInterface, new_name: str):
     """
@@ -43,6 +45,7 @@ def rename_func(storage: Storage, func: FuncInterface, new_name: str):
     func.is_synchronized = False
     func.is_invalidated = True
     storage.rel_adapter._end_transaction(conn=conn)
+
 
 def rename_arg(storage: Storage, func: FuncInterface, name: str, new_name: str):
     """

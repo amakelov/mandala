@@ -29,14 +29,12 @@ class RelAdapter(Transactable):
     """
 
     EVENT_LOG_TABLE = Config.event_log_table
-    SCHEMA_EVENT_LOG_TABLE = Config.schema_event_log_table
     VREF_TABLE = Config.vref_table
     SCHEMA_TABLE = Config.schema_table
     SPECIAL_TABLES = (
         EVENT_LOG_TABLE,
         DuckDBRelStorage.TEMP_ARROW_TABLE,
         SCHEMA_TABLE,
-        SCHEMA_EVENT_LOG_TABLE,
     )
 
     def __init__(self, rel_storage: DuckDBRelStorage):
@@ -80,14 +78,6 @@ class RelAdapter(Transactable):
                 ("version", "integer"),
                 ("signature", "blob"),
             ],
-            primary_key=Config.uid_col,
-            conn=conn,
-        )
-        # The schema event log is a list of descriptions of changes to
-        # signatures
-        self.rel_storage.create_relation(
-            name=self.SCHEMA_EVENT_LOG_TABLE,
-            columns=[(Config.uid_col, None), ("change", "blob")],
             primary_key=Config.uid_col,
             conn=conn,
         )
@@ -277,20 +267,21 @@ class RelAdapter(Transactable):
         self.rel_storage.upsert(relation=self.EVENT_LOG_TABLE, ta=log_ta, conn=conn)
 
     ############################################################################
-    ### accessing signature data
+    ### accessing and working with signature data
     ############################################################################
     @transaction()
     def load_signatures(
-        self, conn: Connection = None
+        self, use_external_names: bool = True, conn: Connection = None
     ) -> Dict[Tuple[str, int], Signature]:
         df = self.rel_storage.execute_df(
             query=f"SELECT * FROM {self.SCHEMA_TABLE}", conn=conn
         )
         df["signature"] = df["signature"].map(lambda x: deserialize(bytes(x)))
         result = {}
-        for version, signature in df[["version", "signature"]].itertuples(index=False):
-            signature: Signature
-            result[(signature.name, version)] = signature
+        for version, sig in df[["version", "signature"]].itertuples(index=False):
+            sig: Signature
+            name_key = sig.name if use_external_names else sig.internal_name
+            result[(name_key, version)] = sig
         return result
 
     @transaction()
@@ -322,11 +313,84 @@ class RelAdapter(Transactable):
         signatures = self.load_signatures(conn=conn)
         return signatures[name, version]
 
+    @transaction()
+    def internalize_tables(
+        self, tables: Dict[str, Union[pd.DataFrame, pa.Table]], conn: Connection = None
+    ) -> Dict[str, Union[pd.DataFrame, pa.Table]]:
+        """
+        Given a dictionary of {human readable table name: table with
+        human-readable columns}, rename it to {internal table name:
+        table with internally-labeled columns}.
+        """
+        call_tables = self.get_call_tables(conn=conn)
+        signatures = self.load_signatures(conn=conn)
+        res = {}
+        for table_name, table in tables.items():
+            if table_name in call_tables:
+                ext_name, version = Signature.parse_versioned_name(
+                    versioned_name=table_name
+                )
+                sig = signatures[ext_name, version]
+                if isinstance(table, pd.DataFrame):
+                    table = table.rename(columns=sig.ext_to_int_input_map)
+                elif isinstance(table, pa.Table):
+                    columns = table.column_names
+                    new_columns = [
+                        sig.ext_to_int_input_map.get(col, col) for col in columns
+                    ]
+                    table = table.rename_columns(new_columns)
+                res[sig.versioned_internal_name] = table
+            else:
+                # skip over non-call tables (i.e., vrefs)
+                res[table_name] = table
+        return res
+
+    @transaction()
+    def externalize_tables(
+        self, tables: Dict[str, Union[pd.DataFrame, pa.Table]], conn: Connection = None
+    ) -> Dict[str, Union[pd.DataFrame, pa.Table]]:
+        """
+        Given a dictionary of {internal table name: table with
+        internally-labeled columns}, rename it to {human-readable table name:
+        table with human-readable columns}.
+        """
+        call_tables = self.get_call_tables(conn=conn)
+        signatures = self.load_signatures(use_external_names=False, conn=conn)
+        internal_to_external_mapping = {
+            sig.versioned_internal_name: sig.versioned_name
+            for sig in signatures.values()
+        }
+        res = {}
+        for table_name, table in tables.items():
+            if internal_to_external_mapping.get(table_name, None) in call_tables:
+                int_name, version = Signature.parse_versioned_name(
+                    versioned_name=table_name
+                )
+                sig = signatures[int_name, version]
+                col_mapping = {v: k for k, v in sig.ext_to_int_input_map.items()}
+                if isinstance(table, pd.DataFrame):
+                    table = table.rename(columns=col_mapping)
+                elif isinstance(table, pa.Table):
+                    columns = table.column_names
+                    new_columns = [col_mapping.get(col, col) for col in columns]
+                    table = table.rename_columns(new_columns)
+                res[sig.versioned_name] = table
+            else:
+                # skip over non-call tables (i.e., vrefs)
+                res[table_name] = table
+        return res
+
     ############################################################################
     ### remote sync operations
     ############################################################################
     @transaction()
     def bundle_to_remote(self, conn: Connection = None) -> RemoteEventLogEntry:
+        """
+        Collect the new calls according to the event log, and pack them into a
+        dict of binary blobs to be sent off to the remote server.
+
+        NOTE: this also renames tables to the internal names.
+        """
         # Bundle event log and referenced calls into tables.
         event_log_df = self.rel_storage.get_data(self.EVENT_LOG_TABLE, conn=conn)
         tables_with_changes = {}
@@ -343,10 +407,13 @@ class RelAdapter(Transactable):
                 conn=conn,
             )
 
+        # pass to internal names
+        tables_with_changes = self.internalize_tables(tables_with_changes, conn=conn)
+
         output = {}
-        for table_name in tables_with_changes:
+        for table_name, table in tables_with_changes.items():
             buffer = io.BytesIO()
-            pq.write_table(tables_with_changes[table_name], buffer)
+            pq.write_table(table, buffer)
             output[table_name] = buffer.getvalue()
 
         self.rel_storage.execute_no_results(
@@ -358,11 +425,21 @@ class RelAdapter(Transactable):
     def apply_from_remote(
         self, changes: list[RemoteEventLogEntry], conn: Connection = None
     ):
+        """
+        Apply new calls from the remote server.
+
+        NOTE: this also renames tables to the external names.
+        """
+        data = {}
         for raw_changeset in changes:
             for table_name in raw_changeset:
                 buffer = io.BytesIO(raw_changeset[table_name])
                 table = pq.read_table(buffer)
-                self.rel_storage.upsert(table_name, table, conn=conn)
+                data[table_name] = table
+        # pass to external names
+        data = self.externalize_tables(tables=data, conn=conn)
+        for table_name, table in data.items():
+            self.rel_storage.upsert(table_name, table, conn=conn)
 
     ############################################################################
     ### provenance

@@ -100,7 +100,9 @@ class Storage:
     ############################################################################
     @property
     def is_clean(self) -> bool:
-        return self.call_cache.is_clean and self.obj_cache.is_clean # and self.rel_adapter.event_log_is_clean()
+        return (
+            self.call_cache.is_clean and self.obj_cache.is_clean
+        )  # and self.rel_adapter.event_log_is_clean()
 
     def synchronize(self, sig: Signature) -> Signature:
         """
@@ -118,7 +120,10 @@ class Storage:
         if not self.rel_adapter.has_signature(
             name=sig.name, version=sig.version, conn=conn
         ):
-            new_sig = sig._generate_internal()
+            if not sig.has_internal_data:
+                new_sig = sig._generate_internal()
+            else:
+                new_sig = sig
             self.rel_adapter.write_signature(sig=new_sig, conn=conn)
             # create relation
             columns = list(new_sig.input_names) + [
