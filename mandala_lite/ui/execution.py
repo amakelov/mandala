@@ -18,6 +18,7 @@ class FuncInterface:
         self.op = op
         self.__name__ = self.op.func.__name__
         self.is_synchronized = False
+        self.is_invalidated = False
 
     def wrap_inputs(self, inputs: Dict[str, Any]) -> Dict[str, ValueRef]:
         # check if we allow implicit wrapping
@@ -76,11 +77,14 @@ class FuncInterface:
         """
         Run the function and return the outputs and the call object.
         """
+        if self.is_invalidated:
+            raise RuntimeError("This function has been invalidated due to a change in the signature, and cannot be called")
         # wrap inputs
         wrapped_inputs = self.wrap_inputs(inputs)
-        # get call UID
+        # get call UID using *internal names* to guarantee the same UID will be
+        # assigned regardless of renamings
         hashable_input_uids = {
-            k: v.uid
+            self.op.sig.ext_to_int_input_map[k]: v.uid
             for k, v in wrapped_inputs.items()
             if k not in self.op.sig._new_input_defaults_uids.keys()
         }
@@ -168,3 +172,11 @@ def Q() -> ValQuery:
 
 def op(func: Callable) -> FuncInterface:
     return FuncInterface(FuncOp(func=func))
+
+def synchronize(func:FuncInterface, storage:Storage) -> FuncInterface:
+    """
+    Manually synchronize a function
+    """
+    func.op.sig = storage.synchronize(sig=func.op.sig)
+    func.is_synchronized = True
+    return func

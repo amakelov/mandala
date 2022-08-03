@@ -100,7 +100,7 @@ class Storage:
     ############################################################################
     @property
     def is_clean(self) -> bool:
-        return self.call_cache.is_clean and self.obj_cache.is_clean
+        return self.call_cache.is_clean and self.obj_cache.is_clean # and self.rel_adapter.event_log_is_clean()
 
     def synchronize(self, sig: Signature) -> Signature:
         """
@@ -113,6 +113,7 @@ class Storage:
             created in the relation for this op.
             - otherwise, an error is raised
         """
+        # TODO: remote sync logic
         conn = self.rel_adapter._get_connection()
         if not self.rel_adapter.has_signature(
             name=sig.name, version=sig.version, conn=conn

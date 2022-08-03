@@ -166,6 +166,8 @@ class Signature:
         """
         Change the external name of an input
         """
+        if new_name in self.input_names:
+            raise ValueError(f'Input "{new_name}" already exists')
         res = copy.deepcopy(self)
         internal_name = self.ext_to_int_input_map[name]
         res.input_names.remove(name)
