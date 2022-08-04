@@ -104,7 +104,7 @@ def test_signatures():
     try:
         sig.update(new=new)
         assert False
-    except AssertionError:
+    except ValueError:
         assert True
 
     # add input

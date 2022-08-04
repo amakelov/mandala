@@ -27,7 +27,7 @@ def rename_func(storage: Storage, func: FuncInterface, new_name: str):
     """
     # TODO: remote sync logic
     _check_rename_precondition(storage=storage, func=func)
-    sigs = storage.rel_adapter.load_signatures()
+    sigs = storage.rel_adapter.signature_gets()
     if new_name in [elt[0] for elt in sigs.keys()]:
         raise RuntimeError(
             f"Cannot rename function {func.op.sig.ui_name} to {new_name}, which already exists."
@@ -36,7 +36,7 @@ def rename_func(storage: Storage, func: FuncInterface, new_name: str):
     # rename in signature object
     sig = func.op.sig
     new_sig = sig.rename(new_name=new_name)
-    storage.rel_adapter.write_signature(sig=new_sig, conn=conn)
+    storage.rel_adapter.signature_set(sig=new_sig, conn=conn)
     # rename table
     storage.rel_storage.rename_relation(
         name=func.op.sig.versioned_ui_name,
@@ -65,7 +65,7 @@ def rename_arg(storage: Storage, func: FuncInterface, name: str, new_name: str):
     # rename in signature object
     sig = func.op.sig
     new_sig = sig.rename_input(name=name, new_name=new_name)
-    storage.rel_adapter.write_signature(sig=new_sig, conn=conn)
+    storage.rel_adapter.signature_set(sig=new_sig, conn=conn)
     # rename in table
     storage.rel_storage.rename_column(
         relation=func.op.sig.versioned_ui_name, name=name, new_name=new_name, conn=conn

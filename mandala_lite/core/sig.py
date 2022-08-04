@@ -98,20 +98,51 @@ class Signature:
     ### PURE methods for manipulating the signature
     ### to avoid broken state
     ############################################################################
-    def _generate_internal(self) -> "Signature":
+    def _generate_internal(self, internal_name: Optional[str] = None) -> "Signature":
         """
         Assign internal names to random UIDs.
         """
         res = copy.deepcopy(self)
-        res._internal_name, res._ui_to_internal_input_map = get_uid(), {
+        if internal_name is None:
+            internal_name = get_uid()
+        res._internal_name, res._ui_to_internal_input_map = internal_name, {
             k: get_uid() for k in self.input_names
         }
         return res
 
+    def is_compatible(self, new: "Signature") -> Tuple[bool, Optional[str]]:
+        """
+        Check if a new signature (possibly without internal data) is compatible
+        with this signature.
+
+        Returns:
+            Tuple[bool, str]: outcome, reason if `False`, None if True
+        """
+        if new.version != self.version:
+            return False, "Versions do not match"
+        if not set.issubset(set(self.input_names), set(new.input_names)):
+            return False, "Removing inputs is not supported"
+        if not self.n_outputs == new.n_outputs:
+            return False, "Changing the number of outputs is not supported"
+        new_defaults = new.defaults
+        if any({k not in new_defaults for k in self.defaults}):
+            return False, "Dropping defaults is not supported"
+        if {k: new_defaults[k] for k in self.defaults} != self.defaults:
+            return False, "Changing defaults is not supported"
+        for k in new.input_names:
+            if k not in self.input_names:
+                if k not in new_defaults:
+                    return False, f"All new arguments must be created with defaults!"
+        return True, None
+
     def update(self, new: "Signature") -> Tuple["Signature", dict]:
         """
-        Return an updated version of this signature based on a new signature,
-        plus a description of the updates.
+        Return an updated version of this signature based on a new signature
+        (possibly without internal data), plus a description of the updates.
+
+        NOTE: the new signature need not have internal data. The goal of this
+        method is to be able to update from a function provided by the user that
+        has not been synchronized yet.
 
         This takes care of
             - checking that the new signature is compatible with the old one
@@ -122,27 +153,15 @@ class Signature:
             - a dictionary of {new input name: default value} for any new inputs
               that were created
         """
-        # it is an internal error if you call this on signatures of different
-        # versions
-        assert new.version == self.version
-        if not set.issubset(set(self.input_names), set(new.input_names)):
-            raise ValueError("Removing inputs is not supported")
-        if not self.n_outputs == new.n_outputs:
-            raise ValueError("Changing the number of outputs is not supported")
+        is_compatible, reason = self.is_compatible(new)
+        if not is_compatible:
+            raise ValueError(reason)
         new_defaults = new.defaults
-        if any({k not in new_defaults for k in self.defaults}):
-            raise ValueError("Dropping defaults is not supported")
-        if {k: new_defaults[k] for k in self.defaults} != self.defaults:
-            raise ValueError("Changing defaults is not supported")
         new_sig = copy.deepcopy(self)
         updates = {}
         for k in new.input_names:
             if k not in new_sig.input_names:
                 # this means a new input is being created
-                if k not in new_defaults:
-                    raise ValueError(
-                        f"All new arguments must be created with defaults!"
-                    )
                 new_sig = new_sig.create_input(name=k, default=new_defaults[k])
                 updates[k] = new_defaults[k]
         return new_sig, updates

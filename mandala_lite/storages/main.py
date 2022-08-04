@@ -1,3 +1,5 @@
+from duckdb import DuckDBPyConnection as Connection
+
 from .kv import InMemoryStorage
 from .rel_impls.duckdb_impl import DuckDBRelStorage
 from .rels import RelAdapter
@@ -104,6 +106,19 @@ class Storage:
             self.call_cache.is_clean and self.obj_cache.is_clean
         )  # and self.rel_adapter.event_log_is_clean()
 
+    def _create_function(self, sig: Signature, conn: Connection):
+        assert sig.has_internal_data
+        self.rel_adapter.signature_set(sig=sig, conn=conn)
+        # create relation
+        columns = list(sig.input_names) + [f"output_{i}" for i in range(sig.n_outputs)]
+        columns = [(Config.uid_col, None)] + [(column, None) for column in columns]
+        self.rel_storage.create_relation(
+            name=sig.versioned_ui_name,
+            columns=columns,
+            primary_key=Config.uid_col,
+            conn=conn,
+        )
+
     def synchronize(self, sig: Signature) -> Signature:
         """
         Synchronize an op's signature with this storage.
@@ -117,29 +132,14 @@ class Storage:
         """
         # TODO: remote sync logic
         conn = self.rel_adapter._get_connection()
-        if not self.rel_adapter.has_signature(
-            name=sig.ui_name, version=sig.version, conn=conn
-        ):
-            if not sig.has_internal_data:
-                new_sig = sig._generate_internal()
-            else:
-                new_sig = sig
-            self.rel_adapter.write_signature(sig=new_sig, conn=conn)
-            # create relation
-            columns = list(new_sig.input_names) + [
-                f"output_{i}" for i in range(new_sig.n_outputs)
-            ]
-            columns = [(Config.uid_col, None)] + [(column, None) for column in columns]
-            self.rel_storage.create_relation(
-                name=new_sig.versioned_ui_name,
-                columns=columns,
-                primary_key=Config.uid_col,
-                conn=conn,
+        ui_name, version = sig.ui_name, sig.version
+        sigs = self.rel_adapter.signature_gets()
+        if (ui_name, version) in sigs:
+            # updating an existing function in-place
+            current = self.rel_adapter.signature_get(
+                ui_name=sig.ui_name, version=sig.version, conn=conn
             )
-        else:
-            current = self.rel_adapter.get_signature(
-                name=sig.ui_name, version=sig.version, conn=conn
-            )
+            # the update step also ensures that the signature is compatible
             new_sig, updates = current.update(new=sig)
             # create new inputs, if any
             for new_input, default_value in updates.items():
@@ -155,6 +155,25 @@ class Storage:
                 self.rel_adapter.obj_set(
                     key=default_uid, value=default_value, conn=conn
                 )
-            self.rel_adapter.write_signature(sig=new_sig, conn=conn)
+            self.rel_adapter.signature_set(sig=new_sig, conn=conn)
+        elif ui_name in [elt[0] for elt in sigs.keys()]:
+            # a new version of an existing function
+            highest_current_version = max(
+                [elt[1] for elt in sigs.keys() if elt[0] == ui_name]
+            )
+            if not version == highest_current_version + 1:
+                raise ValueError()
+            internal_name = sigs[(ui_name, highest_current_version)].internal_name
+            if sig.has_internal_data:
+                raise NotImplementedError()
+            new_sig = sig._generate_internal(internal_name=internal_name)
+            self._create_function(sig=new_sig, conn=conn)
+        else:
+            # a brand-new function!
+            if not sig.has_internal_data:
+                new_sig = sig._generate_internal()
+            else:
+                new_sig = sig
+            self._create_function(sig=new_sig, conn=conn)
         self.rel_adapter._end_transaction(conn=conn)
         return new_sig

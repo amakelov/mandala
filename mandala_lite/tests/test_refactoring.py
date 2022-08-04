@@ -55,7 +55,7 @@ def test_func_renaming():
     # make sure the call was not new
     assert df.shape == (1, 3)
     # make sure we did not create a new function
-    assert len(storage.rel_adapter.load_signatures()) == 1
+    assert len(storage.rel_adapter.signature_gets()) == 1
 
 
 def test_arg_renaming():
@@ -84,7 +84,7 @@ def test_arg_renaming():
     # make sure the call was not new
     assert df.shape == (1, 3)
     # make sure we did not create a new function
-    assert len(storage.rel_adapter.load_signatures()) == 1
+    assert len(storage.rel_adapter.signature_gets()) == 1
 
 
 def test_versions():
@@ -104,7 +104,7 @@ def test_versions():
     with run(storage):
         inc(23)
 
-    assert len(storage.rel_adapter.load_signatures()) == 2
+    assert len(storage.rel_adapter.signature_gets()) == 2
     call_table_names = storage.rel_adapter.get_call_tables()
     assert len(call_table_names) == 2
     for table_name in call_table_names:

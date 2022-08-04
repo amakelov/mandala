@@ -1,4 +1,3 @@
-from abc import ABC, abstractmethod
 from collections import defaultdict
 
 import pyarrow as pa
@@ -70,7 +69,8 @@ class RelAdapter(Transactable):
             conn=conn,
         )
         # The schema table keeps track of the function signatures currently
-        # connected to the storage
+        # connected to the storage. It's indexed by internal name and version
+        # (which should define the signature uniquely!)
         self.rel_storage.create_relation(
             name=self.SCHEMA_TABLE,
             columns=[
@@ -78,7 +78,6 @@ class RelAdapter(Transactable):
                 ("version", "integer"),
                 ("signature", "blob"),
             ],
-            primary_key=Config.uid_col,
             conn=conn,
         )
 
@@ -268,9 +267,12 @@ class RelAdapter(Transactable):
 
     ############################################################################
     ### accessing and working with signature data
+    ###
+    ### Signatures have the invariant that all signatures for versions of the
+    ### same function have the same UI *and* internal names.
     ############################################################################
     @transaction()
-    def load_signatures(
+    def signature_gets(
         self, use_ui_names: bool = True, conn: Connection = None
     ) -> Dict[Tuple[str, int], Signature]:
         """
@@ -294,11 +296,11 @@ class RelAdapter(Transactable):
         return result
 
     @transaction()
-    def write_signature(self, sig: Signature, conn: Connection = None) -> None:
+    def signature_set(self, sig: Signature, conn: Connection = None) -> None:
         """
         Put a signature object in the signature storage.
         """
-        # delete existing
+        # delete existing, if any
         query = f"DELETE FROM {self.SCHEMA_TABLE} WHERE {Config.uid_col} = '{sig.internal_name}' AND version = '{sig.version}'"
         conn.execute(query)
         # insert new
@@ -314,16 +316,18 @@ class RelAdapter(Transactable):
         self.rel_storage.insert(relation=self.SCHEMA_TABLE, ta=ta, conn=conn)
 
     @transaction()
-    def has_signature(self, name: str, version: int, conn: Connection = None) -> bool:
-        signatures = self.load_signatures(conn=conn)
-        return (name, version) in signatures
+    def has_signature(
+        self, ui_name: str, version: int, conn: Connection = None
+    ) -> bool:
+        sigs = self.signature_gets(conn=conn)
+        return (ui_name, version) in sigs
 
     @transaction()
-    def get_signature(
-        self, name: str, version: int, conn: Connection = None
+    def signature_get(
+        self, ui_name: str, version: int, conn: Connection = None
     ) -> Signature:
-        signatures = self.load_signatures(conn=conn)
-        return signatures[name, version]
+        sigs = self.signature_gets(conn=conn)
+        return sigs[ui_name, version]
 
     @transaction()
     def rename_tables_from_ui_to_internal(
@@ -335,14 +339,14 @@ class RelAdapter(Transactable):
         table with internally-labeled columns}.
         """
         call_tables = self.get_call_tables(conn=conn)
-        signatures = self.load_signatures(conn=conn)
+        sigs = self.signature_gets(conn=conn)
         res = {}
         for table_name, table in tables.items():
             if table_name in call_tables:
                 ui_name, version = Signature.parse_versioned_name(
                     versioned_name=table_name
                 )
-                sig = signatures[ui_name, version]
+                sig = sigs[ui_name, version]
                 if isinstance(table, pd.DataFrame):
                     table = table.rename(columns=sig.ui_to_internal_input_map)
                 elif isinstance(table, pa.Table):
@@ -367,10 +371,9 @@ class RelAdapter(Transactable):
         table with human-readable columns}.
         """
         call_tables = self.get_call_tables(conn=conn)
-        signatures = self.load_signatures(use_ui_names=False, conn=conn)
+        sigs = self.signature_gets(use_ui_names=False, conn=conn)
         internal_to_ui_mapping = {
-            sig.versioned_internal_name: sig.versioned_ui_name
-            for sig in signatures.values()
+            sig.versioned_internal_name: sig.versioned_ui_name for sig in sigs.values()
         }
         res = {}
         for table_name, table in tables.items():
@@ -378,7 +381,7 @@ class RelAdapter(Transactable):
                 int_name, version = Signature.parse_versioned_name(
                     versioned_name=table_name
                 )
-                sig = signatures[int_name, version]
+                sig = sigs[int_name, version]
                 col_mapping = {v: k for k, v in sig.ui_to_internal_input_map.items()}
                 if isinstance(table, pd.DataFrame):
                     table = table.rename(columns=col_mapping)
@@ -450,8 +453,10 @@ class RelAdapter(Transactable):
                 buffer = io.BytesIO(raw_changeset[table_name])
                 table = pq.read_table(buffer)
                 data[table_name] = table
+
         # pass to UI names
         data = self.rename_tables_from_internal_to_ui(tables=data, conn=conn)
+
         for table_name, table in data.items():
             self.rel_storage.upsert(table_name, table, conn=conn)
 
