@@ -1,3 +1,5 @@
+from ...core.sig import Signature
+from ...common_imports import *
 import mongomock
 import datetime
 
@@ -10,6 +12,24 @@ class MongoMockRemoteStorage(RemoteStorage):
         self.db_name = db_name
         self.client = client
         self.log = client.experiment_data[self.db_name].event_log
+        self.sigs = []
+
+    def pull_signatures(self) -> List[Signature]:
+        return self.sigs
+
+    def push_signatures(self, new_sigs: List[Signature]) -> None:
+        current_internal_sigs = {
+            (sig.internal_name, sig.version): sig for sig in self.sigs
+        }
+        for new_sig in new_sigs:
+            internal_name, version = new_sig.internal_name, new_sig.version
+            if (internal_name, version) in current_internal_sigs:
+                current_sig = current_internal_sigs[(internal_name, version)]
+                if not current_sig.is_compatible(new_sig):
+                    raise ValueError(
+                        f"Signature {internal_name}:{version} is incompatible with {new_sig}"
+                    )
+        self.sigs = new_sigs
 
     def save_event_log_entry(self, entry: RemoteEventLogEntry):
         response = self.log.insert_one({"tables": entry})

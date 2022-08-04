@@ -28,12 +28,10 @@ def rename_func(storage: Storage, func: FuncInterface, new_name: str):
     # TODO: remote sync logic
     _check_rename_precondition(storage=storage, func=func)
     sig = func.op.sig
-    data = {sig.internal_name: (sig.ui_name, new_name)}
-    conn = storage.rel_adapter._get_connection()
-    storage._rename_funcs(mapping=data, conn=conn)
+    new_sig = sig.rename(new_name=new_name)
+    storage.synchronize_many([new_sig])
     func.is_synchronized = False
     func.is_invalidated = True
-    storage.rel_adapter._end_transaction(conn=conn)
 
 
 def rename_arg(storage: Storage, func: FuncInterface, name: str, new_name: str):
@@ -48,15 +46,9 @@ def rename_arg(storage: Storage, func: FuncInterface, name: str, new_name: str):
     """
     # TODO: remote sync logic
     _check_rename_precondition(storage=storage, func=func)
-    conn = storage.rel_adapter._get_connection()
     sig = func.op.sig
-    storage._rename_args(
-        internal_name=sig.internal_name,
-        version=sig.version,
-        mapping={name: new_name},
-        conn=conn,
-    )
+    new_sig = sig.rename_inputs(mapping={name: new_name})
+    storage.synchronize_many([new_sig])
     # invalidate func
     func.is_synchronized = False
     func.is_invalidated = True
-    storage.rel_adapter._end_transaction(conn=conn)

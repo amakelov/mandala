@@ -95,6 +95,7 @@ class Storage:
     def sync_with_remote(self):
         if self.remote_sync_manager is not None:
             self.remote_sync_manager.sync_to_remote()
+            self.pull_signatures()
             self.remote_sync_manager.sync_from_remote()
 
     def pull_signatures(self):
@@ -104,13 +105,16 @@ class Storage:
         according to the new signatures.
         """
         if self.remote_sync_manager is not None:
-            new_sigs = self.remote_sync_manager.pull_signatures()
+            assert isinstance(self.root, RemoteStorage)
+            new_sigs = self.root.pull_signatures()
+            new_sigs = self.remote_sync_manager.remote_storage.pull_signatures()
             self.synchronize_many(sigs=new_sigs, sync_signatures=False)
 
     def push_signatures(self):
         if self.remote_sync_manager is not None:
+            assert isinstance(self.root, RemoteStorage)
             current_sigs = list(self.rel_adapter.signature_gets().values())
-            self.remote_sync_manager.push_signatures(current_sigs)
+            self.root.push_signatures(current_sigs)
 
     ############################################################################
     ### synchronization, renaming, refactoring
@@ -180,6 +184,8 @@ class Storage:
         self.rel_adapter.signature_set(sig=new_sig, conn=conn)
 
     def _create_function(self, sig: Signature, conn: Connection):
+        print("This")
+        print(self)
         """
         Given a signature with internal data that does not exist in this
         storage, this *both* puts a signature in the signature storage, and
@@ -248,6 +254,17 @@ class Storage:
     def synchronize_many(
         self, sigs: List[Signature], sync_signatures: bool = True
     ) -> List[Signature]:
+        """
+        Universal method to synchronize many signatures and reject if a
+        signature is incompatible.
+
+        This handles everything:
+            - any renamings for all signatures with internal data
+            - generating new internal data for signatures that don't have it
+            - updating, creating new verions
+        """
+        ### by default, we sync the signatures with remote before making any
+        ### changes
         if sync_signatures:
             self.pull_signatures()
         conn = self.rel_adapter._get_connection()
@@ -330,6 +347,7 @@ class Storage:
         current_ui_sigs = self.rel_adapter.signature_gets(use_ui_names=True, conn=conn)
         result = [current_ui_sigs[(sig.ui_name, sig.version)] for sig in sigs]
         self.rel_adapter._end_transaction(conn=conn)
+        ### by default, we send the new signatures to the remote
         if sync_signatures:
             self.push_signatures()
         return result
