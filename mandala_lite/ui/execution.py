@@ -88,7 +88,8 @@ class FuncInterface:
         hashable_input_uids = {
             self.op.sig.ui_to_internal_input_map[k]: v.uid
             for k, v in wrapped_inputs.items()
-            if k not in self.op.sig._new_input_defaults_uids.keys()
+            if self.op.sig.ui_to_internal_input_map[k]
+            not in self.op.sig._new_input_defaults_uids.keys()
         }
         call_uid = Hashing.get_content_hash(
             obj=[
@@ -142,7 +143,8 @@ class FuncInterface:
     def __call__(self, *args, **kwargs) -> List[ValueRef]:
         context = GlobalContext.current
         if not self.op.sig.has_internal_data:
-            self.op.sig = context.storage.synchronize(sig=self.op.sig)
+            new_sig = context.storage.synchronize_many(sigs=[self.op.sig])[0]
+            self.op.sig = new_sig
             self.is_synchronized = True
         inputs = self.bind_inputs(args, kwargs)
         if context is None:
@@ -197,6 +199,7 @@ def synchronize(func: FuncInterface, storage: Storage) -> FuncInterface:
     """
     Manually synchronize a function
     """
-    func.op.sig = storage.synchronize(sig=func.op.sig)
+    new_sig = storage.synchronize_many(sigs=[func.op.sig])[0]
+    func.op.sig = new_sig
     func.is_synchronized = True
     return func

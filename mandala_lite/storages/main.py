@@ -97,6 +97,21 @@ class Storage:
             self.remote_sync_manager.sync_to_remote()
             self.remote_sync_manager.sync_from_remote()
 
+    def pull_signatures(self):
+        """
+        Pull the current state of the signatures from the remote, make sure that
+        they are compatible with the current ones, and then update or create
+        according to the new signatures.
+        """
+        if self.remote_sync_manager is not None:
+            new_sigs = self.remote_sync_manager.pull_signatures()
+            self.synchronize_many(sigs=new_sigs, sync_signatures=False)
+
+    def push_signatures(self):
+        if self.remote_sync_manager is not None:
+            current_sigs = list(self.rel_adapter.signature_gets().values())
+            self.remote_sync_manager.push_signatures(current_sigs)
+
     ############################################################################
     ### synchronization, renaming, refactoring
     ############################################################################
@@ -106,8 +121,73 @@ class Storage:
             self.call_cache.is_clean and self.obj_cache.is_clean
         )  # and self.rel_adapter.event_log_is_clean()
 
+    def _rename_funcs(self, mapping: Dict[str, Tuple[str, str]], conn: Connection):
+        """
+        Rename many functions in a single transaction.
+
+        NOTE: such a method is necessary to handle cases when some names were
+        permuted.
+
+        Args:
+            mapping (Dict[str, Tuple[str, str]]): {internal name: (current ui name, new ui name)
+        """
+        current_ui_sigs = self.rel_adapter.signature_gets(conn=conn)
+        current_ui_names = [elt[0] for elt in current_ui_sigs.keys()]
+        name_mapping = {
+            current_ui_name: new_ui_name
+            for current_ui_name, new_ui_name in mapping.values()
+        }
+        new_ui_names = [
+            name_mapping.get(ui_name, ui_name) for ui_name in current_ui_names
+        ]
+        if len(set(new_ui_names)) != len(new_ui_names):
+            raise ValueError()
+        # rename in signature object
+        for internal_name, (current_ui_name, new_ui_name) in mapping.items():
+            sigs = [
+                sig
+                for (ui_name, version), sig in current_ui_sigs.items()
+                if ui_name == current_ui_name
+            ]
+            for sig in sigs:
+                new_sig = sig.rename(new_name=new_ui_name)
+                self.rel_adapter.signature_set(sig=new_sig, conn=conn)
+                self.rel_storage.rename_relation(
+                    name=sig.versioned_ui_name,
+                    new_name=new_sig.versioned_ui_name,
+                    conn=conn,
+                )
+
+    def _rename_args(
+        self,
+        internal_name: str,
+        version: int,
+        mapping: Dict[str, str],
+        conn: Connection,
+    ):
+        """
+        Rename the arguments of a function with internal name `internal_name`,
+        accoding to the given mapping
+        """
+        current_internal_sigs = self.rel_adapter.signature_gets(
+            use_ui_names=False, conn=conn
+        )
+        sig = current_internal_sigs[internal_name, version]
+        self.rel_storage.rename_columns(
+            relation=sig.versioned_ui_name, mapping=mapping, conn=conn
+        )
+        new_sig = sig.rename_inputs(mapping=mapping)
+        self.rel_adapter.signature_set(sig=new_sig, conn=conn)
+
     def _create_function(self, sig: Signature, conn: Connection):
+        """
+        Given a signature with internal data that does not exist in this
+        storage, this *both* puts a signature in the signature storage, and
+        creates a memoization table in the database.
+        """
         assert sig.has_internal_data
+        internal_sigs = self.rel_adapter.signature_gets(use_ui_names=False, conn=conn)
+        assert (sig.internal_name, sig.version) not in internal_sigs.keys()
         self.rel_adapter.signature_set(sig=sig, conn=conn)
         # create relation
         columns = list(sig.input_names) + [f"output_{i}" for i in range(sig.n_outputs)]
@@ -119,61 +199,137 @@ class Storage:
             conn=conn,
         )
 
-    def synchronize(self, sig: Signature) -> Signature:
+    def _update_function(self, sig: Signature, conn: Connection):
         """
-        Synchronize an op's signature with this storage.
+        Given a signature with or without internal data that exists in this
+        storage, this *both* updates the memoization table in the database, and the
+        signature in the signature storage.
+        """
+        ui_sigs = self.rel_adapter.signature_gets(use_ui_names=True, conn=conn)
+        assert (sig.ui_name, sig.version) in ui_sigs.keys()
+        current = ui_sigs[(sig.ui_name, sig.version)]
+        # the `update` method also ensures that the signature is compatible
+        new_sig, updates = current.update(new=sig)
+        # create new inputs, if any
+        for new_input, default_value in updates.items():
+            internal_input_name = new_sig.ui_to_internal_input_map[new_input]
+            default_uid = new_sig._new_input_defaults_uids[internal_input_name]
+            self.rel_storage.create_column(
+                relation=new_sig.versioned_ui_name,
+                name=new_input,
+                default_value=default_uid,
+                conn=conn,
+            )
+            # insert the default in the objects *in the database*, if it's
+            # not there already
+            self.rel_adapter.obj_set(key=default_uid, value=default_value, conn=conn)
+        self.rel_adapter.signature_set(sig=new_sig, conn=conn)
 
-        - If this is a new operation, it's just added to the storage.
-        - If this is an existing operation,
-            - if the new signature is compatible with the old one, it is updated
-            and returned. TODO: if a new input is created, a new column is
-            created in the relation for this op.
-            - otherwise, an error is raised
-        """
-        # TODO: remote sync logic
-        conn = self.rel_adapter._get_connection()
+    def _create_new_version(
+        self,
+        sig: Signature,
+        current_ui_sigs: Dict[Tuple[str, int], Signature],
+        conn: Connection,
+    ):
         ui_name, version = sig.ui_name, sig.version
-        sigs = self.rel_adapter.signature_gets()
-        if (ui_name, version) in sigs:
-            # updating an existing function in-place
-            current = self.rel_adapter.signature_get(
-                ui_name=sig.ui_name, version=sig.version, conn=conn
-            )
-            # the update step also ensures that the signature is compatible
-            new_sig, updates = current.update(new=sig)
-            # create new inputs, if any
-            for new_input, default_value in updates.items():
-                default_uid = new_sig._new_input_defaults_uids[new_input]
-                self.rel_storage.create_column(
-                    relation=new_sig.versioned_ui_name,
-                    name=new_input,
-                    default_value=default_uid,
-                    conn=conn,
-                )
-                # insert the default in the objects *in the database*, if it's
-                # not there already
-                self.rel_adapter.obj_set(
-                    key=default_uid, value=default_value, conn=conn
-                )
-            self.rel_adapter.signature_set(sig=new_sig, conn=conn)
-        elif ui_name in [elt[0] for elt in sigs.keys()]:
-            # a new version of an existing function
-            highest_current_version = max(
-                [elt[1] for elt in sigs.keys() if elt[0] == ui_name]
-            )
-            if not version == highest_current_version + 1:
-                raise ValueError()
-            internal_name = sigs[(ui_name, highest_current_version)].internal_name
-            if sig.has_internal_data:
-                raise NotImplementedError()
-            new_sig = sig._generate_internal(internal_name=internal_name)
-            self._create_function(sig=new_sig, conn=conn)
-        else:
-            # a brand-new function!
+        highest_current_version = max(
+            [elt[1] for elt in current_ui_sigs.keys() if elt[0] == ui_name]
+        )
+        if not version == highest_current_version + 1:
+            raise ValueError()
+        internal_name = current_ui_sigs[
+            (ui_name, highest_current_version)
+        ].internal_name
+        if sig.has_internal_data:
+            raise NotImplementedError()
+        new_sig = sig._generate_internal(internal_name=internal_name)
+        self._create_function(sig=new_sig, conn=conn)
+
+    def synchronize_many(
+        self, sigs: List[Signature], sync_signatures: bool = True
+    ) -> List[Signature]:
+        if sync_signatures:
+            self.pull_signatures()
+        conn = self.rel_adapter._get_connection()
+        current_internal_sigs = self.rel_adapter.signature_gets(
+            use_ui_names=False, conn=conn
+        )
+        current_ui_sigs = self.rel_adapter.signature_gets(use_ui_names=True, conn=conn)
+        # figure out and apply function renamings
+        function_renamings = {}  # internal name: (current, new)
+        for sig in sigs:
             if not sig.has_internal_data:
-                new_sig = sig._generate_internal()
+                continue
+            internal_name, version = sig.internal_name, sig.version
+            if (internal_name, version) in current_internal_sigs.keys():
+                current_sig = current_internal_sigs[internal_name, version]
+                if sig.ui_name != current_sig.ui_name:
+                    function_renamings[internal_name] = (
+                        current_sig.ui_name,
+                        sig.ui_name,
+                    )
+        self._rename_funcs(mapping=function_renamings, conn=conn)
+        # figure out and apply arg renamings
+        for sig in sigs:
+            if not sig.has_internal_data:
+                continue
+            internal_name, version = sig.internal_name, sig.version
+            if (internal_name, version) in current_internal_sigs.keys():
+                current_sig = current_internal_sigs[internal_name, version]
+                if sig.input_names != current_sig.input_names:
+                    mapping = {}
+                    current_int_to_ui = {
+                        v: k for k, v in current_sig.ui_to_internal_input_map.items()
+                    }
+                    new_int_to_ui = {
+                        v: k for k, v in sig.ui_to_internal_input_map.items()
+                    }
+                    for (
+                        current_internal_arg,
+                        current_ui_arg,
+                    ) in current_int_to_ui.items():
+                        new_ui_name = new_int_to_ui[current_internal_arg]
+                        if new_ui_name != current_ui_arg:
+                            mapping[current_ui_arg] = new_ui_name
+                    self._rename_args(
+                        internal_name, version=version, mapping=mapping, conn=conn
+                    )
+        #! reload current state after renaming
+        current_internal_sigs = self.rel_adapter.signature_gets(
+            use_ui_names=False, conn=conn
+        )
+        current_ui_sigs = self.rel_adapter.signature_gets(use_ui_names=True, conn=conn)
+        # create/update new funcs
+        for sig in sigs:
+            if not sig.has_internal_data:
+                ui_name, version = sig.ui_name, sig.version
+                if (ui_name, version) in current_ui_sigs:
+                    # updating an existing function in-place
+                    self._update_function(sig=sig, conn=conn)
+                elif ui_name in [elt[0] for elt in current_ui_sigs.keys()]:
+                    # a new version of an existing function
+                    self._create_new_version(
+                        sig=sig, current_ui_sigs=current_ui_sigs, conn=conn
+                    )
+                else:
+                    # create new function
+                    if not sig.has_internal_data:
+                        sig = sig._generate_internal()
+                    self._create_function(sig=sig, conn=conn)
             else:
-                new_sig = sig
-            self._create_function(sig=new_sig, conn=conn)
+                internal_name, version = sig.internal_name, sig.version
+                if (internal_name, version) in current_internal_sigs.keys():
+                    self._update_function(sig=sig, conn=conn)
+                elif internal_name in [elt[0] for elt in current_internal_sigs.keys()]:
+                    self._create_new_version(
+                        sig=sig, current_ui_sigs=current_ui_sigs, conn=conn
+                    )
+                else:
+                    self._create_function(sig=sig, conn=conn)
+        # finally, load the new signature objects
+        current_ui_sigs = self.rel_adapter.signature_gets(use_ui_names=True, conn=conn)
+        result = [current_ui_sigs[(sig.ui_name, sig.version)] for sig in sigs]
         self.rel_adapter._end_transaction(conn=conn)
-        return new_sig
+        if sync_signatures:
+            self.push_signatures()
+        return result

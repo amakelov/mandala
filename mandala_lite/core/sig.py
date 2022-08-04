@@ -115,11 +115,23 @@ class Signature:
         Check if a new signature (possibly without internal data) is compatible
         with this signature.
 
+        Currently, the only way to be compatible is to be either the same object
+        or an extension with new arguments.
+
         Returns:
             Tuple[bool, str]: outcome, reason if `False`, None if True
         """
         if new.version != self.version:
             return False, "Versions do not match"
+        if new.ui_name != self.ui_name:
+            return False, "UI names do not match"
+        if new.has_internal_data and self.has_internal_data:
+            if new.internal_name != self.internal_name:
+                return False, "Internal names do not match"
+            if set(new.ui_to_internal_input_map.values()) != set(
+                self.ui_to_internal_input_map.values()
+            ):
+                return False, "Internal input names do not match"
         if not set.issubset(set(self.input_names), set(new.input_names)):
             return False, "Removing inputs is not supported"
         if not self.n_outputs == new.n_outputs:
@@ -150,7 +162,7 @@ class Signature:
 
         Returns:
             - new `Signature` object
-            - a dictionary of {new input name: default value} for any new inputs
+            - a dictionary of {new ui input name: default value} for any new inputs
               that were created
         """
         is_compatible, reason = self.is_compatible(new)
@@ -180,7 +192,7 @@ class Signature:
         res.ui_to_internal_input_map[name] = internal_name
         res.defaults[name] = default
         default_uid = Hashing.get_content_hash(obj=default)
-        res._new_input_defaults_uids[name] = default_uid
+        res._new_input_defaults_uids[internal_name] = default_uid
         return res
 
     def rename(self, new_name: str) -> "Signature":
@@ -203,6 +215,23 @@ class Signature:
         res.input_names.add(new_name)
         del res.ui_to_internal_input_map[name]
         res.ui_to_internal_input_map[new_name] = internal_name
+        return res
+
+    def rename_inputs(self, mapping: Dict[str, str]) -> "Signature":
+        assert all(k in self.input_names for k in mapping.keys())
+        current_names = list(self.input_names)
+        new_names = [mapping.get(k, k) for k in current_names]
+        if len(set(new_names)) != len(new_names):
+            raise ValueError("Input name collision")
+        res = copy.deepcopy(self)
+        for current_name in mapping.keys():
+            res.input_names.remove(current_name)
+        for new_name in mapping.values():
+            res.input_names.add(new_name)
+        for current_name, new_name in mapping.items():
+            internal_name = res.ui_to_internal_input_map[current_name]
+            del res.ui_to_internal_input_map[current_name]
+            res.ui_to_internal_input_map[new_name] = internal_name
         return res
 
     @staticmethod

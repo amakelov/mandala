@@ -5,6 +5,7 @@ from pypika import Query, Column
 
 from .bases import RelStorage
 from .utils import Transactable, transaction
+from ...core.utils import get_uid
 from ...common_imports import *
 from ...core.config import Config
 
@@ -118,8 +119,20 @@ class DuckDBRelStorage(RelStorage, Transactable):
         """
         Rename a column
         """
-        query = f"ALTER TABLE {relation} RENAME {name} TO {new_name};"
+        query = f'ALTER TABLE {relation} RENAME "{name}" TO "{new_name}";'
         conn.execute(query)
+
+    @transaction()
+    def rename_columns(
+        self, relation: str, mapping: Dict[str, str], conn: Connection = None
+    ):
+        # factorize the renaming into two maps that can be applied atomically
+        part_1 = {k: get_uid() for k in mapping.keys()}
+        part_2 = {part_1[k]: v for k, v in mapping.items()}
+        for k, v in part_1.items():
+            self.rename_column(relation=relation, name=k, new_name=v, conn=conn)
+        for k, v in part_2.items():
+            self.rename_column(relation=relation, name=k, new_name=v, conn=conn)
 
     ############################################################################
     ### instance management

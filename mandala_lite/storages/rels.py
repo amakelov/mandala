@@ -268,8 +268,11 @@ class RelAdapter(Transactable):
     ############################################################################
     ### accessing and working with signature data
     ###
-    ### Signatures have the invariant that all signatures for versions of the
-    ### same function have the same UI *and* internal names.
+    ### Signatures have the following invariants:
+    ### - all signatures for versions of the same function have the same UI
+    ### and internal names.
+    ### - there exists a signature with (ui_name, version) if and only if there exists
+    ### a table in the database with the corresponding name and corresponding column names.
     ############################################################################
     @transaction()
     def signature_gets(
@@ -298,7 +301,8 @@ class RelAdapter(Transactable):
     @transaction()
     def signature_set(self, sig: Signature, conn: Connection = None) -> None:
         """
-        Put a signature object in the signature storage.
+        Put a signature object in the signature storage, and create a table in
+        the database if necessary.
         """
         # delete existing, if any
         query = f"DELETE FROM {self.SCHEMA_TABLE} WHERE {Config.uid_col} = '{sig.internal_name}' AND version = '{sig.version}'"
