@@ -9,7 +9,7 @@ from mandala_lite.storages.remote_impls.mongo_mock import MongoMockRemoteStorage
 
 def call_matches_signature(call: Call, sig: Signature) -> bool:
     return (
-        call.op.sig.name == sig.name
+        call.op.sig.ui_name == sig.ui_name
         and set(call.inputs.keys()).issubset(sig.input_names)
         and len(call.outputs) == sig.n_outputs
     )
@@ -33,8 +33,8 @@ def check_invariants(storage: Storage):
     # check that the signatures stored are consistent with the calls
     for call in calls:
         sig = call.op.sig
-        ext_name, version = sig.external_name, sig.version
-        stored_sig = storage.sigs[ext_name, version]
+        ui_name, version = sig.external_name, sig.version
+        stored_sig = storage.sigs[ui_name, version]
         assert call_matches_signature(call, stored_sig)
 
     # check that the committed calls are accounted for in the relational storage

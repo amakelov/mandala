@@ -123,7 +123,7 @@ class RelAdapter(Transactable):
         # split by operation internal name
         calls_by_op = defaultdict(list)
         for call in calls:
-            calls_by_op[call.op.sig.versioned_name].append(call)
+            calls_by_op[call.op.sig.versioned_ui_name].append(call)
         res = {}
         for k, v in calls_by_op.items():
             res[k] = pa.Table.from_pylist(
@@ -271,8 +271,17 @@ class RelAdapter(Transactable):
     ############################################################################
     @transaction()
     def load_signatures(
-        self, use_external_names: bool = True, conn: Connection = None
+        self, use_ui_names: bool = True, conn: Connection = None
     ) -> Dict[Tuple[str, int], Signature]:
+        """
+        Return the signature objects for functions currently connected to the
+        storage, indexed by (ui name, version) or (internal name, version)
+
+        Arguments:
+            use_ui_names: If True, UI names are used as keys in the dictionary,
+            otherwise internal names are used
+
+        """
         df = self.rel_storage.execute_df(
             query=f"SELECT * FROM {self.SCHEMA_TABLE}", conn=conn
         )
@@ -280,12 +289,15 @@ class RelAdapter(Transactable):
         result = {}
         for version, sig in df[["version", "signature"]].itertuples(index=False):
             sig: Signature
-            name_key = sig.name if use_external_names else sig.internal_name
+            name_key = sig.ui_name if use_ui_names else sig.internal_name
             result[(name_key, version)] = sig
         return result
 
     @transaction()
     def write_signature(self, sig: Signature, conn: Connection = None) -> None:
+        """
+        Put a signature object in the signature storage.
+        """
         # delete existing
         query = f"DELETE FROM {self.SCHEMA_TABLE} WHERE {Config.uid_col} = '{sig.internal_name}' AND version = '{sig.version}'"
         conn.execute(query)
@@ -314,7 +326,7 @@ class RelAdapter(Transactable):
         return signatures[name, version]
 
     @transaction()
-    def internalize_tables(
+    def rename_tables_from_ui_to_internal(
         self, tables: Dict[str, Union[pd.DataFrame, pa.Table]], conn: Connection = None
     ) -> Dict[str, Union[pd.DataFrame, pa.Table]]:
         """
@@ -327,16 +339,16 @@ class RelAdapter(Transactable):
         res = {}
         for table_name, table in tables.items():
             if table_name in call_tables:
-                ext_name, version = Signature.parse_versioned_name(
+                ui_name, version = Signature.parse_versioned_name(
                     versioned_name=table_name
                 )
-                sig = signatures[ext_name, version]
+                sig = signatures[ui_name, version]
                 if isinstance(table, pd.DataFrame):
-                    table = table.rename(columns=sig.ext_to_int_input_map)
+                    table = table.rename(columns=sig.ui_to_internal_input_map)
                 elif isinstance(table, pa.Table):
                     columns = table.column_names
                     new_columns = [
-                        sig.ext_to_int_input_map.get(col, col) for col in columns
+                        sig.ui_to_internal_input_map.get(col, col) for col in columns
                     ]
                     table = table.rename_columns(new_columns)
                 res[sig.versioned_internal_name] = table
@@ -346,7 +358,7 @@ class RelAdapter(Transactable):
         return res
 
     @transaction()
-    def externalize_tables(
+    def rename_tables_from_internal_to_ui(
         self, tables: Dict[str, Union[pd.DataFrame, pa.Table]], conn: Connection = None
     ) -> Dict[str, Union[pd.DataFrame, pa.Table]]:
         """
@@ -355,26 +367,26 @@ class RelAdapter(Transactable):
         table with human-readable columns}.
         """
         call_tables = self.get_call_tables(conn=conn)
-        signatures = self.load_signatures(use_external_names=False, conn=conn)
-        internal_to_external_mapping = {
-            sig.versioned_internal_name: sig.versioned_name
+        signatures = self.load_signatures(use_ui_names=False, conn=conn)
+        internal_to_ui_mapping = {
+            sig.versioned_internal_name: sig.versioned_ui_name
             for sig in signatures.values()
         }
         res = {}
         for table_name, table in tables.items():
-            if internal_to_external_mapping.get(table_name, None) in call_tables:
+            if internal_to_ui_mapping.get(table_name, None) in call_tables:
                 int_name, version = Signature.parse_versioned_name(
                     versioned_name=table_name
                 )
                 sig = signatures[int_name, version]
-                col_mapping = {v: k for k, v in sig.ext_to_int_input_map.items()}
+                col_mapping = {v: k for k, v in sig.ui_to_internal_input_map.items()}
                 if isinstance(table, pd.DataFrame):
                     table = table.rename(columns=col_mapping)
                 elif isinstance(table, pa.Table):
                     columns = table.column_names
                     new_columns = [col_mapping.get(col, col) for col in columns]
                     table = table.rename_columns(new_columns)
-                res[sig.versioned_name] = table
+                res[sig.versioned_ui_name] = table
             else:
                 # skip over non-call tables (i.e., vrefs)
                 res[table_name] = table
@@ -408,7 +420,9 @@ class RelAdapter(Transactable):
             )
 
         # pass to internal names
-        tables_with_changes = self.internalize_tables(tables_with_changes, conn=conn)
+        tables_with_changes = self.rename_tables_from_ui_to_internal(
+            tables_with_changes, conn=conn
+        )
 
         output = {}
         for table_name, table in tables_with_changes.items():
@@ -428,7 +442,7 @@ class RelAdapter(Transactable):
         """
         Apply new calls from the remote server.
 
-        NOTE: this also renames tables to the external names.
+        NOTE: this also renames tables to the UI names.
         """
         data = {}
         for raw_changeset in changes:
@@ -436,8 +450,8 @@ class RelAdapter(Transactable):
                 buffer = io.BytesIO(raw_changeset[table_name])
                 table = pq.read_table(buffer)
                 data[table_name] = table
-        # pass to external names
-        data = self.externalize_tables(tables=data, conn=conn)
+        # pass to UI names
+        data = self.rename_tables_from_internal_to_ui(tables=data, conn=conn)
         for table_name, table in data.items():
             self.rel_storage.upsert(table_name, table, conn=conn)
 

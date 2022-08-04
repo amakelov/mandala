@@ -43,7 +43,7 @@ class Compiler:
     def _generate_aliases(self) -> Tuple[Dict[ValQuery, Table], Dict[FuncQuery, Table]]:
         func_aliases = {}
         for func_query in self.func_queries:
-            op_table = Table(func_query.op.sig.versioned_name)
+            op_table = Table(func_query.op.sig.versioned_ui_name)
             func_aliases[func_query] = op_table.as_(f"_{id(func_query)}")
         val_aliases = {}
         for val_query in self.val_queries:

@@ -118,7 +118,7 @@ class Storage:
         # TODO: remote sync logic
         conn = self.rel_adapter._get_connection()
         if not self.rel_adapter.has_signature(
-            name=sig.name, version=sig.version, conn=conn
+            name=sig.ui_name, version=sig.version, conn=conn
         ):
             if not sig.has_internal_data:
                 new_sig = sig._generate_internal()
@@ -131,21 +131,21 @@ class Storage:
             ]
             columns = [(Config.uid_col, None)] + [(column, None) for column in columns]
             self.rel_storage.create_relation(
-                name=new_sig.versioned_name,
+                name=new_sig.versioned_ui_name,
                 columns=columns,
                 primary_key=Config.uid_col,
                 conn=conn,
             )
         else:
             current = self.rel_adapter.get_signature(
-                name=sig.name, version=sig.version, conn=conn
+                name=sig.ui_name, version=sig.version, conn=conn
             )
             new_sig, updates = current.update(new=sig)
             # create new inputs, if any
             for new_input, default_value in updates.items():
                 default_uid = new_sig._new_input_defaults_uids[new_input]
                 self.rel_storage.create_column(
-                    relation=new_sig.versioned_name,
+                    relation=new_sig.versioned_ui_name,
                     name=new_input,
                     default_value=default_uid,
                     conn=conn,

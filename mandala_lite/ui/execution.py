@@ -86,7 +86,7 @@ class FuncInterface:
         # get call UID using *internal names* to guarantee the same UID will be
         # assigned regardless of renamings
         hashable_input_uids = {
-            self.op.sig.ext_to_int_input_map[k]: v.uid
+            self.op.sig.ui_to_internal_input_map[k]: v.uid
             for k, v in wrapped_inputs.items()
             if k not in self.op.sig._new_input_defaults_uids.keys()
         }
@@ -159,7 +159,7 @@ class FuncInterface:
     def get_table(self) -> pd.DataFrame:
         storage = GlobalContext.current.storage
         assert storage is not None
-        return storage.rel_storage.get_data(table=self.op.sig.versioned_name)
+        return storage.rel_storage.get_data(table=self.op.sig.versioned_ui_name)
 
 
 def Q() -> ValQuery:

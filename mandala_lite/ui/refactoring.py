@@ -30,7 +30,7 @@ def rename_func(storage: Storage, func: FuncInterface, new_name: str):
     sigs = storage.rel_adapter.load_signatures()
     if new_name in [elt[0] for elt in sigs.keys()]:
         raise RuntimeError(
-            f"Cannot rename function {func.op.sig.name} to {new_name}, which already exists."
+            f"Cannot rename function {func.op.sig.ui_name} to {new_name}, which already exists."
         )
     conn = storage.rel_adapter._get_connection()
     # rename in signature object
@@ -39,7 +39,9 @@ def rename_func(storage: Storage, func: FuncInterface, new_name: str):
     storage.rel_adapter.write_signature(sig=new_sig, conn=conn)
     # rename table
     storage.rel_storage.rename_relation(
-        name=func.op.sig.versioned_name, new_name=new_sig.versioned_name, conn=conn
+        name=func.op.sig.versioned_ui_name,
+        new_name=new_sig.versioned_ui_name,
+        conn=conn,
     )
     # invalidate func
     func.is_synchronized = False
@@ -66,7 +68,7 @@ def rename_arg(storage: Storage, func: FuncInterface, name: str, new_name: str):
     storage.rel_adapter.write_signature(sig=new_sig, conn=conn)
     # rename in table
     storage.rel_storage.rename_column(
-        relation=func.op.sig.versioned_name, name=name, new_name=new_name, conn=conn
+        relation=func.op.sig.versioned_ui_name, name=name, new_name=new_name, conn=conn
     )
     # invalidate func
     func.is_synchronized = False

@@ -29,7 +29,7 @@ def test_main_storage():
 
 def test_signatures():
     sig = Signature(
-        name="f",
+        ui_name="f",
         input_names={"x", "y"},
         n_outputs=1,
         defaults={"y": 42},
@@ -44,7 +44,7 @@ def test_signatures():
         assert True
 
     try:
-        sig.ext_to_int_input_map
+        sig.ui_to_internal_input_map
         assert False
     except ValueError:
         assert True
@@ -56,7 +56,7 @@ def test_signatures():
     ### invalid signature changes
     # remove input
     new = Signature(
-        name="f",
+        ui_name="f",
         input_names={"x", "z"},
         n_outputs=1,
         defaults={"y": 42},
@@ -69,7 +69,7 @@ def test_signatures():
         assert True
     # change number of outputs
     new = Signature(
-        name="f",
+        ui_name="f",
         input_names={"x", "y"},
         n_outputs=2,
         defaults={"y": 42},
@@ -82,7 +82,7 @@ def test_signatures():
         assert True
     # remove default
     new = Signature(
-        name="f",
+        ui_name="f",
         input_names={"x", "y"},
         n_outputs=1,
         defaults={},
@@ -95,7 +95,7 @@ def test_signatures():
         assert True
     # change version
     new = Signature(
-        name="f",
+        ui_name="f",
         input_names={"x", "y"},
         n_outputs=1,
         defaults={"y": 42},
