@@ -69,7 +69,6 @@ class DuckDBRelStorage(RelStorage, Transactable):
         """
         Create a table with given columns, with an optional primary key
         """
-        print(f'Creating relation "{name}"')
         query = (
             Query.create_table(table=name)
             .if_not_exists()

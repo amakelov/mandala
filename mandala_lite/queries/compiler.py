@@ -101,5 +101,4 @@ class Compiler:
             query = query.from_(table)
         query = query.select(*select_cols)
         query = query.where(Criterion.all(all_constraints))
-        print(query)
         return query

@@ -136,7 +136,7 @@ class Storage:
             mapping (Dict[str, Tuple[str, str]]): {internal name: (current ui name, new ui name)
         """
         current_ui_sigs = self.rel_adapter.signature_gets(conn=conn)
-        current_ui_names = [elt[0] for elt in current_ui_sigs.keys()]
+        current_ui_names = set([elt[0] for elt in current_ui_sigs.keys()])
         name_mapping = {
             current_ui_name: new_ui_name
             for current_ui_name, new_ui_name in mapping.values()
@@ -184,8 +184,6 @@ class Storage:
         self.rel_adapter.signature_set(sig=new_sig, conn=conn)
 
     def _create_function(self, sig: Signature, conn: Connection):
-        print("This")
-        print(self)
         """
         Given a signature with internal data that does not exist in this
         storage, this *both* puts a signature in the signature storage, and
@@ -246,9 +244,10 @@ class Storage:
         internal_name = current_ui_sigs[
             (ui_name, highest_current_version)
         ].internal_name
-        if sig.has_internal_data:
-            raise NotImplementedError()
-        new_sig = sig._generate_internal(internal_name=internal_name)
+        if not sig.has_internal_data:
+            new_sig = sig._generate_internal(internal_name=internal_name)
+        else:
+            new_sig = sig
         self._create_function(sig=new_sig, conn=conn)
 
     def synchronize_many(

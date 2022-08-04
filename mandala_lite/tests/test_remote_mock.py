@@ -124,3 +124,16 @@ def test_remote_lots_of_stuff():
     storage_1.sync_with_remote()
     assert compare_signatures(storage_1=storage_1, storage_2=storage_2)
     assert compare_data(storage_1=storage_1, storage_2=storage_2)
+
+    # do some versioning stuff
+    @op(version=1)
+    def add(x: int, y: int, z: int) -> int:
+        return x + y + z
+
+    with run(storage_2):
+        add(x=1, y=2, z=3)
+
+    storage_2.sync_with_remote()
+    storage_1.sync_with_remote()
+    assert compare_signatures(storage_1=storage_1, storage_2=storage_2)
+    assert compare_data(storage_1=storage_1, storage_2=storage_2)
