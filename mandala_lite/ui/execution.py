@@ -49,7 +49,7 @@ class FuncInterface:
         ]
         return wrapped_outputs
 
-    def bind_inputs(self, args, kwargs) -> Dict[str, Any]:
+    def bind_inputs(self, args, kwargs, mode:str) -> Dict[str, Any]:
         """
         Given args and kwargs passed by the user from python, this adds defaults
         and returns a dict where they are indexed via internal names.
@@ -57,8 +57,11 @@ class FuncInterface:
         bound_args = self.op.py_sig.bind(*args, **kwargs)
         bound_args.apply_defaults()
         inputs_dict = dict(bound_args.arguments)
-        # rename to internal names
-        # inputs_dict = {k: v for k, v in inputs_dict.items()}
+        if mode == MODES.query:
+            # TODO: add a point constraint for defaults
+            for k in inputs_dict.keys():
+                if not isinstance(inputs_dict[k], ValQuery):
+                    inputs_dict[k] = Q()
         return inputs_dict
 
     def format_as_outputs(
@@ -85,6 +88,13 @@ class FuncInterface:
         wrapped_inputs = self.wrap_inputs(inputs)
         # get call UID using *internal names* to guarantee the same UID will be
         # assigned regardless of renamings
+        hashable_input_uids = {}
+        for k, v in wrapped_inputs.items():
+            internal_k = self.op.sig.ui_to_internal_input_map[k]
+            if internal_k in self.op.sig._new_input_defaults_uids:
+                if self.op.sig._new_input_defaults_uids[internal_k] == v.uid:
+                    continue
+            hashable_input_uids[internal_k] = v.uid
         hashable_input_uids = {
             self.op.sig.ui_to_internal_input_map[k]: v.uid
             for k, v in wrapped_inputs.items()
@@ -142,11 +152,13 @@ class FuncInterface:
 
     def __call__(self, *args, **kwargs) -> List[ValueRef]:
         context = GlobalContext.current
+        if context is None:
+            raise RuntimeError()
         if not self.op.sig.has_internal_data:
             new_sig = context.storage.synchronize_many(sigs=[self.op.sig])[0]
             self.op.sig = new_sig
             self.is_synchronized = True
-        inputs = self.bind_inputs(args, kwargs)
+        inputs = self.bind_inputs(args, kwargs, mode=context.mode)
         if context is None:
             raise RuntimeError("No context to call from")
         mode = context.mode

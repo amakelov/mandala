@@ -8,6 +8,9 @@ def test_add_input():
 
     storage = Storage()
 
+    ############################################################################ 
+    ### check that old calls are preserved
+    ############################################################################ 
     @op
     def inc(x: int) -> int:
         return x + 1
@@ -27,7 +30,60 @@ def test_add_input():
         df = inc.get_table()
     assert df.shape == (1, 4)
 
+    ############################################################################ 
+    ### check that defaults can be overridden 
+    ############################################################################ 
+    @op
+    def add_many(x:int) -> int:
+        return x + 1
+    synchronize(func=add_many, storage=storage)
 
+    @op
+    def add_many(x:int, y:int=23, z:int=42) -> int:
+        return x + y + z 
+    synchronize(func=add_many, storage=storage)
+
+    with run(storage):
+        add_many(0)
+        add_many(0, 1)
+        add_many(0, 1, 2)
+    
+    with query(storage) as q:
+        x, y, z = Q(), Q(), Q()
+        w = add_many(x, y, z)
+        df = q.get_table(x, y, z, w)
+    
+    rows = set(tuple(row) for row in df.values.tolist())
+    assert rows == {(0, 1, 2, 3), (0, 1, 42, 43), (0, 23, 42, 65)}
+
+    ############################################################################ 
+    ### check that queries work with defaults
+    ############################################################################ 
+    with query(storage) as q:
+        x = Q()
+        w = add_many(x)
+        df = q.get_table(x, w)
+    
+    ############################################################################ 
+    ### check that invalid ways to add an input are not allowed
+    ############################################################################ 
+
+    ### no default
+    @op
+    def no_default(x:int) -> int:
+        return x + 1 
+    synchronize(func=no_default, storage=storage)
+
+    try:
+        @op
+        def no_default(x:int, y:int) -> int:
+            return x + y
+        synchronize(func=no_default, storage=storage)
+        assert False
+    except:
+        assert True
+    
+    
 def test_func_renaming():
 
     storage = Storage()
