@@ -88,6 +88,9 @@ def test_func_renaming():
 
     storage = Storage()
 
+    ############################################################################ 
+    ### unit test
+    ############################################################################ 
     @op
     def inc(x: int) -> int:
         return x + 1
@@ -113,10 +116,65 @@ def test_func_renaming():
     # make sure we did not create a new function
     assert len(storage.rel_adapter.signature_gets()) == 1
 
+    ############################################################################ 
+    ### check that name collisions are not allowed
+    ############################################################################ 
+    storage = Storage()
+
+    @op
+    def inc(x: int) -> int:
+        return x + 1
+
+    @op
+    def new_inc(x: int) -> int:
+        return x + 1
+
+    synchronize(func=inc, storage=storage)
+    synchronize(func=new_inc, storage=storage)
+
+    try:
+        rename_func(storage=storage, func=inc, new_name="inc_new")
+        assert False
+    except:
+        assert True
+
+    ############################################################################ 
+    ### permute names
+    ############################################################################ 
+    storage = Storage()
+
+    @op
+    def inc(x: int) -> int:
+        return x + 1
+
+    @op
+    def new_inc(x: int) -> int:
+        return x + 1
+
+    synchronize(func=inc, storage=storage)
+    synchronize(func=new_inc, storage=storage)
+
+    rename_func(storage=storage, func=inc, new_name="temp")
+    rename_func(storage=storage, func=new_inc, new_name="inc")
+
+    @op
+    def temp(x: int) -> int:
+        return x + 1
+    @op
+    def inc(x: int) -> int:
+        return x + 1
+    synchronize(func=temp, storage=storage)
+    synchronize(func=inc, storage=storage)
+
+    rename_func(storage=storage, func=temp, new_name="new_inc")
+
 
 def test_arg_renaming():
     storage = Storage()
 
+    ############################################################################ 
+    ### unit test
+    ############################################################################ 
     @op
     def inc(x: int) -> int:
         return x + 1
@@ -142,9 +200,27 @@ def test_arg_renaming():
     # make sure we did not create a new function
     assert len(storage.rel_adapter.signature_gets()) == 1
 
+    ############################################################################ 
+    ### check collisions are not allowed
+    ############################################################################ 
+    @op
+    def add(x:int, y:int) -> int:
+        return x + y
+    
+    synchronize(func=add, storage=storage)
+    try:
+        rename_arg(storage=storage, func=add, name='x', new_name='y')
+        assert False
+    except:
+        assert True
+
 
 def test_versions():
     storage = Storage()
+
+    ############################################################################ 
+    ### unit test
+    ############################################################################ 
 
     @op
     def inc(x: int) -> int:

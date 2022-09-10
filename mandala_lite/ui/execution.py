@@ -95,12 +95,6 @@ class FuncInterface:
                 if self.op.sig._new_input_defaults_uids[internal_k] == v.uid:
                     continue
             hashable_input_uids[internal_k] = v.uid
-        hashable_input_uids = {
-            self.op.sig.ui_to_internal_input_map[k]: v.uid
-            for k, v in wrapped_inputs.items()
-            if self.op.sig.ui_to_internal_input_map[k]
-            not in self.op.sig._new_input_defaults_uids.keys()
-        }
         call_uid = Hashing.get_content_hash(
             obj=[
                 hashable_input_uids,
