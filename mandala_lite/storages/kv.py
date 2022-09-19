@@ -50,6 +50,9 @@ class InMemoryStorage(KVStore):
         self.data: dict[str, Any] = {}
         self.dirty_entries: set[str] = set()
 
+    def __repr__(self):
+        return f"InMemoryStorage(data={self.data})"
+
     def exists(self, k: str) -> bool:
         return k in self.data
 
@@ -66,3 +69,7 @@ class InMemoryStorage(KVStore):
 
     def keys(self) -> List[str]:
         return list(self.data.keys())
+
+    @property
+    def is_clean(self) -> bool:
+        return len(self.dirty_entries) == 0

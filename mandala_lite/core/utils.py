@@ -11,6 +11,13 @@ def get_uid() -> str:
     return "{}".format(binascii.hexlify(os.urandom(16)).decode("utf-8"))
 
 
+def is_subdict(a: Dict, b: Dict) -> bool:
+    """
+    Check that all keys in `a` are in `b` with the same value.
+    """
+    return all((k in b and a[k] == b[k]) for k in a)
+
+
 class Hashing:
     """
     Helpers for hashing e.g. function inputs and call metadata.

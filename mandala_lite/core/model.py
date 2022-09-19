@@ -38,7 +38,7 @@ def wrap(obj: Any, uid: Optional[str] = None) -> ValueRef:
     """
     Wraps a value as a `ValueRef`, if it isn't one already.
 
-    The uid is either explicitly set or a content hash is generated. Note that
+    The uid is either explicitly set, or a content hash is generated. Note that
     content hashing may take non-trivial time for large objects. When `obj` is
     already a `ValueRef` and `uid` is provided, an error is raised.
     """
@@ -68,16 +68,16 @@ def unwrap(obj: Union[T, ValueRef]) -> T:
 
 class Call:
     """
-    Represents the inputs, outputs and uid of a call to an operation.
+    Represents the data of a call to an operation (inputs, outputs, and call UID).
 
     The inputs to an operation are represented as a dictionary, and the outputs
     are a (possibly empty) list, mirroring how Python functions have named
-    inputs but nameless outputs for functions. This convention is followed
-    throughout mandala to stick as close as possible to the object being
-    modeled.
+    inputs but nameless (but ordered) outputs. This convention is followed
+    throughout to stick as close as possible to the object being modeled (a
+    Python function).
 
-    The uid is a unique identifier for the call derived from the inputs and the
-    identity of the operation.
+    The UID is a unique identifier for the call derived *deterministically* from
+    the inputs' UIDs and the "identity" of the operation.
     """
 
     def __init__(
@@ -110,8 +110,16 @@ class Call:
 
     @staticmethod
     def from_row(row: pa.Table) -> "Call":
+        """
+        Generate a `Call` from a single-row table encoding the UID, input and
+        output UIDs.
+
+        TODO: this currently does not include the operation
+        """
         columns = row.column_names
-        output_columns = [column for column in columns if column.startswith("output")]
+        output_columns = [
+            column for column in columns if column.startswith(Config.output_name_prefix)
+        ]
         input_columns = [
             column
             for column in columns
@@ -143,32 +151,39 @@ class FuncOp:
     performing the necessary updates to the stored signature.
 
     See also:
-        - `Signature`
+        - `mandala_lite.core.sig.Signature`
     """
 
     def __init__(self, func: Callable, version: int = 0):
         self.func = func
         self.py_sig = inspect.signature(self.func)
         self.sig = Signature.from_py(
-            sig=inspect.signature(func),
-            name=func.__name__,
-            version=version
+            sig=inspect.signature(func), name=func.__name__, version=version
         )
         # TODO: use this
         self.is_synchronized = False
 
     def compute(self, inputs: Dict[str, Any]) -> List[Any]:
         """
-        Computes the function with the given *unwrapped* inputs, named by
-        internal input names.
+        Computes the function on the given *unwrapped* inputs. Returns a list of
+        `self.sig.n_outputs` outputs (after checking they are the number
+        expected by the interface).
+
+        This expects the inputs to be named using *internal* input names.
         """
-        # inv_mapping = {v: k for k, v in self.sig.ext_to_int_input_map.items()}
-        # inputs = {inv_mapping[k]: v for k, v in inputs.items()}
         result = self.func(**inputs)
         if self.sig.n_outputs == 0:
-            assert result is None, "Function returned non-None value"
+            assert (
+                result is None
+            ), f"Operation {self} has zero outputs, but its function returned {result}"
             return []
         elif self.sig.n_outputs == 1:
             return [result]
         else:
+            assert isinstance(
+                result, tuple
+            ), f"Operation {self} has multiple outputs, but its function returned a non-tuple: {result}"
+            assert (
+                len(result) == self.sig.n_outputs
+            ), f"Operation {self} has {self.sig.n_outputs} outputs, but its function returned a tuple of length {len(result)}"
             return list(result)

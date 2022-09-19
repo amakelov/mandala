@@ -1,5 +1,5 @@
 from ..common_imports import *
-from ..core.config import Config
+from ..core.config import Config, dump_output_name
 from .weaver import ValQuery, FuncQuery
 from pypika import Query, Table, Field, Column, Criterion
 
@@ -43,7 +43,7 @@ class Compiler:
     def _generate_aliases(self) -> Tuple[Dict[ValQuery, Table], Dict[FuncQuery, Table]]:
         func_aliases = {}
         for func_query in self.func_queries:
-            op_table = Table(func_query.op.sig.name)
+            op_table = Table(func_query.op.sig.versioned_ui_name)
             func_aliases[func_query] = op_table.as_(f"_{id(func_query)}")
         val_aliases = {}
         for val_query in self.val_queries:
@@ -65,7 +65,8 @@ class Compiler:
         for output_idx, val_query in enumerate(op_query.outputs):
             val_alias = self.val_aliases[val_query]
             constraints.append(
-                val_alias[Config.uid_col] == func_alias[f"output_{output_idx}"]
+                val_alias[Config.uid_col]
+                == func_alias[dump_output_name(index=output_idx)]
             )
             select_fields.append(val_alias[Config.uid_col])
         return constraints, select_fields
@@ -101,5 +102,4 @@ class Compiler:
             query = query.from_(table)
         query = query.select(*select_cols)
         query = query.where(Criterion.all(all_constraints))
-        print(query)
         return query

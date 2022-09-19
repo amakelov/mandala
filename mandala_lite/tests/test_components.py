@@ -29,17 +29,34 @@ def test_main_storage():
 
 def test_signatures():
     sig = Signature(
-        name="f",
+        ui_name="f",
         input_names={"x", "y"},
         n_outputs=1,
         defaults={"y": 42},
         version=0,
     )
 
+    # if internal data has not been set, it should not be accessible
+    try:
+        sig.internal_name
+        assert False
+    except ValueError:
+        assert True
+
+    try:
+        sig.ui_to_internal_input_map
+        assert False
+    except ValueError:
+        assert True
+
+    with_internal = sig._generate_internal()
+    assert not sig.has_internal_data
+    assert with_internal.has_internal_data
+
     ### invalid signature changes
     # remove input
     new = Signature(
-        name="f",
+        ui_name="f",
         input_names={"x", "z"},
         n_outputs=1,
         defaults={"y": 42},
@@ -52,7 +69,7 @@ def test_signatures():
         assert True
     # change number of outputs
     new = Signature(
-        name="f",
+        ui_name="f",
         input_names={"x", "y"},
         n_outputs=2,
         defaults={"y": 42},
@@ -65,7 +82,7 @@ def test_signatures():
         assert True
     # remove default
     new = Signature(
-        name="f",
+        ui_name="f",
         input_names={"x", "y"},
         n_outputs=1,
         defaults={},
@@ -78,7 +95,7 @@ def test_signatures():
         assert True
     # change version
     new = Signature(
-        name="f",
+        ui_name="f",
         input_names={"x", "y"},
         n_outputs=1,
         defaults={"y": 42},
@@ -87,10 +104,11 @@ def test_signatures():
     try:
         sig.update(new=new)
         assert False
-    except AssertionError:
+    except ValueError:
         assert True
 
     # add input
+    sig = sig._generate_internal()
     try:
         sig.create_input(name="y", default=23)
         assert False
