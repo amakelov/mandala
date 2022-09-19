@@ -20,6 +20,9 @@ class DuckDBRelStorage(RelStorage, Transactable):
         if self.in_memory:
             self._conn = duckdb.connect(self.address)
 
+    ############################################################################
+    ### transaction interface
+    ############################################################################
     def _get_connection(self) -> Connection:
         return self._conn if self.in_memory else duckdb.connect(database=self.address)
 
@@ -27,28 +30,30 @@ class DuckDBRelStorage(RelStorage, Transactable):
         if not self.in_memory:
             conn.close()
 
+    ############################################################################
+    ###
+    ############################################################################
     @transaction()
-    def get_tables(self, conn: Connection = None) -> List[str]:
-        return conn.execute("SHOW TABLES;").fetchdf()["name"].values.tolist()
+    def get_tables(self, conn: Optional[Connection] = None) -> List[str]:
+        return self.execute_df(query="SHOW TABLES;", conn=conn)["name"].tolist()
 
     @transaction()
-    def table_exists(self, relation: str, conn: Connection = None) -> bool:
+    def table_exists(self, relation: str, conn: Optional[Connection] = None) -> bool:
         return relation in self.get_tables(conn=conn)
 
     @transaction()
-    def get_data(self, table: str, conn: Connection = None) -> pd.DataFrame:
-        return conn.execute(f"SELECT * FROM '{table}';").fetchdf()
+    def get_data(self, table: str, conn: Optional[Connection] = None) -> pd.DataFrame:
+        return self.execute_df(query=f"SELECT * FROM {table};", conn=conn)
 
     @transaction()
-    def get_count(self, table: str, conn: Connection = None) -> int:
-        return (
-            conn.execute(f"SELECT COUNT(*) FROM {table};")
-            .fetchdf()["count_star()"]
-            .item()
-        )
+    def get_count(self, table: str, conn: Optional[Connection] = None) -> int:
+        df = self.execute_df(query=f"SELECT COUNT(*) FROM {table};", conn=conn)
+        return df["count_star()"].item()
 
     @transaction()
-    def get_all_data(self, conn: Connection = None) -> Dict[str, pd.DataFrame]:
+    def get_all_data(
+        self, conn: Optional[Connection] = None
+    ) -> Dict[str, pd.DataFrame]:
         tables = self.get_tables(conn=conn)
         data = {}
         for table in tables:
@@ -64,10 +69,12 @@ class DuckDBRelStorage(RelStorage, Transactable):
         name: str,
         columns: List[tuple[str, Optional[str]]],
         primary_key: Optional[str] = None,
-        conn: Connection = None,
+        conn: Optional[Connection] = None,
     ):
         """
-        Create a table with given columns, with an optional primary key
+        Create a table with given columns, with an optional primary key.
+        Columns are given as tuples of (name, type).
+        Columns without a dtype are assumed to be of type `self.UID_DTYPE`.
         """
         query = (
             Query.create_table(table=name)
@@ -75,10 +82,12 @@ class DuckDBRelStorage(RelStorage, Transactable):
             .columns(
                 *[
                     Column(
-                        column_name=c,
-                        column_type=dtype if dtype is not None else self.UID_DTYPE,
+                        column_name=column_name,
+                        column_type=column_type
+                        if column_type is not None
+                        else self.UID_DTYPE,
                     )
-                    for c, dtype in columns
+                    for column_name, column_type in columns
                 ],
             )
         )
@@ -87,7 +96,7 @@ class DuckDBRelStorage(RelStorage, Transactable):
         conn.execute(str(query))
 
     @transaction()
-    def delete_relation(self, name: str, conn: Connection = None):
+    def delete_relation(self, name: str, conn: Optional[Connection] = None):
         """
         Delete a (memoization) table
         """
@@ -96,7 +105,11 @@ class DuckDBRelStorage(RelStorage, Transactable):
 
     @transaction()
     def create_column(
-        self, relation: str, name: str, default_value: str, conn: Connection = None
+        self,
+        relation: str,
+        name: str,
+        default_value: str,
+        conn: Optional[Connection] = None,
     ):
         """
         Add a new column to a table.
@@ -105,7 +118,9 @@ class DuckDBRelStorage(RelStorage, Transactable):
         conn.execute(query=query)
 
     @transaction()
-    def rename_relation(self, name: str, new_name: str, conn: Connection = None):
+    def rename_relation(
+        self, name: str, new_name: str, conn: Optional[Connection] = None
+    ):
         """
         Rename a table
         """
@@ -114,7 +129,7 @@ class DuckDBRelStorage(RelStorage, Transactable):
 
     @transaction()
     def rename_column(
-        self, relation: str, name: str, new_name: str, conn: Connection = None
+        self, relation: str, name: str, new_name: str, conn: Optional[Connection] = None
     ):
         """
         Rename a column
@@ -124,7 +139,7 @@ class DuckDBRelStorage(RelStorage, Transactable):
 
     @transaction()
     def rename_columns(
-        self, relation: str, mapping: Dict[str, str], conn: Connection = None
+        self, relation: str, mapping: Dict[str, str], conn: Optional[Connection] = None
     ):
         # factorize the renaming into two maps that can be applied atomically
         part_1 = {k: get_uid() for k in mapping.keys()}
@@ -138,7 +153,7 @@ class DuckDBRelStorage(RelStorage, Transactable):
     ### instance management
     ############################################################################
     @transaction()
-    def _get_cols(self, relation: str, conn: Connection = None) -> List[str]:
+    def _get_cols(self, relation: str, conn: Optional[Connection] = None) -> List[str]:
         """
         Duckdb-specific method to get the *ordered* columns of a table.
         """
@@ -149,7 +164,9 @@ class DuckDBRelStorage(RelStorage, Transactable):
         )
 
     @transaction()
-    def _get_primary_keys(self, relation: str, conn: Connection = None) -> List[str]:
+    def _get_primary_keys(
+        self, relation: str, conn: Optional[Connection] = None
+    ) -> List[str]:
         """
         Duckdb-specific method to get the primary key of a table.
         """
@@ -167,7 +184,7 @@ class DuckDBRelStorage(RelStorage, Transactable):
             raise NotImplementedError(f"Multiple primary keys for {relation}")
 
     @transaction()
-    def insert(self, relation: str, ta: pa.Table, conn: Connection = None):
+    def insert(self, relation: str, ta: pa.Table, conn: Optional[Connection] = None):
         """
         Append rows to a table
         """
@@ -183,7 +200,7 @@ class DuckDBRelStorage(RelStorage, Transactable):
         conn.unregister(view_name=self.TEMP_ARROW_TABLE)
 
     @transaction()
-    def upsert(self, relation: str, ta: pa.Table, conn: Connection = None):
+    def upsert(self, relation: str, ta: pa.Table, conn: Optional[Connection] = None):
         """
         Upsert rows in a table based on primary key.
 
@@ -212,7 +229,9 @@ class DuckDBRelStorage(RelStorage, Transactable):
         conn.unregister(view_name=self.TEMP_ARROW_TABLE)
 
     @transaction()
-    def delete(self, relation: str, index: List[str], conn: Connection = None):
+    def delete(
+        self, relation: str, index: List[str], conn: Optional[Connection] = None
+    ):
         """
         Delete rows from a table based on index
         """
@@ -231,7 +250,7 @@ class DuckDBRelStorage(RelStorage, Transactable):
         self,
         query: Union[str, Query],
         parameters: list[Any] = None,
-        conn: Connection = None,
+        conn: Optional[Connection] = None,
     ) -> pa.Table:
         if parameters is None:
             parameters = []
@@ -244,7 +263,7 @@ class DuckDBRelStorage(RelStorage, Transactable):
         self,
         query: Union[str, Query],
         parameters: list[Any] = None,
-        conn: Connection = None,
+        conn: Optional[Connection] = None,
     ) -> None:
         if parameters is None:
             parameters = []
@@ -257,7 +276,7 @@ class DuckDBRelStorage(RelStorage, Transactable):
         self,
         query: Union[str, Query],
         parameters: list[Any] = None,
-        conn: Connection = None,
+        conn: Optional[Connection] = None,
     ) -> pd.DataFrame:
         if parameters is None:
             parameters = []

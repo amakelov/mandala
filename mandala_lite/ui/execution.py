@@ -20,6 +20,10 @@ class FuncInterface:
         self.is_synchronized = False
         self.is_invalidated = False
 
+    def invalidate(self):
+        self.is_invalidated = True
+        self.is_synchronized = False
+
     def wrap_inputs(self, inputs: Dict[str, Any]) -> Dict[str, ValueRef]:
         # check if we allow implicit wrapping
         if Config.autowrap_inputs:
@@ -49,7 +53,7 @@ class FuncInterface:
         ]
         return wrapped_outputs
 
-    def bind_inputs(self, args, kwargs, mode:str) -> Dict[str, Any]:
+    def bind_inputs(self, args, kwargs, mode: str) -> Dict[str, Any]:
         """
         Given args and kwargs passed by the user from python, this adds defaults
         and returns a dict where they are indexed via internal names.
@@ -145,13 +149,16 @@ class FuncInterface:
         return outputs
 
     def __call__(self, *args, **kwargs) -> List[ValueRef]:
+        if self.is_invalidated:
+            raise RuntimeError(
+                "This function has been invalidated due to a change in the signature, and cannot be called"
+            )
         context = GlobalContext.current
         if context is None:
             raise RuntimeError()
         if not self.op.sig.has_internal_data:
-            new_sig = context.storage.synchronize_many(sigs=[self.op.sig])[0]
-            self.op.sig = new_sig
-            self.is_synchronized = True
+            # synchronize if necessary
+            synchronize(func=self, storage=context.storage)
         inputs = self.bind_inputs(args, kwargs, mode=context.mode)
         if context is None:
             raise RuntimeError("No context to call from")
@@ -201,11 +208,10 @@ def op(*args, **kwargs) -> FuncInterface:
         return FuncDecorator(version=version)
 
 
-def synchronize(func: FuncInterface, storage: Storage) -> FuncInterface:
+def synchronize(func: FuncInterface, storage: Storage):
     """
-    Manually synchronize a function
+    Synchronize a function in-place
     """
-    new_sig = storage.synchronize_many(sigs=[func.op.sig])[0]
+    new_sig = storage.sig_adapter.sync_from_local(sig=func.op.sig)
     func.op.sig = new_sig
     func.is_synchronized = True
-    return func

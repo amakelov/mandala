@@ -17,11 +17,22 @@ class Config:
     autocommit = True
 
     ### constants
+    # used for columns containing UIDs of value references or calls
     uid_col = "__uid__"
+    # name for the table that holds the value reference UIDs
     vref_table = "__vrefs__"
+    # name for the event log table
     event_log_table = "__event_log__"
-    schema_event_log_table = "__schema_event_log__"
+    # todo: currently unused?
+    # schema_event_log_table = "__schema_event_log__"
     schema_table = "__schema__"
+    # all output names begin with this string
+    # todo: prevent creating inputs with this name
+    output_name_prefix = "output_"
+
+
+def dump_output_name(index: int) -> str:
+    return f"{Config.output_name_prefix}{index}"
 
 
 class Prov:

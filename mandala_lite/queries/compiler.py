@@ -1,5 +1,5 @@
 from ..common_imports import *
-from ..core.config import Config
+from ..core.config import Config, dump_output_name
 from .weaver import ValQuery, FuncQuery
 from pypika import Query, Table, Field, Column, Criterion
 
@@ -65,7 +65,8 @@ class Compiler:
         for output_idx, val_query in enumerate(op_query.outputs):
             val_alias = self.val_aliases[val_query]
             constraints.append(
-                val_alias[Config.uid_col] == func_alias[f"output_{output_idx}"]
+                val_alias[Config.uid_col]
+                == func_alias[dump_output_name(index=output_idx)]
             )
             select_fields.append(val_alias[Config.uid_col])
         return constraints, select_fields

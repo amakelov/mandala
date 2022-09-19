@@ -1,6 +1,6 @@
 from ..common_imports import *
 from ..storages.main import Storage
-from .execution import FuncInterface
+from .execution import FuncInterface, synchronize
 
 
 def _check_rename_precondition(storage: Storage, func: FuncInterface):
@@ -25,13 +25,9 @@ def rename_func(storage: Storage, func: FuncInterface, new_name: str):
         - update signature object
         - invalidate the function (making it impossible to compute with it)
     """
-    # TODO: remote sync logic
     _check_rename_precondition(storage=storage, func=func)
-    sig = func.op.sig
-    new_sig = sig.rename(new_name=new_name)
-    storage.synchronize_many([new_sig])
-    func.is_synchronized = False
-    func.is_invalidated = True
+    storage.sig_adapter.sync_rename_sig(sig=func.op.sig, new_name=new_name)
+    func.invalidate()
 
 
 def rename_arg(storage: Storage, func: FuncInterface, name: str, new_name: str):
@@ -44,11 +40,8 @@ def rename_arg(storage: Storage, func: FuncInterface, name: str, new_name: str):
         - rename table
         - invalidate the function (making it impossible to compute with it)
     """
-    # TODO: remote sync logic
     _check_rename_precondition(storage=storage, func=func)
-    sig = func.op.sig
-    new_sig = sig.rename_inputs(mapping={name: new_name})
-    storage.synchronize_many([new_sig])
-    # invalidate func
-    func.is_synchronized = False
-    func.is_invalidated = True
+    storage.sig_adapter.sync_rename_input(
+        sig=func.op.sig, input_name=name, new_input_name=new_name
+    )
+    func.invalidate()

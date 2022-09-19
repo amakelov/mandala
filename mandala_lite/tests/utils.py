@@ -8,12 +8,12 @@ from mandala_lite.storages.remote_impls.mongo_mock import MongoMockRemoteStorage
 
 
 def compare_signatures(storage_1: Storage, storage_2: Storage) -> bool:
-    sigs_1 = storage_1.rel_adapter.signature_gets()
-    sigs_2 = storage_2.rel_adapter.signature_gets()
+    sigs_1 = storage_1.sig_adapter.sigs
+    sigs_2 = storage_2.sig_adapter.sigs
     if sigs_1.keys() != sigs_2.keys():
         return False
-    for (ui_name, version), sig_1 in sigs_1.items():
-        sig_2 = sigs_2[ui_name, version]
+    for (internal_name, version), sig_1 in sigs_1.items():
+        sig_2 = sigs_2[internal_name, version]
         if sig_1 != sig_2:
             return False
     return True
@@ -37,7 +37,7 @@ def compare_data(storage_1: Storage, storage_2: Storage) -> bool:
 
 def check_invariants(storage: Storage):
     # check that signatures match tables
-    ui_sigs = storage.rel_adapter.signature_gets(use_ui_names=True)
+    ui_sigs = storage.sig_adapter.ui_sigs
     call_tables = storage.rel_adapter.get_call_tables()
     columns_by_table = {}
     # collect table columns
@@ -55,7 +55,7 @@ def check_invariants(storage: Storage):
         input_cols = [
             col
             for col in columns
-            if not col.startswith("output_") and col != Config.uid_col
+            if not col.startswith(Config.output_name_prefix) and col != Config.uid_col
         ]
         ui_name, version = Signature.parse_versioned_name(versioned_name=call_table)
         assert set(input_cols).issubset(ui_sigs[ui_name, version].input_names)

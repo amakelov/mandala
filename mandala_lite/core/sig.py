@@ -1,5 +1,6 @@
 from ..common_imports import *
-from .utils import get_uid, Hashing
+from .config import Config
+from .utils import get_uid, Hashing, is_subdict
 
 
 class Signature:
@@ -21,9 +22,9 @@ class Signature:
     connected to. The UI name is what the function is named in the source
     code, and can be changed. Same for the internal/UI input names.
 
-    What goes through most of the system at runtime are the UI names, for better
-    observability. The internal names are used only in very specific and
-    isolated parts of the architecture.
+    What goes through most of the system at runtime are the UI names, to make it
+    easier to debug and inspect things. The internal names are used only in very
+    specific and isolated parts of the architecture.
     """
 
     def __init__(
@@ -43,17 +44,32 @@ class Signature:
         # ui name -> internal name for inputs
         self._ui_to_internal_input_map = None
         # internal input name -> UID of default value
+        # this stores the UIDs of default values for inputs that have been
+        # added to the function since its creation
         self._new_input_defaults_uids = {}
+
+    def __repr__(self) -> str:
+        return (
+            f"Signature(ui_name={self.ui_name}, input_names={self.input_names}, "
+            f"n_outputs={self.n_outputs}, defaults={self.defaults}, "
+            f"version={self.version}, internal_name={self.internal_name}, "
+            f"ui_to_internal_input_map={self.ui_to_internal_input_map}, "
+            f"new_input_defaults_uids={self._new_input_defaults_uids})"
+        )
 
     @property
     def versioned_ui_name(self) -> str:
         """
-        Return the version-qualified name of this signature
+        Return the version-qualified human-readable name of this signature, used to
+        disambiguate between different versions of the same function.
         """
         return f"{self.ui_name}_{self.version}"
 
     @property
     def versioned_internal_name(self) -> str:
+        """
+        Return the version-qualified internal name of this signature
+        """
         return f"{self.internal_name}_{self.version}"
 
     @property
@@ -64,18 +80,38 @@ class Signature:
 
     @staticmethod
     def parse_versioned_name(versioned_name: str) -> Tuple[str, int]:
+        """
+        Recover the name and version from a version-qualified name
+        """
         name, version_string = versioned_name.rsplit("_", 1)
         return name, int(version_string)
 
     @property
     def ui_to_internal_input_map(self) -> Dict[str, str]:
         if self._ui_to_internal_input_map is None:
-            raise ValueError("Internal name not set")
+            raise ValueError("Internal input names not set")
         return self._ui_to_internal_input_map
 
     @property
+    def internal_to_ui_input_map(self) -> Dict[str, str]:
+        """
+        Mapping from internal input names to their UI names
+        """
+        if not self.has_internal_data:
+            raise ValueError()
+        return {v: k for k, v in self.ui_to_internal_input_map.items()}
+
+    @property
     def has_internal_data(self) -> bool:
-        return self._internal_name is not None
+        """
+        Whether this signature has had its internal data (internal signature
+        name and internal input names) set.
+        """
+        return (
+            self._internal_name is not None
+            and self._ui_to_internal_input_map is not None
+            and self._ui_to_internal_input_map.keys() == self.input_names
+        )
 
     @property
     def internal_input_names(self) -> Set[str]:
@@ -101,6 +137,9 @@ class Signature:
     def _generate_internal(self, internal_name: Optional[str] = None) -> "Signature":
         """
         Assign internal names to random UIDs.
+
+        Providing `internal_name` explicitly can be used to set the same
+        internal name for different versions of the same function.
         """
         res = copy.deepcopy(self)
         if internal_name is None:
@@ -119,7 +158,7 @@ class Signature:
         or an extension with new arguments.
 
         Returns:
-            Tuple[bool, str]: outcome, reason if `False`, None if True
+            Tuple[bool, str]: (outcome, (reason if `False`, None if True))
         """
         if new.version != self.version:
             return False, "Versions do not match"
@@ -128,22 +167,21 @@ class Signature:
         if new.has_internal_data and self.has_internal_data:
             if new.internal_name != self.internal_name:
                 return False, "Internal names do not match"
-            if set(new.ui_to_internal_input_map.values()) != set(
-                self.ui_to_internal_input_map.values()
+            if not is_subdict(
+                self.ui_to_internal_input_map, new.ui_to_internal_input_map
             ):
-                return False, "Internal input names do not match"
+                return False, "UI -> internal input mapping is inconsistent"
         if not set.issubset(set(self.input_names), set(new.input_names)):
             return False, "Removing inputs is not supported"
         if not self.n_outputs == new.n_outputs:
             return False, "Changing the number of outputs is not supported"
-        new_defaults = new.defaults
-        if any({k not in new_defaults for k in self.defaults}):
-            return False, "Dropping defaults is not supported"
-        if {k: new_defaults[k] for k in self.defaults} != self.defaults:
-            return False, "Changing defaults is not supported"
+        if not is_subdict(self.defaults, new.defaults):
+            return False, "New defaults are inconsistent with current defaults"
+        if not is_subdict(self._new_input_defaults_uids, new._new_input_defaults_uids):
+            return False, "New default UIDs are inconsistent with current default UIDs"
         for k in new.input_names:
             if k not in self.input_names:
-                if k not in new_defaults:
+                if k not in new.defaults.keys():
                     return False, f"All new arguments must be created with defaults!"
         return True, None
 
@@ -180,7 +218,9 @@ class Signature:
 
     def create_input(self, name: str, default) -> "Signature":
         """
-        Add an input to this signature, with optional default value
+        Add an input with a default value to this signature. This takes care of
+        all the internal bookkeeping, including figuring out the UID for the
+        default value.
         """
         if name in self.input_names:
             raise ValueError(f'Input "{name}" already exists')
@@ -191,6 +231,7 @@ class Signature:
         internal_name = get_uid()
         res.ui_to_internal_input_map[name] = internal_name
         res.defaults[name] = default
+        #! if we implement custom types, this will need to be updated
         default_uid = Hashing.get_content_hash(obj=default)
         res._new_input_defaults_uids[internal_name] = default_uid
         return res
@@ -203,21 +244,13 @@ class Signature:
         res.ui_name = new_name
         return res
 
-    def rename_input(self, name: str, new_name: str) -> "Signature":
-        """
-        Change the ui name of an input
-        """
-        if new_name in self.input_names:
-            raise ValueError(f'Input "{new_name}" already exists')
-        res = copy.deepcopy(self)
-        internal_name = self.ui_to_internal_input_map[name]
-        res.input_names.remove(name)
-        res.input_names.add(new_name)
-        del res.ui_to_internal_input_map[name]
-        res.ui_to_internal_input_map[new_name] = internal_name
-        return res
-
     def rename_inputs(self, mapping: Dict[str, str]) -> "Signature":
+        """
+        Change UI names according to the given mapping.
+
+        Supporting only a method that changes multiple names at once is more
+        convenient, since we must support applying updates in bulk anyway.
+        """
         assert all(k in self.input_names for k in mapping.keys())
         current_names = list(self.input_names)
         new_names = [mapping.get(k, k) for k in current_names]
@@ -229,9 +262,9 @@ class Signature:
         for new_name in mapping.values():
             res.input_names.add(new_name)
         for current_name, new_name in mapping.items():
-            internal_name = res.ui_to_internal_input_map[current_name]
-            del res.ui_to_internal_input_map[current_name]
-            res.ui_to_internal_input_map[new_name] = internal_name
+            res.ui_to_internal_input_map[new_name] = res.ui_to_internal_input_map.pop(
+                current_name
+            )
         return res
 
     @staticmethod
@@ -242,7 +275,7 @@ class Signature:
     ) -> "Signature":
         """
         Create a `Signature` from a Python function's signature and the other
-        necessary metadata.
+        necessary metadata, and check it satisfies mandala-specific constraints.
         """
         input_names = set(
             [
@@ -251,6 +284,11 @@ class Signature:
                 if param.kind == inspect.Parameter.POSITIONAL_OR_KEYWORD
             ]
         )
+        # ensure that there will be no collisions with input and output names
+        if any(name.startswith(Config.output_name_prefix) for name in input_names):
+            raise ValueError(
+                f"Input names cannot start with {Config.output_name_prefix}"
+            )
         return_annotation = sig.return_annotation
         if (
             hasattr(return_annotation, "__origin__")

@@ -7,7 +7,7 @@ from pypika.terms import LiteralValue
 from duckdb import DuckDBPyConnection as Connection
 
 from ..common_imports import *
-from ..core.config import Config, Prov
+from ..core.config import Config, Prov, dump_output_name
 from ..core.model import Call
 from ..core.sig import Signature
 from .rel_impls.duckdb_impl import DuckDBRelStorage
@@ -15,6 +15,24 @@ from .rel_impls.utils import Transactable, transaction
 
 
 RemoteEventLogEntry = dict[str, bytes]
+
+
+def upsert_df(current: pd.DataFrame, new: pd.DataFrame) -> pd.DataFrame:
+    """
+    Upsert for dataframes with the same columns
+    """
+    return pd.concat([current, new[~new.index.isin(current.index)]])
+
+
+def serialize(obj: Any) -> bytes:
+    buffer = io.BytesIO()
+    joblib.dump(obj, buffer)
+    return buffer.getvalue()
+
+
+def deserialize(value: bytes) -> Any:
+    buffer = io.BytesIO(value)
+    return joblib.load(buffer)
 
 
 class RelAdapter(Transactable):
@@ -29,11 +47,11 @@ class RelAdapter(Transactable):
 
     EVENT_LOG_TABLE = Config.event_log_table
     VREF_TABLE = Config.vref_table
-    SCHEMA_TABLE = Config.schema_table
+    SIGNATURES_TABLE = Config.schema_table
     SPECIAL_TABLES = (
         EVENT_LOG_TABLE,
         DuckDBRelStorage.TEMP_ARROW_TABLE,
-        SCHEMA_TABLE,
+        SIGNATURES_TABLE,
     )
 
     def __init__(self, rel_storage: DuckDBRelStorage):
@@ -53,7 +71,7 @@ class RelAdapter(Transactable):
         # self.prov_df.set_index([Prov.call_uid, Prov.vref_name, Prov.is_input])
 
     @transaction()
-    def init(self, conn: Connection = None):
+    def init(self, conn: Optional[Connection] = None):
         self.rel_storage.create_relation(
             name=self.VREF_TABLE,
             columns=[(Config.uid_col, None), ("value", "blob")],
@@ -68,21 +86,19 @@ class RelAdapter(Transactable):
             primary_key=Config.uid_col,
             conn=conn,
         )
-        # The schema table keeps track of the function signatures currently
-        # connected to the storage. It's indexed by internal name and version
-        # (which should define the signature uniquely!)
+        # The signatures table is a binary dump of the signatures
         self.rel_storage.create_relation(
-            name=self.SCHEMA_TABLE,
+            name=self.SIGNATURES_TABLE,
             columns=[
-                (Config.uid_col, None),
-                ("version", "integer"),
-                ("signature", "blob"),
+                ("index", "int"),
+                ("signatures", "blob"),
             ],
+            primary_key="index",
             conn=conn,
         )
 
     @transaction()
-    def get_call_tables(self, conn: Connection = None) -> List[str]:
+    def get_call_tables(self, conn: Optional[Connection] = None) -> List[str]:
         tables = self.rel_storage.get_tables(conn=conn)
         return [
             t for t in tables if t not in self.SPECIAL_TABLES and t != self.VREF_TABLE
@@ -98,7 +114,7 @@ class RelAdapter(Transactable):
         )
 
     @transaction()
-    def event_log_is_clean(self, conn: Connection = None) -> bool:
+    def event_log_is_clean(self, conn: Optional[Connection] = None) -> bool:
         return self.rel_storage.get_count(table=self.EVENT_LOG_TABLE, conn=conn) == 0
 
     ############################################################################
@@ -130,7 +146,10 @@ class RelAdapter(Transactable):
                     {
                         Config.uid_col: call.uid,
                         **{k: v.uid for k, v in call.inputs.items()},
-                        **{f"output_{i}": v.uid for i, v in enumerate(call.outputs)},
+                        **{
+                            dump_output_name(index=i): v.uid
+                            for i, v in enumerate(call.outputs)
+                        },
                     }
                     for call in v
                 ]
@@ -139,7 +158,7 @@ class RelAdapter(Transactable):
         return res
 
     @transaction()
-    def upsert_calls(self, calls: List[Call], conn: Connection = None):
+    def upsert_calls(self, calls: List[Call], conn: Optional[Connection] = None):
         """
         Upserts calls in the relational storage so that they will show up in
         declarative queries.
@@ -161,7 +180,7 @@ class RelAdapter(Transactable):
             # self.prov_df = upsert_df(current=self.prov_df, new=new_prov_df)
 
     @transaction()
-    def _query_call(self, call_uid: str, conn: Connection = None) -> pa.Table:
+    def _query_call(self, call_uid: str, conn: Optional[Connection] = None) -> pa.Table:
         all_tables = [
             Query.from_(table_name)
             .where(Table(table_name)[Config.uid_col] == Parameter("$1"))
@@ -172,11 +191,11 @@ class RelAdapter(Transactable):
         return self.rel_storage.execute_arrow(query, [call_uid], conn=conn)
 
     @transaction()
-    def call_exists(self, call_uid: str, conn: Connection = None) -> bool:
+    def call_exists(self, call_uid: str, conn: Optional[Connection] = None) -> bool:
         return len(self._query_call(call_uid, conn=conn)) > 0
 
     @transaction()
-    def call_get(self, call_uid: str, conn: Connection = None) -> Call:
+    def call_get(self, call_uid: str, conn: Optional[Connection] = None) -> Call:
         row = self._query_call(call_uid, conn=conn).take([0])
         table_name = row.column(1)[0]
         table = Table(table_name)
@@ -189,7 +208,9 @@ class RelAdapter(Transactable):
         return Call.from_row(results)
 
     @transaction()
-    def call_set(self, call_uid: str, call: Call, conn: Connection = None) -> None:
+    def call_set(
+        self, call_uid: str, call: Call, conn: Optional[Connection] = None
+    ) -> None:
         self.obj_sets(
             {vref.uid: vref.obj for vref in list(call.inputs.values()) + call.outputs}
         )
@@ -199,7 +220,9 @@ class RelAdapter(Transactable):
     ### object methods
     ############################################################################
     @transaction()
-    def obj_gets(self, keys: list[str], conn: Connection = None) -> pd.DataFrame:
+    def obj_gets(
+        self, keys: list[str], conn: Optional[Connection] = None
+    ) -> pd.DataFrame:
         if len(keys) == 0:
             return pd.DataFrame()
 
@@ -215,7 +238,7 @@ class RelAdapter(Transactable):
 
     @transaction()
     def obj_exists(
-        self, keys: Union[str, list[str]], conn: Connection = None
+        self, keys: Union[str, list[str]], conn: Optional[Connection] = None
     ) -> Union[bool, list[bool]]:
         if isinstance(keys, str):
             all_keys = [keys]
@@ -229,12 +252,12 @@ class RelAdapter(Transactable):
             return results
 
     @transaction()
-    def obj_get(self, key: str, conn: Connection = None) -> Any:
+    def obj_get(self, key: str, conn: Optional[Connection] = None) -> Any:
         df = self.obj_gets(keys=[key], conn=conn)
         return df.loc[0, "value"]
 
     @transaction()
-    def obj_set(self, key: str, value: Any, conn: Connection = None) -> None:
+    def obj_set(self, key: str, value: Any, conn: Optional[Connection] = None) -> None:
         if self.obj_exists(keys=[key], conn=conn):
             return
 
@@ -252,7 +275,7 @@ class RelAdapter(Transactable):
         )
 
     @transaction()
-    def obj_sets(self, kvs: dict[str, Any], conn: Connection = None) -> None:
+    def obj_sets(self, kvs: dict[str, Any], conn: Optional[Connection] = None) -> None:
         keys = list(kvs.keys())
         indicators = self.obj_exists(keys, conn=conn)
         new_keys = [key for key, indicator in zip(keys, indicators) if not indicator]
@@ -266,262 +289,47 @@ class RelAdapter(Transactable):
         self.rel_storage.upsert(relation=self.EVENT_LOG_TABLE, ta=log_ta, conn=conn)
 
     ############################################################################
-    ### accessing and working with signature data
-    ###
-    ### Signatures have the following invariants:
-    ### - all signatures for versions of the same function have the same UI
-    ### and internal names.
-    ### - there exists a signature with (ui_name, version) if and only if there exists
-    ### a table in the database with the corresponding name and corresponding column names.
-    ############################################################################
-    @transaction()
-    def signature_gets(
-        self, use_ui_names: bool = True, conn: Connection = None
-    ) -> Dict[Tuple[str, int], Signature]:
-        """
-        Return the signature objects for functions currently connected to the
-        storage, indexed by (ui name, version) or (internal name, version)
-
-        Arguments:
-            use_ui_names: If True, UI names are used as keys in the dictionary,
-            otherwise internal names are used
-
-        """
-        df = self.rel_storage.execute_df(
-            query=f"SELECT * FROM {self.SCHEMA_TABLE}", conn=conn
-        )
-        df["signature"] = df["signature"].map(lambda x: deserialize(bytes(x)))
-        result = {}
-        for version, sig in df[["version", "signature"]].itertuples(index=False):
-            sig: Signature
-            name_key = sig.ui_name if use_ui_names else sig.internal_name
-            result[(name_key, version)] = sig
-        return result
-
-    @transaction()
-    def signature_set(self, sig: Signature, conn: Connection = None) -> None:
-        """
-        Put a signature object in the signature storage, and create a table in
-        the database if necessary.
-        """
-        # delete existing, if any
-        query = f"DELETE FROM {self.SCHEMA_TABLE} WHERE {Config.uid_col} = '{sig.internal_name}' AND version = '{sig.version}'"
-        conn.execute(query)
-        # insert new
-        serialized = serialize(obj=sig)
-        df = pd.DataFrame(
-            {
-                Config.uid_col: [sig.internal_name],
-                "version": [sig.version],
-                "signature": [serialized],
-            }
-        )
-        ta = pa.Table.from_pandas(df)
-        self.rel_storage.insert(relation=self.SCHEMA_TABLE, ta=ta, conn=conn)
-
-    @transaction()
-    def has_signature(
-        self, ui_name: str, version: int, conn: Connection = None
-    ) -> bool:
-        sigs = self.signature_gets(conn=conn)
-        return (ui_name, version) in sigs
-
-    @transaction()
-    def signature_get(
-        self, ui_name: str, version: int, conn: Connection = None
-    ) -> Signature:
-        sigs = self.signature_gets(conn=conn)
-        return sigs[ui_name, version]
-
-    @transaction()
-    def rename_tables_from_ui_to_internal(
-        self, tables: Dict[str, Union[pd.DataFrame, pa.Table]], conn: Connection = None
-    ) -> Dict[str, Union[pd.DataFrame, pa.Table]]:
-        """
-        Given a dictionary of {human readable table name: table with
-        human-readable columns}, rename it to {internal table name:
-        table with internally-labeled columns}.
-        """
-        call_tables = self.get_call_tables(conn=conn)
-        sigs = self.signature_gets(conn=conn)
-        res = {}
-        for table_name, table in tables.items():
-            if table_name in call_tables:
-                ui_name, version = Signature.parse_versioned_name(
-                    versioned_name=table_name
-                )
-                sig = sigs[ui_name, version]
-                if isinstance(table, pd.DataFrame):
-                    table = table.rename(columns=sig.ui_to_internal_input_map)
-                elif isinstance(table, pa.Table):
-                    columns = table.column_names
-                    new_columns = [
-                        sig.ui_to_internal_input_map.get(col, col) for col in columns
-                    ]
-                    table = table.rename_columns(new_columns)
-                res[sig.versioned_internal_name] = table
-            else:
-                # skip over non-call tables (i.e., vrefs)
-                res[table_name] = table
-        return res
-
-    @transaction()
-    def rename_tables_from_internal_to_ui(
-        self, tables: Dict[str, Union[pd.DataFrame, pa.Table]], conn: Connection = None
-    ) -> Dict[str, Union[pd.DataFrame, pa.Table]]:
-        """
-        Given a dictionary of {internal table name: table with
-        internally-labeled columns}, rename it to {human-readable table name:
-        table with human-readable columns}.
-        """
-        call_tables = self.get_call_tables(conn=conn)
-        sigs = self.signature_gets(use_ui_names=False, conn=conn)
-        internal_to_ui_mapping = {
-            sig.versioned_internal_name: sig.versioned_ui_name for sig in sigs.values()
-        }
-        res = {}
-        for table_name, table in tables.items():
-            if internal_to_ui_mapping.get(table_name, None) in call_tables:
-                int_name, version = Signature.parse_versioned_name(
-                    versioned_name=table_name
-                )
-                sig = sigs[int_name, version]
-                col_mapping = {v: k for k, v in sig.ui_to_internal_input_map.items()}
-                if isinstance(table, pd.DataFrame):
-                    table = table.rename(columns=col_mapping)
-                elif isinstance(table, pa.Table):
-                    columns = table.column_names
-                    new_columns = [col_mapping.get(col, col) for col in columns]
-                    table = table.rename_columns(new_columns)
-                res[sig.versioned_ui_name] = table
-            else:
-                # skip over non-call tables (i.e., vrefs)
-                res[table_name] = table
-        return res
-
-    ############################################################################
-    ### remote sync operations
-    ############################################################################
-    @transaction()
-    def bundle_to_remote(self, conn: Connection = None) -> RemoteEventLogEntry:
-        """
-        Collect the new calls according to the event log, and pack them into a
-        dict of binary blobs to be sent off to the remote server.
-
-        NOTE: this also renames tables to the internal names.
-        """
-        # Bundle event log and referenced calls into tables.
-        event_log_df = self.rel_storage.get_data(self.EVENT_LOG_TABLE, conn=conn)
-        tables_with_changes = {}
-        table_names_with_changes = event_log_df["table"].unique()
-
-        event_log_table = Table(self.EVENT_LOG_TABLE)
-        for table_name in table_names_with_changes:
-            table = Table(table_name)
-            tables_with_changes[table_name] = self.rel_storage.execute_arrow(
-                query=Query.from_(table)
-                .join(event_log_table)
-                .on(table[Config.uid_col] == event_log_table[Config.uid_col])
-                .select(table.star),
-                conn=conn,
-            )
-
-        # pass to internal names
-        tables_with_changes = self.rename_tables_from_ui_to_internal(
-            tables_with_changes, conn=conn
-        )
-
-        output = {}
-        for table_name, table in tables_with_changes.items():
-            buffer = io.BytesIO()
-            pq.write_table(table, buffer)
-            output[table_name] = buffer.getvalue()
-
-        self.rel_storage.execute_no_results(
-            query=Query.from_(event_log_table).delete(), conn=conn
-        )
-        return output
-
-    @transaction()
-    def apply_from_remote(
-        self, changes: list[RemoteEventLogEntry], conn: Connection = None
-    ):
-        """
-        Apply new calls from the remote server.
-
-        NOTE: this also renames tables to the UI names.
-        """
-        data = {}
-        for raw_changeset in changes:
-            for table_name in raw_changeset:
-                buffer = io.BytesIO(raw_changeset[table_name])
-                table = pq.read_table(buffer)
-                data[table_name] = table
-
-        # pass to UI names
-        data = self.rename_tables_from_internal_to_ui(tables=data, conn=conn)
-
-        for table_name, table in data.items():
-            self.rel_storage.upsert(table_name, table, conn=conn)
-
-    ############################################################################
     ### provenance
     ############################################################################
-    @staticmethod
-    def get_provenance_table(calls: List[Call]) -> pd.DataFrame:
-        """
-        Converts call objects to a dataframe of provenance information. Calls to
-        all operations are in the same table. Traversing "backward" in this
-        table allows you to reconstruct the history of any value reference.
-        """
-        raise NotImplementedError()
-        dfs = []
-        for call in calls:
-            call_uid = call.uid
-            op_name = call.op.sig.name
-            op_version = call.op.sig.version
-            input_names = list(call.inputs.keys())
-            input_uids = [call.inputs[k].uid for k in input_names]
-            in_table = pd.DataFrame(
-                {
-                    Prov.call_uid: call_uid,
-                    Prov.op_name: op_name,
-                    Prov.op_version: op_version,
-                    Prov.vref_name: input_names,
-                    Prov.vref_uid: input_uids,
-                    Prov.is_input: True,
-                }
-            )
-            output_names = list([f"output_{i}" for i in range(len(call.outputs))])
-            output_uids = [call.outputs[i].uid for i in range(len(call.outputs))]
-            out_table = pd.DataFrame(
-                {
-                    Prov.call_uid: call_uid,
-                    Prov.op_name: op_name,
-                    Prov.op_version: op_version,
-                    Prov.vref_name: output_names,
-                    Prov.vref_uid: output_uids,
-                    Prov.is_input: False,
-                }
-            )
-            df = pd.concat([in_table, out_table], ignore_index=True)
-            dfs.append(df)
-        return pd.concat(dfs, ignore_index=True)
-
-
-def upsert_df(current: pd.DataFrame, new: pd.DataFrame) -> pd.DataFrame:
-    """
-    Upsert for dataframes with the same columns
-    """
-    return pd.concat([current, new[~new.index.isin(current.index)]])
-
-
-def serialize(obj: Any) -> bytes:
-    buffer = io.BytesIO()
-    joblib.dump(obj, buffer)
-    return buffer.getvalue()
-
-
-def deserialize(value: bytes) -> Any:
-    buffer = io.BytesIO(value)
-    return joblib.load(buffer)
+    # @staticmethod
+    # def get_provenance_table(calls: List[Call]) -> pd.DataFrame:
+    #     """
+    #     Converts call objects to a dataframe of provenance information. Calls to
+    #     all operations are in the same table. Traversing "backward" in this
+    #     table allows you to reconstruct the history of any value reference.
+    #     """
+    #     raise NotImplementedError()
+    #     dfs = []
+    #     for call in calls:
+    #         call_uid = call.uid
+    #         op_name = call.op.sig.name
+    #         op_version = call.op.sig.version
+    #         input_names = list(call.inputs.keys())
+    #         input_uids = [call.inputs[k].uid for k in input_names]
+    #         in_table = pd.DataFrame(
+    #             {
+    #                 Prov.call_uid: call_uid,
+    #                 Prov.op_name: op_name,
+    #                 Prov.op_version: op_version,
+    #                 Prov.vref_name: input_names,
+    #                 Prov.vref_uid: input_uids,
+    #                 Prov.is_input: True,
+    #             }
+    #         )
+    #         output_names = list(
+    #             [dump_output_name(index=i) for i in range(len(call.outputs))]
+    #         )
+    #         output_uids = [call.outputs[i].uid for i in range(len(call.outputs))]
+    #         out_table = pd.DataFrame(
+    #             {
+    #                 Prov.call_uid: call_uid,
+    #                 Prov.op_name: op_name,
+    #                 Prov.op_version: op_version,
+    #                 Prov.vref_name: output_names,
+    #                 Prov.vref_uid: output_uids,
+    #                 Prov.is_input: False,
+    #             }
+    #         )
+    #         df = pd.concat([in_table, out_table], ignore_index=True)
+    #         dfs.append(df)
+    #     return pd.concat(dfs, ignore_index=True)

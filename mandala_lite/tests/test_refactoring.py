@@ -8,9 +8,9 @@ def test_add_input():
 
     storage = Storage()
 
-    ############################################################################ 
+    ############################################################################
     ### check that old calls are preserved
-    ############################################################################ 
+    ############################################################################
     @op
     def inc(x: int) -> int:
         return x + 1
@@ -30,67 +30,72 @@ def test_add_input():
         df = inc.get_table()
     assert df.shape == (1, 4)
 
-    ############################################################################ 
-    ### check that defaults can be overridden 
-    ############################################################################ 
+    ############################################################################
+    ### check that defaults can be overridden
+    ############################################################################
     @op
-    def add_many(x:int) -> int:
+    def add_many(x: int) -> int:
         return x + 1
+
     synchronize(func=add_many, storage=storage)
 
     @op
-    def add_many(x:int, y:int=23, z:int=42) -> int:
-        return x + y + z 
+    def add_many(x: int, y: int = 23, z: int = 42) -> int:
+        return x + y + z
+
     synchronize(func=add_many, storage=storage)
 
     with run(storage):
         add_many(0)
         add_many(0, 1)
         add_many(0, 1, 2)
-    
+
     with query(storage) as q:
         x, y, z = Q(), Q(), Q()
         w = add_many(x, y, z)
         df = q.get_table(x, y, z, w)
-    
+
     rows = set(tuple(row) for row in df.values.tolist())
     assert rows == {(0, 1, 2, 3), (0, 1, 42, 43), (0, 23, 42, 65)}
 
-    ############################################################################ 
+    ############################################################################
     ### check that queries work with defaults
-    ############################################################################ 
+    ############################################################################
     with query(storage) as q:
         x = Q()
         w = add_many(x)
         df = q.get_table(x, w)
-    
-    ############################################################################ 
+
+    ############################################################################
     ### check that invalid ways to add an input are not allowed
-    ############################################################################ 
+    ############################################################################
 
     ### no default
     @op
-    def no_default(x:int) -> int:
-        return x + 1 
+    def no_default(x: int) -> int:
+        return x + 1
+
     synchronize(func=no_default, storage=storage)
 
     try:
+
         @op
-        def no_default(x:int, y:int) -> int:
+        def no_default(x: int, y: int) -> int:
             return x + y
+
         synchronize(func=no_default, storage=storage)
         assert False
     except:
         assert True
-    
-    
+
+
 def test_func_renaming():
 
     storage = Storage()
 
-    ############################################################################ 
+    ############################################################################
     ### unit test
-    ############################################################################ 
+    ############################################################################
     @op
     def inc(x: int) -> int:
         return x + 1
@@ -114,11 +119,11 @@ def test_func_renaming():
     # make sure the call was not new
     assert df.shape == (1, 3)
     # make sure we did not create a new function
-    assert len(storage.rel_adapter.signature_gets()) == 1
+    assert len(storage.sig_adapter.sigs) == 1
 
-    ############################################################################ 
+    ############################################################################
     ### check that name collisions are not allowed
-    ############################################################################ 
+    ############################################################################
     storage = Storage()
 
     @op
@@ -138,9 +143,9 @@ def test_func_renaming():
     except:
         assert True
 
-    ############################################################################ 
+    ############################################################################
     ### permute names
-    ############################################################################ 
+    ############################################################################
     storage = Storage()
 
     @op
@@ -160,9 +165,11 @@ def test_func_renaming():
     @op
     def temp(x: int) -> int:
         return x + 1
+
     @op
     def inc(x: int) -> int:
         return x + 1
+
     synchronize(func=temp, storage=storage)
     synchronize(func=inc, storage=storage)
 
@@ -172,9 +179,9 @@ def test_func_renaming():
 def test_arg_renaming():
     storage = Storage()
 
-    ############################################################################ 
+    ############################################################################
     ### unit test
-    ############################################################################ 
+    ############################################################################
     @op
     def inc(x: int) -> int:
         return x + 1
@@ -198,18 +205,18 @@ def test_arg_renaming():
     # make sure the call was not new
     assert df.shape == (1, 3)
     # make sure we did not create a new function
-    assert len(storage.rel_adapter.signature_gets()) == 1
+    assert len(storage.sig_adapter.sigs) == 1
 
-    ############################################################################ 
+    ############################################################################
     ### check collisions are not allowed
-    ############################################################################ 
+    ############################################################################
     @op
-    def add(x:int, y:int) -> int:
+    def add(x: int, y: int) -> int:
         return x + y
-    
+
     synchronize(func=add, storage=storage)
     try:
-        rename_arg(storage=storage, func=add, name='x', new_name='y')
+        rename_arg(storage=storage, func=add, name="x", new_name="y")
         assert False
     except:
         assert True
@@ -218,9 +225,9 @@ def test_arg_renaming():
 def test_versions():
     storage = Storage()
 
-    ############################################################################ 
+    ############################################################################
     ### unit test
-    ############################################################################ 
+    ############################################################################
 
     @op
     def inc(x: int) -> int:
@@ -236,7 +243,7 @@ def test_versions():
     with run(storage):
         inc(23)
 
-    assert len(storage.rel_adapter.signature_gets()) == 2
+    assert len(storage.sig_adapter.sigs) == 2
     call_table_names = storage.rel_adapter.get_call_tables()
     assert len(call_table_names) == 2
     for table_name in call_table_names:
