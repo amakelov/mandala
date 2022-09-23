@@ -217,7 +217,8 @@ class DuckDBRelStorage(RelStorage, Transactable):
                 conn=conn,
             )
         table_cols = self._get_cols(relation=relation, conn=conn)
-        assert set(ta.column_names) == set(table_cols)
+        # this assertion is not necessary true if we have defaults on the table!
+        # assert set(ta.column_names) == set(table_cols)
         cols_string = ", ".join([f'"{column_name}"' for column_name in ta.column_names])
         primary_keys = self._get_primary_keys(relation=relation, conn=conn)
         if len(primary_keys) != 1:

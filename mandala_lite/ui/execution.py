@@ -189,11 +189,12 @@ def Q() -> ValQuery:
 
 class FuncDecorator:
     # parametrized version of `@op` decorator
-    def __init__(self, version: int = 0):
+    def __init__(self, version: int = 0, ui_name: Optional[str] = None):
         self.version = version
+        self.ui_name = ui_name
 
     def __call__(self, func: Callable) -> "func":
-        op = FuncOp(func=func, version=self.version)
+        op = FuncOp(func=func, version=self.version, ui_name=self.ui_name)
         return FuncInterface(op=op)
 
 
@@ -205,13 +206,16 @@ def op(*args, **kwargs) -> FuncInterface:
     else:
         # @op(...) case
         version = kwargs.get("version", 0)
-        return FuncDecorator(version=version)
+        ui_name = kwargs.get("ui_name", None)
+        return FuncDecorator(version=version, ui_name=ui_name)
 
 
 def synchronize(func: FuncInterface, storage: Storage):
     """
-    Synchronize a function in-place
+    Synchronize a function in-place.
     """
+    # first, pull the current data from the remote!
+    storage.sig_adapter.sync_from_remote()
     new_sig = storage.sig_adapter.sync_from_local(sig=func.op.sig)
     func.op.sig = new_sig
     func.is_synchronized = True

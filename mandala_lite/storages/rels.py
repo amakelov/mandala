@@ -48,6 +48,7 @@ class RelAdapter(Transactable):
     EVENT_LOG_TABLE = Config.event_log_table
     VREF_TABLE = Config.vref_table
     SIGNATURES_TABLE = Config.schema_table
+    # tables to be excluded from certain operations
     SPECIAL_TABLES = (
         EVENT_LOG_TABLE,
         DuckDBRelStorage.TEMP_ARROW_TABLE,
@@ -57,18 +58,6 @@ class RelAdapter(Transactable):
     def __init__(self, rel_storage: DuckDBRelStorage):
         self.rel_storage = rel_storage
         self.init()
-        # # initialize provenance table
-        # self.prov_df = pd.DataFrame(
-        #     columns=[
-        #         Prov.call_uid,
-        #         Prov.op_name,
-        #         Prov.op_version,
-        #         Prov.vref_name,
-        #         Prov.vref_uid,
-        #         Prov.is_input,
-        #     ]
-        # )
-        # self.prov_df.set_index([Prov.call_uid, Prov.vref_name, Prov.is_input])
 
     @transaction()
     def init(self, conn: Optional[Connection] = None):
@@ -80,6 +69,8 @@ class RelAdapter(Transactable):
         )
         # Initialize the event log.
         # The event log is just a list of UIDs that changed, for now.
+        # the UID column stores the vref/call uid, the `table` column stores the
+        # table in which this UID is to be found.
         self.rel_storage.create_relation(
             name=self.EVENT_LOG_TABLE,
             columns=[(Config.uid_col, None), ("table", "varchar")],
@@ -107,15 +98,26 @@ class RelAdapter(Transactable):
     ############################################################################
     ### event log stuff
     ############################################################################
-    def log_change(self, table: str, key: str):
-        self.rel_storage.upsert(
-            self.EVENT_LOG_TABLE,
-            pa.Table.from_pylist([{Config.uid_col: key, "table": table}]),
-        )
+    # def log_change(self, table: str, key: str):
+    #     self.rel_storage.upsert(
+    #         self.EVENT_LOG_TABLE,
+    #         pa.Table.from_pylist([{Config.uid_col: key, "table": table}]),
+    #     )
+
+    @transaction()
+    def get_event_log(self, conn: Optional[Connection] = None) -> pd.DataFrame:
+        return self.rel_storage.get_data(table=self.EVENT_LOG_TABLE, conn=conn)
 
     @transaction()
     def event_log_is_clean(self, conn: Optional[Connection] = None) -> bool:
         return self.rel_storage.get_count(table=self.EVENT_LOG_TABLE, conn=conn) == 0
+
+    @transaction()
+    def clear_event_log(self, conn: Optional[Connection] = None):
+        event_log_table = Table(self.EVENT_LOG_TABLE)
+        self.rel_storage.execute_no_results(
+            query=Query.from_(event_log_table).delete(), conn=conn
+        )
 
     ############################################################################
     ### `Transactable` interface
@@ -164,20 +166,19 @@ class RelAdapter(Transactable):
         declarative queries.
         """
         if len(calls) > 0:  # avoid dealing with empty dataframes
-            # Write changes to the event log table.
-
-            for name, ta in self.tabulate_calls(calls).items():
-                self.rel_storage.upsert(relation=name, ta=ta, conn=conn)
+            for table_name, ta in self.tabulate_calls(calls).items():
+                self.rel_storage.upsert(relation=table_name, ta=ta, conn=conn)
+                # Write changes to the event log table
                 self.rel_storage.upsert(
                     relation=self.EVENT_LOG_TABLE,
                     ta=pa.Table.from_pydict(
-                        {Config.uid_col: ta[Config.uid_col], "table": [name] * len(ta)}
+                        {
+                            Config.uid_col: ta[Config.uid_col],
+                            "table": [table_name] * len(ta),
+                        }
                     ),
                     conn=conn,
                 )
-            # # update provenance table
-            # new_prov_df = self.get_provenance_table(calls=calls)
-            # self.prov_df = upsert_df(current=self.prov_df, new=new_prov_df)
 
     @transaction()
     def _query_call(self, call_uid: str, conn: Optional[Connection] = None) -> pa.Table:
@@ -221,15 +222,15 @@ class RelAdapter(Transactable):
     ############################################################################
     @transaction()
     def obj_gets(
-        self, keys: list[str], conn: Optional[Connection] = None
+        self, uids: list[str], conn: Optional[Connection] = None
     ) -> pd.DataFrame:
-        if len(keys) == 0:
+        if len(uids) == 0:
             return pd.DataFrame()
 
         table = Table(Config.vref_table)
         query = (
             Query.from_(table)
-            .where(table[Config.uid_col].isin(keys))
+            .where(table[Config.uid_col].isin(uids))
             .select(table[Config.uid_col], table.value)
         )
         output = self.rel_storage.execute_arrow(query, conn=conn).to_pandas()
@@ -238,98 +239,56 @@ class RelAdapter(Transactable):
 
     @transaction()
     def obj_exists(
-        self, keys: Union[str, list[str]], conn: Optional[Connection] = None
+        self, uids: Union[str, list[str]], conn: Optional[Connection] = None
     ) -> Union[bool, list[bool]]:
-        if isinstance(keys, str):
-            all_keys = [keys]
+        if isinstance(uids, str):
+            all_uids = [uids]
         else:
-            all_keys = keys
-        df = self.obj_gets(all_keys, conn=conn)
-        results = [len(df[df[Config.uid_col] == key]) > 0 for key in all_keys]
-        if isinstance(keys, str):
+            all_uids = uids
+        df = self.obj_gets(all_uids, conn=conn)
+        results = [len(df[df[Config.uid_col] == uid]) > 0 for uid in all_uids]
+        if isinstance(uids, str):
             return results[0]
         else:
             return results
 
     @transaction()
-    def obj_get(self, key: str, conn: Optional[Connection] = None) -> Any:
-        df = self.obj_gets(keys=[key], conn=conn)
+    def obj_get(self, uid: str, conn: Optional[Connection] = None) -> Any:
+        df = self.obj_gets(uids=[uid], conn=conn)
         return df.loc[0, "value"]
 
     @transaction()
-    def obj_set(self, key: str, value: Any, conn: Optional[Connection] = None) -> None:
-        if self.obj_exists(keys=[key], conn=conn):
-            return
-
-        buffer = io.BytesIO()
-        joblib.dump(value=value, filename=buffer)
+    def obj_set(self, uid: str, value: Any, conn: Optional[Connection] = None) -> None:
+        if self.obj_exists(uids=[uid], conn=conn):
+            return  # guarantees no overwriting of values
+        serialized_value = serialize(value)
         query = Query.into(Config.vref_table).insert(Parameter("$1"), Parameter("$2"))
         self.rel_storage.execute_arrow(
-            query=query, parameters=[key, buffer.getvalue()], conn=conn
+            query=query, parameters=[uid, serialized_value], conn=conn
         )
         log_query = Query.into(self.EVENT_LOG_TABLE).insert(
             Parameter("$1"), Parameter("$2")
         )
         self.rel_storage.execute_arrow(
-            log_query, parameters=[key, Config.vref_table], conn=conn
+            log_query, parameters=[uid, Config.vref_table], conn=conn
         )
 
     @transaction()
     def obj_sets(self, kvs: dict[str, Any], conn: Optional[Connection] = None) -> None:
-        keys = list(kvs.keys())
-        indicators = self.obj_exists(keys, conn=conn)
-        new_keys = [key for key, indicator in zip(keys, indicators) if not indicator]
+        uids = list(kvs.keys())
+        indicators = self.obj_exists(uids, conn=conn)
+        new_uids = [uid for uid, indicator in zip(uids, indicators) if not indicator]
         ta = pa.Table.from_pylist(
-            [{Config.uid_col: key, "value": serialize(kvs[key])} for key in new_keys]
+            [
+                {Config.uid_col: new_uid, "value": serialize(kvs[new_uid])}
+                for new_uid in new_uids
+            ]
         )
         self.rel_storage.upsert(relation=Config.vref_table, ta=ta, conn=conn)
         log_ta = pa.Table.from_pylist(
-            [{Config.uid_col: key, "table": Config.vref_table} for key in new_keys]
+            [
+                {Config.uid_col: new_uid, "table": Config.vref_table}
+                for new_uid in new_uids
+            ]
         )
         self.rel_storage.upsert(relation=self.EVENT_LOG_TABLE, ta=log_ta, conn=conn)
-
-    ############################################################################
-    ### provenance
-    ############################################################################
-    # @staticmethod
-    # def get_provenance_table(calls: List[Call]) -> pd.DataFrame:
-    #     """
-    #     Converts call objects to a dataframe of provenance information. Calls to
-    #     all operations are in the same table. Traversing "backward" in this
-    #     table allows you to reconstruct the history of any value reference.
-    #     """
-    #     raise NotImplementedError()
-    #     dfs = []
-    #     for call in calls:
-    #         call_uid = call.uid
-    #         op_name = call.op.sig.name
-    #         op_version = call.op.sig.version
-    #         input_names = list(call.inputs.keys())
-    #         input_uids = [call.inputs[k].uid for k in input_names]
-    #         in_table = pd.DataFrame(
-    #             {
-    #                 Prov.call_uid: call_uid,
-    #                 Prov.op_name: op_name,
-    #                 Prov.op_version: op_version,
-    #                 Prov.vref_name: input_names,
-    #                 Prov.vref_uid: input_uids,
-    #                 Prov.is_input: True,
-    #             }
-    #         )
-    #         output_names = list(
-    #             [dump_output_name(index=i) for i in range(len(call.outputs))]
-    #         )
-    #         output_uids = [call.outputs[i].uid for i in range(len(call.outputs))]
-    #         out_table = pd.DataFrame(
-    #             {
-    #                 Prov.call_uid: call_uid,
-    #                 Prov.op_name: op_name,
-    #                 Prov.op_version: op_version,
-    #                 Prov.vref_name: output_names,
-    #                 Prov.vref_uid: output_uids,
-    #                 Prov.is_input: False,
-    #             }
-    #         )
-    #         df = pd.concat([in_table, out_table], ignore_index=True)
-    #         dfs.append(df)
-    #     return pd.concat(dfs, ignore_index=True)

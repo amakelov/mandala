@@ -52,8 +52,8 @@ class Signature:
         return (
             f"Signature(ui_name={self.ui_name}, input_names={self.input_names}, "
             f"n_outputs={self.n_outputs}, defaults={self.defaults}, "
-            f"version={self.version}, internal_name={self.internal_name}, "
-            f"ui_to_internal_input_map={self.ui_to_internal_input_map}, "
+            f"version={self.version}, internal_name={self._internal_name}, "
+            f"ui_to_internal_input_map={self._ui_to_internal_input_map}, "
             f"new_input_defaults_uids={self._new_input_defaults_uids})"
         )
 
@@ -190,6 +190,8 @@ class Signature:
         Return an updated version of this signature based on a new signature
         (possibly without internal data), plus a description of the updates.
 
+        If the new signature has internal data, it is copied over.
+
         NOTE: the new signature need not have internal data. The goal of this
         method is to be able to update from a function provided by the user that
         has not been synchronized yet.
@@ -212,11 +214,19 @@ class Signature:
         for k in new.input_names:
             if k not in new_sig.input_names:
                 # this means a new input is being created
-                new_sig = new_sig.create_input(name=k, default=new_defaults[k])
+                if new.has_internal_data:
+                    internal_name = new.ui_to_internal_input_map[k]
+                else:
+                    internal_name = None
+                new_sig = new_sig.create_input(
+                    name=k, default=new_defaults[k], internal_name=internal_name
+                )
                 updates[k] = new_defaults[k]
         return new_sig, updates
 
-    def create_input(self, name: str, default) -> "Signature":
+    def create_input(
+        self, name: str, default, internal_name: Optional[str] = None
+    ) -> "Signature":
         """
         Add an input with a default value to this signature. This takes care of
         all the internal bookkeeping, including figuring out the UID for the
@@ -228,7 +238,7 @@ class Signature:
             raise ValueError("Cannot add inputs to a signature without internal data")
         res = copy.deepcopy(self)
         res.input_names.add(name)
-        internal_name = get_uid()
+        internal_name = get_uid() if internal_name is None else internal_name
         res.ui_to_internal_input_map[name] = internal_name
         res.defaults[name] = default
         #! if we implement custom types, this will need to be updated

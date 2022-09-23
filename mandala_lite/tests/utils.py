@@ -7,7 +7,7 @@ from mandala_lite.storages.remote_impls.mongo_impl import MongoRemoteStorage
 from mandala_lite.storages.remote_impls.mongo_mock import MongoMockRemoteStorage
 
 
-def compare_signatures(storage_1: Storage, storage_2: Storage) -> bool:
+def signatures_are_equal(storage_1: Storage, storage_2: Storage) -> bool:
     sigs_1 = storage_1.sig_adapter.sigs
     sigs_2 = storage_2.sig_adapter.sigs
     if sigs_1.keys() != sigs_2.keys():

@@ -85,7 +85,7 @@ class Storage(Transactable):
     def obj_get(self, obj_uid: str) -> Any:
         if self.obj_cache.exists(obj_uid):
             return self.obj_cache.get(obj_uid)
-        return self.rel_adapter.obj_get(obj_uid)
+        return self.rel_adapter.obj_get(uid=obj_uid)
 
     def obj_set(self, obj_uid: str, value: Any) -> None:
         self.obj_cache.set(obj_uid, value)
@@ -129,12 +129,14 @@ class Storage(Transactable):
         Collect the new calls according to the event log, and pack them into a
         dict of binary blobs to be sent off to the remote server.
 
-        NOTE: this also renames tables to the internal names.
+        NOTE: this also renames tables and columns to their immutable internal
+        names.
         """
         # Bundle event log and referenced calls into tables.
-        event_log_df = self.rel_storage.get_data(
-            self.rel_adapter.EVENT_LOG_TABLE, conn=conn
-        )
+        # event_log_df = self.rel_storage.get_data(
+        #     self.rel_adapter.EVENT_LOG_TABLE, conn=conn
+        # )
+        event_log_df = self.rel_adapter.get_event_log(conn=conn)
         tables_with_changes = {}
         table_names_with_changes = event_log_df["table"].unique()
 
@@ -155,12 +157,10 @@ class Storage(Transactable):
         output = {}
         for table_name, table in tables_with_changes.items():
             buffer = io.BytesIO()
-            sess.d = locals()
             pq.write_table(table, buffer)
             output[table_name] = buffer.getvalue()
-        self.rel_storage.execute_no_results(
-            query=Query.from_(event_log_table).delete(), conn=conn
-        )
+        self.rel_adapter.clear_event_log(conn=conn)
+        print(output)
         return output
 
     @transaction()
@@ -170,7 +170,7 @@ class Storage(Transactable):
         """
         Apply new calls from the remote server.
 
-        NOTE: this also renames tables to the UI names.
+        NOTE: this also renames tables and columns to their UI names.
         """
         data = {}
         for raw_changeset in changes:
@@ -211,11 +211,14 @@ class Storage(Transactable):
         local schema.
         """
         if not isinstance(self.root, RemoteStorage):
-            return
-        # apply signature changes from the server
-        self.sig_adapter.sync_from_remote()
-        changes = self.bundle_to_remote()
-        self.root.save_event_log_entry(changes)
+            # todo: there should be a way to completely ignore the event log
+            # when there's no remote
+            self.rel_adapter.clear_event_log()
+        else:
+            # apply signature changes from the server
+            self.sig_adapter.sync_from_remote()
+            changes = self.bundle_to_remote()
+            self.root.save_event_log_entry(changes)
 
     def sync_with_remote(self):
         if not isinstance(self.root, RemoteStorage):

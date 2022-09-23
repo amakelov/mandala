@@ -5,7 +5,7 @@ from ..common_imports import *
 from ..core.config import Config, dump_output_name
 from ..core.sig import Signature
 from .rel_impls.utils import Transactable, transaction
-from .rels import RelAdapter, serialize
+from .rels import RelAdapter, serialize, deserialize
 from .remote_storage import RemoteStorage
 
 
@@ -172,6 +172,20 @@ class SigAdapter(Transactable):
         )
 
     @transaction()
+    def load_state(
+        self, conn: Optional[Connection] = None
+    ) -> Dict[Tuple[str, int], Signature]:
+        """
+        Load the current state of the signatures from the database
+        """
+        query = f"SELECT * FROM {self.rel_adapter.SIGNATURES_TABLE} WHERE index = 0"
+        df = self.rel_storage.execute_df(query=query, conn=conn)
+        if len(df) == 0:
+            return {}
+        else:
+            return deserialize(df["signatures"][0])
+
+    @transaction()
     def create_sig(self, sig: Signature, conn: Optional[Connection] = None):
         """
         Create a new signature. `sig` must have internal data and not be present
@@ -239,7 +253,7 @@ class SigAdapter(Transactable):
             )
             # insert the default in the objects *in the database*, if it's
             # not there already
-            self.rel_adapter.obj_set(key=default_uid, value=default_value, conn=conn)
+            self.rel_adapter.obj_set(uid=default_uid, value=default_value, conn=conn)
 
     @transaction()
     def update_ui_name(self, sig: Signature, conn: Optional[Connection] = None):
@@ -272,6 +286,7 @@ class SigAdapter(Transactable):
         current = self.sigs[(sig.internal_name, sig.version)]
         current_internal_to_ui = current.internal_to_ui_input_map
         new_internal_to_ui = sig.internal_to_ui_input_map
+        sess.d = locals()
         renaming_map = {
             current_internal_to_ui[k]: new_internal_to_ui[k]
             for k in current_internal_to_ui
@@ -401,6 +416,7 @@ class SigAdapter(Transactable):
         all_sigs[(new_sig.internal_name, new_sig.version)] = new_sig
         self.push_signatures(sigs=list(all_sigs.values()))
         self.update_input_ui_names(sig=new_sig, conn=conn)
+        return new_sig
 
     def sync_from_local(self, sig: Signature) -> Signature:
         """
