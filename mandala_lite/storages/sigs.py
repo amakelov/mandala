@@ -59,11 +59,6 @@ class SigAdapter(Transactable):
     ):
         self.rel_adapter = rel_adapter
         self.root = root
-        # # manage remote storage
-        # if isinstance(root, RemoteStorage):
-        #     self.remote_sync_manager = RemoteSyncManager(
-        #         local_storage=self.rel_adapter, remote_storage=root
-        #     )
         self.rel_storage = self.rel_adapter.rel_storage
         # {(internal name, version): Signature}
         self.sigs = sigs
@@ -176,7 +171,7 @@ class SigAdapter(Transactable):
         self, conn: Optional[Connection] = None
     ) -> Dict[Tuple[str, int], Signature]:
         """
-        Load the current state of the signatures from the database
+        Load the state of the signatures from the database
         """
         query = f"SELECT * FROM {self.rel_adapter.SIGNATURES_TABLE} WHERE index = 0"
         df = self.rel_storage.execute_df(query=query, conn=conn)
@@ -286,7 +281,6 @@ class SigAdapter(Transactable):
         current = self.sigs[(sig.internal_name, sig.version)]
         current_internal_to_ui = current.internal_to_ui_input_map
         new_internal_to_ui = sig.internal_to_ui_input_map
-        sess.d = locals()
         renaming_map = {
             current_internal_to_ui[k]: new_internal_to_ui[k]
             for k in current_internal_to_ui
