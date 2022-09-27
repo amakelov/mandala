@@ -161,6 +161,20 @@ class SigAdapter(Transactable):
             return self.load_ui_sigs(conn=conn)[(sig.ui_name, version)]
 
     @transaction()
+    def get_versions(
+        self, sig: Signature, conn: Optional[Connection] = None
+    ) -> List[int]:
+        """
+        Get all versions of the signature, based on its internal name.
+        """
+        sigs = self.load_state(conn=conn)
+        if sig.has_internal_data:
+            return [k[1] for k in sigs.keys() if k[0] == sig.internal_name]
+        else:
+            ui_sigs = self.load_ui_sigs(conn=conn)
+            return [k[1] for k in ui_sigs.keys() if k[0] == sig.ui_name]
+
+    @transaction()
     def exists_internal(
         self, sig: Signature, conn: Optional[Connection] = None
     ) -> bool:
@@ -294,20 +308,25 @@ class SigAdapter(Transactable):
         assert sig.has_internal_data
         assert self.exists_internal(sig=sig, conn=conn)
         sigs = self.load_state(conn=conn)
-        current = sigs[(sig.internal_name, sig.version)]
-        if current.ui_name != sig.ui_name:
-            new_sig = current.rename(new_name=sig.ui_name)
-            # update signature object
-            sigs[(sig.internal_name, sig.version)] = new_sig
-            self.dump_state(state=sigs, conn=conn)
-            # update table
-            self.rel_storage.rename_relation(
-                name=current.versioned_ui_name,
-                new_name=new_sig.versioned_ui_name,
-                conn=conn,
-            )
+        all_versions = self.get_versions(sig=sig, conn=conn)
+        current_ui_name = sigs[(sig.internal_name, all_versions[0])].ui_name
+        new_ui_name = sig.ui_name
+        for version in all_versions:
+            current = sigs[(sig.internal_name, version)]
+            if current.ui_name != sig.ui_name:
+                new_sig = current.rename(new_name=sig.ui_name)
+                # update signature object
+                sigs[(sig.internal_name, version)] = new_sig
+                self.dump_state(state=sigs, conn=conn)
+                # update table
+                self.rel_storage.rename_relation(
+                    name=current.versioned_ui_name,
+                    new_name=new_sig.versioned_ui_name,
+                    conn=conn,
+                )
+        if current_ui_name != new_ui_name:
             logger.debug(
-                f"Updated UI name of signature: from {current.ui_name} to {new_sig.ui_name}"
+                f"Updated UI name of signature: from {current_ui_name} to {new_ui_name}"
             )
 
     @transaction()
