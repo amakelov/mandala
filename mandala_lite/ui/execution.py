@@ -154,11 +154,19 @@ class FuncInterface:
                 "This function has been invalidated due to a change in the signature, and cannot be called"
             )
         context = GlobalContext.current
+        storage = context.storage
+        assert isinstance(storage, Storage)
         if context is None:
             raise RuntimeError()
         if not self.op.sig.has_internal_data:
             # synchronize if necessary
             synchronize(func=self, storage=context.storage)
+        if Config.check_signature_on_each_call:
+            # to prevent stale signatures from being able to make calls.
+            # not necessary to ensure correctness at this stage
+            is_synced, reason = storage.sig_adapter.is_synced(sig=self.op.sig)
+            if not is_synced:
+                raise SyncException(reason)
         inputs = self.bind_inputs(args, kwargs, mode=context.mode)
         if context is None:
             raise RuntimeError("No context to call from")

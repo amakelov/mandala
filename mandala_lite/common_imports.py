@@ -1,4 +1,5 @@
 import traceback
+import logging
 import itertools
 import copy
 import hashlib
@@ -30,4 +31,15 @@ class Session:
     pass
 
 
+logger = logging.getLogger("mandala_lite")
+# logger.addHandler(logging.StreamHandler())
+FORMAT = "[%(filename)s:%(lineno)s - %(funcName)20s() ] %(message)s"
+logging.basicConfig(format=FORMAT)
+logger.setLevel(logging.DEBUG)
 sess = Session()
+
+TableType = TypeVar("TableType", pa.Table, pd.DataFrame)
+
+
+class SyncException(Exception):
+    pass

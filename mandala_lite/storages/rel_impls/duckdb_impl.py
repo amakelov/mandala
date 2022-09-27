@@ -94,6 +94,9 @@ class DuckDBRelStorage(RelStorage, Transactable):
         if primary_key is not None:
             query = query.primary_key(primary_key)
         conn.execute(str(query))
+        logger.debug(
+            f'Created table "{name}" with columns {[elt[0] for elt in columns]}'
+        )
 
     @transaction()
     def delete_relation(self, name: str, conn: Optional[Connection] = None):
@@ -102,6 +105,7 @@ class DuckDBRelStorage(RelStorage, Transactable):
         """
         query = Query.drop_table(table=name)
         conn.execute(str(query))
+        logger.debug(f'Deleted table "{name}"')
 
     @transaction()
     def create_column(
@@ -116,6 +120,7 @@ class DuckDBRelStorage(RelStorage, Transactable):
         """
         query = f"ALTER TABLE {relation} ADD COLUMN {name} {self.UID_DTYPE} DEFAULT '{default_value}'"
         conn.execute(query=query)
+        logger.debug(f'Added column "{name}" to table "{relation}"')
 
     @transaction()
     def rename_relation(
@@ -126,6 +131,7 @@ class DuckDBRelStorage(RelStorage, Transactable):
         """
         query = f"ALTER TABLE {name} RENAME TO {new_name};"
         conn.execute(query)
+        logger.debug(f'Renamed table "{name}" to "{new_name}"')
 
     @transaction()
     def rename_column(
@@ -136,6 +142,7 @@ class DuckDBRelStorage(RelStorage, Transactable):
         """
         query = f'ALTER TABLE {relation} RENAME "{name}" TO "{new_name}";'
         conn.execute(query)
+        logger.debug(f'Renamed column "{name}" of table "{relation}" to "{new_name}"')
 
     @transaction()
     def rename_columns(
@@ -148,6 +155,8 @@ class DuckDBRelStorage(RelStorage, Transactable):
             self.rename_column(relation=relation, name=k, new_name=v, conn=conn)
         for k, v in part_2.items():
             self.rename_column(relation=relation, name=k, new_name=v, conn=conn)
+        if len(mapping) > 0:
+            logger.debug(f'Renamed columns of table "{relation}" via mapping {mapping}')
 
     ############################################################################
     ### instance management
@@ -210,6 +219,7 @@ class DuckDBRelStorage(RelStorage, Transactable):
             return
         # TODO this a temporary hack until we get function signature sync working!
         if not self.table_exists(relation, conn=conn):
+            raise RuntimeError()
             self.create_relation(
                 relation,
                 [(col, None) for col in ta.column_names],

@@ -1,18 +1,18 @@
 from duckdb import DuckDBPyConnection as Connection
+from collections import defaultdict
 import datetime
-from pypika import Query, Table, Parameter
+from pypika import Query, Table
 import pyarrow.parquet as pq
 
 from .rel_impls.utils import Transactable, transaction
 from .kv import InMemoryStorage
 from .rel_impls.duckdb_impl import DuckDBRelStorage
-from .rels import RelAdapter, RemoteEventLogEntry
+from .rels import RelAdapter, RemoteEventLogEntry, deserialize
 from .sigs import SigAdapter
 from .remote_storage import RemoteStorage
 from ..common_imports import *
-from ..core.config import Config, dump_output_name
+from ..core.config import Config
 from ..core.model import Call
-from ..core.sig import Signature
 
 
 class Storage(Transactable):
@@ -41,9 +41,7 @@ class Storage(Transactable):
         # manipulates the memoization tables
         self.rel_adapter = RelAdapter(rel_storage=self.rel_storage)
         # manipulates signatures
-        self.sig_adapter = SigAdapter(
-            rel_adapter=self.rel_adapter, sigs={}, root=self.root
-        )
+        self.sig_adapter = SigAdapter(rel_adapter=self.rel_adapter, root=self.root)
         # stores the signatures of the operations connected to this storage
         # (name, version) -> signature
         # self.sigs: Dict[Tuple[str, int], Signature] = {}
@@ -151,6 +149,12 @@ class Storage(Transactable):
                 conn=conn,
             )
         # pass to internal names
+        evaluated_tables = {
+            k: self.rel_adapter.evaluate_call_table(ta=v)
+            for k, v in tables_with_changes.items()
+            if k != Config.vref_table
+        }
+        logger.debug(f"Sending tables with changes: {evaluated_tables}")
         tables_with_changes = self.sig_adapter.rename_tables(
             tables_with_changes, to="internal"
         )
@@ -160,7 +164,6 @@ class Storage(Transactable):
             pq.write_table(table, buffer)
             output[table_name] = buffer.getvalue()
         self.rel_adapter.clear_event_log(conn=conn)
-        print(output)
         return output
 
     @transaction()
@@ -172,16 +175,20 @@ class Storage(Transactable):
 
         NOTE: this also renames tables and columns to their UI names.
         """
-        data = {}
         for raw_changeset in changes:
-            for table_name in raw_changeset:
-                buffer = io.BytesIO(raw_changeset[table_name])
-                table = pq.read_table(buffer)
-                data[table_name] = table
-        # pass to UI names
-        data = self.sig_adapter.rename_tables(tables=data, to="ui")
-        for table_name, table in data.items():
-            self.rel_storage.upsert(table_name, table, conn=conn)
+            changeset_data = {}
+            for table_name, serialized_table in raw_changeset.items():
+                buffer = io.BytesIO(serialized_table)
+                deserialized_table = pq.read_table(buffer)
+                changeset_data[table_name] = deserialized_table
+            # pass to UI names
+            changeset_data = self.sig_adapter.rename_tables(
+                tables=changeset_data, to="ui"
+            )
+            for table_name, deserialized_table in changeset_data.items():
+                self.rel_storage.upsert(table_name, deserialized_table, conn=conn)
+        # evaluated_tables = {k: self.rel_adapter.evaluate_call_table(ta=v, conn=conn) for k, v in data.items() if k != Config.vref_table}
+        # logger.debug(f'Applied tables from remote: {evaluated_tables}')
 
     def sync_from_remote(self):
         """
@@ -194,7 +201,8 @@ class Storage(Transactable):
         """
         if not isinstance(self.root, RemoteStorage):
             return
-        # apply signature changes from the server
+        # apply signature changes from the server first, because the new calls
+        # may depend on the new schema.
         self.sig_adapter.sync_from_remote()
         # next, pull new calls
         new_log_entries, timestamp = self.root.get_log_entries_since(
@@ -202,12 +210,14 @@ class Storage(Transactable):
         )
         self.apply_from_remote(new_log_entries)
         self.last_timestamp = timestamp
+        logger.debug("synced from remote")
 
     def sync_to_remote(self):
         """
         Send calls to the remote server.
 
         As with `sync_from_remote`, the server may have a super-schema of the
+        local schema. The current signatures are first pulled and applied to the
         local schema.
         """
         if not isinstance(self.root, RemoteStorage):
@@ -215,10 +225,12 @@ class Storage(Transactable):
             # when there's no remote
             self.rel_adapter.clear_event_log()
         else:
-            # apply signature changes from the server
-            self.sig_adapter.sync_from_remote()
+            # collect new work and send it to the server
             changes = self.bundle_to_remote()
             self.root.save_event_log_entry(changes)
+            # apply signature changes from the server
+            # self.sig_adapter.sync_from_remote()
+            logger.debug("synced to remote")
 
     def sync_with_remote(self):
         if not isinstance(self.root, RemoteStorage):

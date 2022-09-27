@@ -15,6 +15,9 @@ class Config:
     evict_on_commit = True
     # whether to commit on context exit
     autocommit = True
+    # whether signatures are verified against the database each time a function
+    # is called
+    check_signature_on_each_call = False
 
     ### constants
     # used for columns containing UIDs of value references or calls

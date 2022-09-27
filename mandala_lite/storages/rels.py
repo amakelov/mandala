@@ -8,7 +8,7 @@ from duckdb import DuckDBPyConnection as Connection
 
 from ..common_imports import *
 from ..core.config import Config, Prov, dump_output_name
-from ..core.model import Call
+from ..core.model import Call, unwrap
 from ..core.sig import Signature
 from .rel_impls.duckdb_impl import DuckDBRelStorage
 from .rel_impls.utils import Transactable, transaction
@@ -94,6 +94,45 @@ class RelAdapter(Transactable):
         return [
             t for t in tables if t not in self.SPECIAL_TABLES and t != self.VREF_TABLE
         ]
+
+    @transaction()
+    def evaluate_call_table(
+        self, ta: TableType, conn: Optional[Connection] = None
+    ) -> pd.DataFrame:
+        if isinstance(ta, pa.Table):
+            ta = pa.Table.to_pandas(ta)
+        ta = ta.copy()
+        for col in ta.columns:
+            if col != Config.uid_col:
+                ta[col] = ta[col].apply(
+                    lambda uid: unwrap(self.obj_get(uid, conn=conn))
+                )
+        return ta
+
+    @transaction()
+    def get_vrefs(self, conn: Optional[Connection] = None) -> pd.DataFrame:
+        """
+        Returns a dataframe of the deserialized values of the value references
+        in the storage.
+        """
+        data = self.rel_storage.get_data(table=self.VREF_TABLE, conn=conn)
+        data["value"] = data["value"].apply(lambda vref: unwrap(deserialize(vref)))
+        return data
+
+    @transaction()
+    def get_all_call_data(
+        self, conn: Optional[Connection] = None
+    ) -> Dict[str, pd.DataFrame]:
+        """
+        Return a dictionary of all the memoization tables (labeled by function
+        and version name)
+        """
+        result = {}
+        for table in self.get_call_tables(conn=conn):
+            result[table] = self.rel_storage.get_data(table=table, conn=conn)
+        for k, v in result.items():
+            v = self.evaluate_call_table(ta=v, conn=conn)
+        return result
 
     ############################################################################
     ### event log stuff

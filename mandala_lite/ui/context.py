@@ -51,9 +51,9 @@ class Context:
         for k, v in updates.items():
             if v is not None:
                 self.__dict__[f"{k}"] = v
-        # Load state from remote
-        if self.storage is not None:
-            self.storage.sync_with_remote()
+        # Load state from remote: this step doesn't really help much.
+        # if self.storage is not None:
+        #     self.storage.sync_with_remote()
         return self
 
     def _undo_updates(self):
