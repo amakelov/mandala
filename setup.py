@@ -8,13 +8,14 @@ install_requires = [
     "duckdb >= 0.4",
     "pypika >= 0.48",
     "pyarrow >= 8.0.0",
+    "pymongo",
 ]
 
 extras_require = {
     "base": [],
     "test": [
         "pytest >= 6.0.0",
-        "scikit-learn >= 1.0.0",  # sklearn 1.0+ requires python 3.7+
+        # "scikit-learn >= 1.0.0",  # sklearn 1.0+ requires python 3.7+
         "ipython",
         "mongomock",
     ],
@@ -43,12 +44,11 @@ setup(
         "Intended Audience :: Science/Research",
         "Operating System :: POSIX :: Linux",
         "Programming Language :: Python :: 3",
-        "Programming Language :: Python :: 3.9",
         "Programming Language :: Python :: 3.10",
     ],
     packages=packages,
     long_description=open("README.md").read() if os.path.exists("README.md") else "",
-    python_requires=">=3.9",
+    python_requires=">=3.10",
     install_requires=install_requires,
     extras_require=extras_require,
 )

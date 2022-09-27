@@ -104,7 +104,7 @@ class Context:
 
         # now, evaluate the table
         keys_to_collect = [
-            item for _, column in df.iteritems() for _, item in column.iteritems()
+            item for _, column in df.items() for _, item in column.items()
         ]
         self.storage.preload_objs(keys_to_collect)
         result = df.applymap(lambda key: unwrap(self.storage.obj_get(key)))
