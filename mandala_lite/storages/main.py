@@ -7,8 +7,8 @@ import pyarrow.parquet as pq
 from .rel_impls.utils import Transactable, transaction
 from .kv import InMemoryStorage
 from .rel_impls.duckdb_impl import DuckDBRelStorage
-from .rels import RelAdapter, RemoteEventLogEntry, deserialize
-from .sigs import SigAdapter
+from .rels import RelAdapter, RemoteEventLogEntry, deserialize, SigAdapter
+from .sigs import SigSyncer
 from .remote_storage import RemoteStorage
 from ..common_imports import *
 from ..core.config import Config
@@ -40,8 +40,8 @@ class Storage(Transactable):
         self.rel_storage = DuckDBRelStorage()
         # manipulates the memoization tables
         self.rel_adapter = RelAdapter(rel_storage=self.rel_storage)
-        # manipulates signatures
-        self.sig_adapter = SigAdapter(rel_adapter=self.rel_adapter, root=self.root)
+        self.sig_adapter = self.rel_adapter.sig_adapter
+        self.sig_syncer = SigSyncer(sig_adapter=self.sig_adapter, root=self.root)
         # stores the signatures of the operations connected to this storage
         # (name, version) -> signature
         # self.sigs: Dict[Tuple[str, int], Signature] = {}
@@ -149,12 +149,12 @@ class Storage(Transactable):
                 conn=conn,
             )
         # pass to internal names
-        evaluated_tables = {
-            k: self.rel_adapter.evaluate_call_table(ta=v)
-            for k, v in tables_with_changes.items()
-            if k != Config.vref_table
-        }
-        logger.debug(f"Sending tables with changes: {evaluated_tables}")
+        # evaluated_tables = {
+        #     k: self.rel_adapter.evaluate_call_table(ta=v)
+        #     for k, v in tables_with_changes.items()
+        #     if k != Config.vref_table
+        # }
+        # logger.debug(f"Sending tables with changes: {evaluated_tables}")
         tables_with_changes = self.sig_adapter.rename_tables(
             tables_with_changes, to="internal"
         )
@@ -203,7 +203,7 @@ class Storage(Transactable):
             return
         # apply signature changes from the server first, because the new calls
         # may depend on the new schema.
-        self.sig_adapter.sync_from_remote()
+        self.sig_syncer.sync_from_remote()
         # next, pull new calls
         new_log_entries, timestamp = self.root.get_log_entries_since(
             self.last_timestamp

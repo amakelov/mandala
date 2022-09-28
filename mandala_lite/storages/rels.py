@@ -10,29 +10,381 @@ from ..common_imports import *
 from ..core.config import Config, Prov, dump_output_name
 from ..core.model import Call, unwrap
 from ..core.sig import Signature
+from ..utils import upsert_df, serialize, deserialize, _rename_cols
 from .rel_impls.duckdb_impl import DuckDBRelStorage
 from .rel_impls.utils import Transactable, transaction
 
 
+# {internal table name -> serialized (internally named) table}
 RemoteEventLogEntry = dict[str, bytes]
 
 
-def upsert_df(current: pd.DataFrame, new: pd.DataFrame) -> pd.DataFrame:
+class SigAdapter(Transactable):
     """
-    Upsert for dataframes with the same columns
+    Responsible for state transitions of the schema that update the
+    signature objects *and* the relational tables in a transactional way.
     """
-    return pd.concat([current, new[~new.index.isin(current.index)]])
 
+    def __init__(
+        self,
+        rel_adapter: "RelAdapter",
+    ):
+        self.rel_adapter = rel_adapter
+        self.rel_storage = self.rel_adapter.rel_storage
+        # {(internal name, version): Signature}
 
-def serialize(obj: Any) -> bytes:
-    buffer = io.BytesIO()
-    joblib.dump(obj, buffer)
-    return buffer.getvalue()
+    @transaction()
+    def dump_state(
+        self, state: Dict[Tuple[str, int], Signature], conn: Optional[Connection] = None
+    ):
+        """
+        Dump the current state of the signatures to the database
+        """
+        # delete existing, if any
+        index_col = "index"
+        query = f"DELETE FROM {self.rel_adapter.SIGNATURES_TABLE} WHERE {index_col} = 0"
+        conn.execute(query)
+        # insert new
+        serialized = serialize(obj=state)
+        df = pd.DataFrame(
+            {
+                index_col: [0],
+                "signatures": [serialized],
+            }
+        )
+        ta = pa.Table.from_pandas(df)
+        self.rel_storage.insert(
+            relation=self.rel_adapter.SIGNATURES_TABLE, ta=ta, conn=conn
+        )
 
+    @transaction()
+    def load_state(
+        self, conn: Optional[Connection] = None
+    ) -> Dict[Tuple[str, int], Signature]:
+        """
+        Load the state of the signatures from the database. All interactions
+        with the state of the signatures are done transactionally through this
+        method.
+        """
+        query = f"SELECT * FROM {self.rel_adapter.SIGNATURES_TABLE} WHERE index = 0"
+        df = self.rel_storage.execute_df(query=query, conn=conn)
+        if len(df) == 0:
+            return {}
+        else:
+            return deserialize(df["signatures"][0])
 
-def deserialize(value: bytes) -> Any:
-    buffer = io.BytesIO(value)
-    return joblib.load(buffer)
+    ############################################################################
+    ### `Transactable` interface
+    ############################################################################
+    def _get_connection(self) -> Connection:
+        return self.rel_storage._get_connection()
+
+    def _end_transaction(self, conn: Connection):
+        return self.rel_storage._end_transaction(conn=conn)
+
+    ############################################################################
+    ###
+    ############################################################################
+    @transaction()
+    def load_ui_sigs(
+        self, conn: Optional[Connection] = None
+    ) -> Dict[Tuple[str, int], Signature]:
+        """
+        Get the signatures indexed by UI names
+        """
+        sigs = self.load_state(conn=conn)
+        return {(sig.ui_name, sig.version): sig for sig in sigs.values()}
+
+    @transaction()
+    def exists_ui(self, sig: Signature, conn: Optional[Connection] = None) -> bool:
+        """
+        Check if the signature exists based on its UI name
+        """
+        return (sig.ui_name, sig.version) in self.load_ui_sigs(conn=conn)
+
+    @transaction()
+    def exists_any_version(
+        self, sig: Signature, conn: Optional[Connection] = None
+    ) -> bool:
+        if sig.has_internal_data:
+            return any(
+                sig.internal_name == k[0] for k in self.load_state(conn=conn).keys()
+            )
+        else:
+            return any(sig.ui_name == k[0] for k in self.load_ui_sigs(conn=conn).keys())
+
+    @transaction()
+    def get_latest_version(
+        self, sig: Signature, conn: Optional[Connection] = None
+    ) -> Signature:
+        """
+        Get the latest version of the signature, based on its internal name.
+        """
+        sigs = self.load_state(conn=conn)
+        if sig.has_internal_data:
+            version = max([k[1] for k in sigs.keys() if k[0] == sig.internal_name])
+            return sigs[(sig.internal_name, version)]
+        else:
+            version = max(
+                [
+                    k[1]
+                    for k in self.load_ui_sigs(conn=conn).keys()
+                    if k[0] == sig.ui_name
+                ]
+            )
+            return self.load_ui_sigs(conn=conn)[(sig.ui_name, version)]
+
+    @transaction()
+    def get_versions(
+        self, sig: Signature, conn: Optional[Connection] = None
+    ) -> List[int]:
+        """
+        Get all versions of the signature, based on its internal name.
+        """
+        sigs = self.load_state(conn=conn)
+        if sig.has_internal_data:
+            return [k[1] for k in sigs.keys() if k[0] == sig.internal_name]
+        else:
+            ui_sigs = self.load_ui_sigs(conn=conn)
+            return [k[1] for k in ui_sigs.keys() if k[0] == sig.ui_name]
+
+    @transaction()
+    def exists_internal(
+        self, sig: Signature, conn: Optional[Connection] = None
+    ) -> bool:
+        """
+        Check if the signature exists based on its internal name
+        """
+        return (sig.internal_name, sig.version) in self.load_state(conn=conn)
+
+    @transaction()
+    def internal_to_ui(self, conn: Optional[Connection] = None) -> Dict[str, str]:
+        """
+        Get a mapping from internal names to UI names
+        """
+        return {k[0]: v.ui_name for k, v in self.load_state(conn=conn).items()}
+
+    @transaction()
+    def ui_to_internal(self, conn: Optional[Connection] = None) -> Dict[str, str]:
+        """
+        Get a mapping from UI names to internal names
+        """
+        return {v.ui_name: k[0] for k, v in self.load_state(conn=conn).items()}
+
+    @transaction()
+    def ui_names(self, conn: Optional[Connection] = None) -> Set[str]:
+        return set(self.ui_to_internal(conn=conn).keys())
+
+    @transaction()
+    def internal_names(self, conn: Optional[Connection] = None) -> Set[str]:
+        return set(self.internal_to_ui(conn=conn).keys())
+
+    @transaction()
+    def is_sig_table_name(self, name: str, conn: Optional[Connection] = None) -> bool:
+        """
+        Check if the name is a valid name for a table corresponding to a
+        signature.
+        """
+        parts = name.split("_", 1)
+        return (
+            parts[0] in (self.internal_names(conn=conn) | self.ui_names(conn=conn))
+            and parts[1].isdigit()
+        )
+
+    ############################################################################
+    ### elementary transitions for local state
+    ############################################################################
+    @transaction()
+    def create_sig(self, sig: Signature, conn: Optional[Connection] = None):
+        """
+        Create a new signature. `sig` must have internal data and not be present
+        in storage.
+        """
+        assert sig.has_internal_data
+        sigs = self.load_state(conn=conn)
+        assert (sig.internal_name, sig.version) not in sigs.keys()
+        sigs[(sig.internal_name, sig.version)] = sig
+        # write signatures
+        self.dump_state(state=sigs, conn=conn)
+        # create relation
+        columns = list(sig.input_names) + [
+            dump_output_name(index=i) for i in range(sig.n_outputs)
+        ]
+        columns = [(Config.uid_col, None)] + [(column, None) for column in columns]
+        self.rel_storage.create_relation(
+            name=sig.versioned_ui_name,
+            columns=columns,
+            primary_key=Config.uid_col,
+            conn=conn,
+        )
+        logger.debug(f"Created signature:\n{sig}")
+
+    @transaction()
+    def create_new_version(self, sig: Signature, conn: Optional[Connection] = None):
+        latest_sig = self.get_latest_version(sig=sig, conn=conn)
+        assert sig.version == latest_sig.version + 1
+        # update signatures
+        sigs = self.load_state(conn=conn)
+        sigs[(sig.internal_name, sig.version)] = sig
+        self.dump_state(state=sigs, conn=conn)
+        # create relation
+        columns = list(sig.input_names) + [
+            dump_output_name(index=i) for i in range(sig.n_outputs)
+        ]
+        columns = [(Config.uid_col, None)] + [(column, None) for column in columns]
+        self.rel_storage.create_relation(
+            name=sig.versioned_ui_name,
+            columns=columns,
+            primary_key=Config.uid_col,
+            conn=conn,
+        )
+        logger.debug(f"Created new version:\n{sig}")
+
+    @transaction()
+    def update_sig(self, sig: Signature, conn: Optional[Connection] = None):
+        """
+        Update an existing signature. `sig` must have internal data, and
+        must already exist in storage.
+        """
+        assert sig.has_internal_data
+        sigs = self.load_state(conn=conn)
+        assert (sig.internal_name, sig.version) in sigs.keys()
+        current = sigs[(sig.internal_name, sig.version)]
+        # the `update` method also ensures that the signature is compatible
+        new_sig, updates = current.update(new=sig)
+        # update the signature data
+        sigs[(sig.internal_name, sig.version)] = new_sig
+        self.dump_state(state=sigs, conn=conn)
+        # create new inputs in the database, if any
+        for new_input, default_value in updates.items():
+            internal_input_name = new_sig.ui_to_internal_input_map[new_input]
+            default_uid = new_sig._new_input_defaults_uids[internal_input_name]
+            self.rel_storage.create_column(
+                relation=new_sig.versioned_ui_name,
+                name=new_input,
+                default_value=default_uid,
+                conn=conn,
+            )
+            # insert the default in the objects *in the database*, if it's
+            # not there already
+            self.rel_adapter.obj_set(uid=default_uid, value=default_value, conn=conn)
+        if len(updates) > 0:
+            logger.debug(
+                f"Updated signature:\n    new inputs:{updates} new signature:\n    {sig}"
+            )
+
+    @transaction()
+    def update_ui_name(self, sig: Signature, conn: Optional[Connection] = None):
+        """
+        Update a signature's UI name from the given `Signature` object.
+        `sig` must have internal data, and must carry the new UI name.
+        """
+        assert sig.has_internal_data
+        assert self.exists_internal(sig=sig, conn=conn)
+        sigs = self.load_state(conn=conn)
+        all_versions = self.get_versions(sig=sig, conn=conn)
+        current_ui_name = sigs[(sig.internal_name, all_versions[0])].ui_name
+        new_ui_name = sig.ui_name
+        for version in all_versions:
+            current = sigs[(sig.internal_name, version)]
+            if current.ui_name != sig.ui_name:
+                new_sig = current.rename(new_name=sig.ui_name)
+                # update signature object
+                sigs[(sig.internal_name, version)] = new_sig
+                self.dump_state(state=sigs, conn=conn)
+                # update table
+                self.rel_storage.rename_relation(
+                    name=current.versioned_ui_name,
+                    new_name=new_sig.versioned_ui_name,
+                    conn=conn,
+                )
+        if current_ui_name != new_ui_name:
+            logger.debug(
+                f"Updated UI name of signature: from {current_ui_name} to {new_ui_name}"
+            )
+
+    @transaction()
+    def update_input_ui_names(self, sig: Signature, conn: Optional[Connection] = None):
+        """
+        Update a signature's input UI names from the given `Signature` object.
+        `sig` must have internal data, and must carry the new UI input names.
+        """
+        assert sig.has_internal_data
+        sigs = self.load_state(conn=conn)
+        current = sigs[(sig.internal_name, sig.version)]
+        current_internal_to_ui = current.internal_to_ui_input_map
+        new_internal_to_ui = sig.internal_to_ui_input_map
+        renaming_map = {
+            current_internal_to_ui[k]: new_internal_to_ui[k]
+            for k in current_internal_to_ui
+            if current_internal_to_ui[k] != new_internal_to_ui[k]
+        }
+        # update signature object
+        new_sig = current.rename_inputs(mapping=renaming_map)
+        sigs[(sig.internal_name, sig.version)] = new_sig
+        self.dump_state(state=sigs, conn=conn)
+        # update table columns
+        self.rel_storage.rename_columns(
+            relation=new_sig.versioned_ui_name, mapping=renaming_map, conn=conn
+        )
+        if len(renaming_map) > 0:
+            logger.debug(
+                f"Updated input UI names of signature named {sig.ui_name}: via mapping {renaming_map}"
+            )
+
+    ############################################################################
+    ### helpers
+    ############################################################################
+    @transaction()
+    def is_synced(
+        self, sig: Signature, conn: Optional[Connection] = None
+    ) -> Tuple[bool, str]:
+        """
+        Given a signature with internal data, check if it matches what's
+        in the databse. Returns a tuple of (is_synced, reason if false).
+        """
+        assert sig.has_internal_data
+        current_sigs = self.load_state(conn=conn)
+        if (sig.internal_name, sig.version) in current_sigs:
+            current = current_sigs[(sig.internal_name, sig.version)]
+            if sig != current:
+                return (
+                    False,
+                    f"Signatures are different.\nThis signature:\n    {sig}\nCurrent signature:\n    {current}",
+                )
+        else:
+            return (
+                False,
+                f"Signature with this internal name and version not found in database.",
+            )
+        return True, "Signature is equal to a signature in the database."
+
+    @transaction()
+    def rename_tables(
+        self,
+        tables: Dict[str, TableType],
+        to: str = "internal",
+        conn: Optional[Connection] = None,
+    ) -> Dict[str, TableType]:
+        result = {}
+        for table_name, table in tables.items():
+            if self.is_sig_table_name(name=table_name, conn=conn):
+                if to == "internal":
+                    ui_name, version = Signature.parse_versioned_name(table_name)
+                    sig = self.load_ui_sigs(conn=conn)[ui_name, version]
+                    new_table_name = sig.versioned_internal_name
+                    mapping = sig.ui_to_internal_input_map
+                elif to == "ui":
+                    internal_name, version = Signature.parse_versioned_name(table_name)
+                    sig = self.load_state(conn=conn)[internal_name, version]
+                    new_table_name = sig.versioned_ui_name
+                    mapping = sig.internal_to_ui_input_map
+                else:
+                    raise ValueError()
+                result[new_table_name] = _rename_cols(table=table, mapping=mapping)
+            else:
+                result[table_name] = table
+        return result
 
 
 class RelAdapter(Transactable):
@@ -57,7 +409,9 @@ class RelAdapter(Transactable):
 
     def __init__(self, rel_storage: DuckDBRelStorage):
         self.rel_storage = rel_storage
+        self.sig_adapter = SigAdapter(rel_adapter=self)
         self.init()
+        self.sig_adapter.dump_state(state={})
 
     @transaction()
     def init(self, conn: Optional[Connection] = None):
@@ -170,29 +524,57 @@ class RelAdapter(Transactable):
     ############################################################################
     ### call methods
     ############################################################################
-    @staticmethod
-    def tabulate_calls(calls: List[Call]) -> Dict[str, pa.Table]:
+    @transaction()
+    def _get_current_names(
+        self, sig: Signature, conn: Optional[Connection] = None
+    ) -> Tuple[str, Dict[str, str]]:
+        current_sigs = self.sig_adapter.load_state()
+        current_sig = current_sigs[sig.internal_name, sig.version]
+        true_versioned_ui_name = current_sig.versioned_ui_name
+        stale_to_true_input_mapping = {
+            k: current_sig.internal_to_ui_input_map[v]
+            for k, v in sig.ui_to_internal_input_map.items()
+        }
+        return true_versioned_ui_name, stale_to_true_input_mapping
+
+    @transaction()
+    def tabulate_calls(
+        self, calls: List[Call], conn: Optional[Connection] = None
+    ) -> Dict[str, pa.Table]:
         """
         Converts call objects to a dictionary of {relation name: table
         to upsert} pairs.
+
+        To handle calls to stale functions, this passes through internal names
+        to get the current UI names.
         """
         # split by operation internal name
         calls_by_op = defaultdict(list)
+        sigs_by_op = {}
         for call in calls:
             calls_by_op[call.op.sig.versioned_ui_name].append(call)
+            sigs_by_op[call.op.sig.versioned_ui_name] = call.op.sig
         res = {}
-        for k, v in calls_by_op.items():
-            res[k] = pa.Table.from_pylist(
+        for versioned_ui_name, calls in calls_by_op.items():
+            sig = sigs_by_op[versioned_ui_name]
+            (
+                true_versioned_ui_name,
+                stale_to_true_input_mapping,
+            ) = self._get_current_names(sig, conn=conn)
+            res[true_versioned_ui_name] = pa.Table.from_pylist(
                 [
                     {
                         Config.uid_col: call.uid,
-                        **{k: v.uid for k, v in call.inputs.items()},
+                        **{
+                            stale_to_true_input_mapping[k]: v.uid
+                            for k, v in call.inputs.items()
+                        },
                         **{
                             dump_output_name(index=i): v.uid
                             for i, v in enumerate(call.outputs)
                         },
                     }
-                    for call in v
+                    for call in calls
                 ]
             )
 

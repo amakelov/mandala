@@ -223,7 +223,7 @@ def synchronize(func: FuncInterface, storage: Storage):
     Synchronize a function in-place.
     """
     # first, pull the current data from the remote!
-    storage.sig_adapter.sync_from_remote()
-    new_sig = storage.sig_adapter.sync_from_local(sig=func.op.sig)
+    storage.sig_syncer.sync_from_remote()
+    new_sig = storage.sig_syncer.sync_from_local(sig=func.op.sig)
     func.op.sig = new_sig
     func.is_synchronized = True
