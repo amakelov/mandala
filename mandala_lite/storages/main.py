@@ -202,7 +202,7 @@ class Storage(Transactable):
         if not isinstance(self.root, RemoteStorage):
             return
         # apply signature changes from the server first, because the new calls
-        # may depend on the new schema.
+        # from the server may depend on the new schema.
         self.sig_syncer.sync_from_remote()
         # next, pull new calls
         new_log_entries, timestamp = self.root.get_log_entries_since(

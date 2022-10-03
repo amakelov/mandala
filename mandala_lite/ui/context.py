@@ -53,7 +53,8 @@ class Context:
                 self.__dict__[f"{k}"] = v
         # Load state from remote
         if self.storage is not None:
-            self.storage.sync_with_remote()
+            # self.storage.sync_with_remote()
+            self.storage.sync_from_remote()
         return self
 
     def _undo_updates(self):
@@ -75,7 +76,7 @@ class Context:
             # commit calls from temp partition to main and tabulate them
             if Config.autocommit:
                 self.storage.commit()
-            self.storage.sync_with_remote()
+            self.storage.sync_to_remote()
         except Exception as e:
             exc = e
         self._undo_updates()
