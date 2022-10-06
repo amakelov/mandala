@@ -102,7 +102,7 @@ class FuncInterface:
         call_uid = Hashing.get_content_hash(
             obj=[
                 hashable_input_uids,
-                self.op.sig.internal_name,
+                self.op.sig.versioned_internal_name,
             ]
         )
         # check if call UID exists in call storage
@@ -227,3 +227,14 @@ def synchronize(func: FuncInterface, storage: Storage):
     new_sig = storage.sig_syncer.sync_from_local(sig=func.op.sig)
     func.op.sig = new_sig
     func.is_synchronized = True
+
+
+def synchronize_op(op: FuncOp, storage: Storage):
+    """
+    Synchronize a function in-place.
+    """
+    # first, pull the current data from the remote!
+    storage.sig_syncer.sync_from_remote()
+    new_sig = storage.sig_syncer.sync_from_local(sig=op.sig)
+    op.sig = new_sig
+    op.is_synchronized = True

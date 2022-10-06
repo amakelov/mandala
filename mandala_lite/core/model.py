@@ -164,6 +164,12 @@ class FuncOp:
         )
         self.is_synchronized = False
 
+    @staticmethod
+    def from_data(f: Callable, sig: Signature) -> "FuncOp":
+        res = FuncOp(func=f, version=sig.version, ui_name=sig.ui_name)
+        res.sig = sig
+        return res
+
     def compute(self, inputs: Dict[str, Any]) -> List[Any]:
         """
         Computes the function on the given *unwrapped* inputs. Returns a list of

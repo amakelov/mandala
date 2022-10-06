@@ -129,3 +129,58 @@ def test_superops_multilevel():
         df = q.get_table(xs, ys, intermediate, final)
         assert len(df["intermediate"].item()) == 9
         assert len(df["final"].item()) == 27
+
+
+def test_weird():
+    Config.autowrap_inputs = True
+    Config.autounwrap_inputs = True
+
+    storage = Storage()
+
+    @op
+    def a(f: int, g: int):
+        return
+
+    @op
+    def b(k: int, l: int):
+        return
+
+    @op
+    def c(h: int, i: int) -> int:
+        return h + i
+
+    @op
+    def d(j: int) -> Tuple[int, int, int]:
+        return j, j, j
+
+    @op
+    def e(m: int) -> int:
+        return m + 1
+
+    for f in [a, b, c, d, e]:
+        synchronize(f, storage)
+
+    with run(storage):
+        var_0 = 23
+        var_1 = 42
+        a(var_0, var_0)
+        b(var_0, var_0)
+        a(f=var_0, g=var_0)
+        var_2 = c(h=var_0, i=var_0)
+        a(f=var_0, g=var_0)
+        var_3, var_4, var_5 = d(j=var_1)
+        b(k=var_4, l=var_1)
+        var_6 = e(m=var_2)
+
+    with query(storage) as q:
+        var_0 = Q()
+        var_1 = Q()
+        a(f=var_0, g=var_0)
+        b(k=var_0, l=var_0)
+        a(f=var_0, g=var_0)
+        var_2 = c(h=var_0, i=var_0)
+        a(f=var_0, g=var_0)
+        var_3, var_4, var_5 = d(j=var_1)
+        b(k=var_4, l=var_1)
+        var_6 = e(m=var_2)
+        df = q.get_table(var_0, var_1, var_2, var_3, var_4, var_5, var_6)

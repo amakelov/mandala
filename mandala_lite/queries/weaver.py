@@ -17,7 +17,7 @@ class ValQuery:
     subsequent calls to operations that consume this `ValQuery` object.
     """
 
-    def __init__(self, creator: "FuncQuery", created_as: int):
+    def __init__(self, creator: Optional["FuncQuery"], created_as: Optional[int]):
         self.creator = creator
         self.created_as = created_as
         self.consumers: List["FuncQuery"] = []

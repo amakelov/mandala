@@ -1,6 +1,10 @@
 from .common_imports import *
 
 
+def invert_dict(d: Dict) -> Dict:
+    return {v: k for k, v in d.items()}
+
+
 def upsert_df(current: pd.DataFrame, new: pd.DataFrame) -> pd.DataFrame:
     """
     Upsert for dataframes with the same columns

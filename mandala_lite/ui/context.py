@@ -95,27 +95,7 @@ class Context:
         # We must sync any dirty cache elements to the DuckDB store before performing a query.
         # If we don't, we'll query a store that might be missing calls and objs.
         self.storage.commit()
-
-        # compile the computational graph to SQL and execute the query
-        select_queries = list(queries)
-        val_queries, func_queries = traverse_all(select_queries)
-        compiler = Compiler(val_queries=val_queries, func_queries=func_queries)
-        query = compiler.compile(select_queries=select_queries)
-        df = self.storage.rel_storage.execute_df(query=str(query))
-
-        # now, evaluate the table
-        keys_to_collect = [
-            item for _, column in df.items() for _, item in column.items()
-        ]
-        self.storage.preload_objs(keys_to_collect)
-        result = df.applymap(lambda key: unwrap(self.storage.obj_get(key)))
-
-        # finally, name the columns
-        result.columns = [
-            f"unnamed_{i}" if query.column_name is None else query.column_name
-            for i, query in zip(range(len((result.columns))), queries)
-        ]
-        return result
+        return execute_query(storage=self.storage, select_queries=list(queries))
 
 
 class RunContext(Context):
@@ -130,3 +110,28 @@ class QueryContext(Context):
 
 run = RunContext()
 query = QueryContext()
+
+
+def execute_query(storage: Storage, select_queries: List[ValQuery]) -> pd.DataFrame:
+    """
+    Execute the given queries and return the result as a pandas DataFrame.
+    """
+    if not select_queries:
+        return pd.DataFrame()
+    val_queries, func_queries = traverse_all(select_queries)
+    compiler = Compiler(val_queries=val_queries, func_queries=func_queries)
+    query = compiler.compile(select_queries=select_queries)
+    df = storage.rel_storage.execute_df(query=str(query))
+
+    # now, evaluate the table
+    keys_to_collect = [item for _, column in df.items() for _, item in column.items()]
+    storage.preload_objs(keys_to_collect)
+    result = df.applymap(lambda key: unwrap(storage.obj_get(key)))
+
+    # finally, name the columns
+    cols = [
+        f"unnamed_{i}" if query.column_name is None else query.column_name
+        for i, query in zip(range(len((result.columns))), select_queries)
+    ]
+    result.rename(columns=dict(zip(result.columns, cols)), inplace=True)
+    return result

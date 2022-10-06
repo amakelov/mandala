@@ -548,6 +548,9 @@ class RelAdapter(Transactable):
         To handle calls to stale functions, this passes through internal names
         to get the current UI names.
         """
+        if not len(calls) == len(set([call.uid for call in calls])):
+            # something fishy may be going on
+            raise ValueError("Calls must have unique UIDs")
         # split by operation internal name
         calls_by_op = defaultdict(list)
         sigs_by_op = {}
