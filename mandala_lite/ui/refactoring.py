@@ -1,6 +1,6 @@
 from ..common_imports import *
 from .main import Storage
-from .execution import FuncInterface, synchronize
+from .funcs import FuncInterface, synchronize
 
 
 def _check_rename_precondition(storage: Storage, func: FuncInterface):

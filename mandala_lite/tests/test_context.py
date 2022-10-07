@@ -2,7 +2,7 @@ from mandala_lite.all import *
 from mandala_lite.tests.utils import *
 
 
-def test_nesting():
+def test_nesting_old_api():
     storage = Storage()
 
     with run(storage) as c:
@@ -20,7 +20,7 @@ def test_nesting():
         assert c.mode == MODES.run
 
 
-def test_new_api():
+def test_nesting_new_api():
     storage = Storage()
 
     with storage.run() as c:

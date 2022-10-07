@@ -5,6 +5,7 @@ from ..core.utils import Hashing
 from .main import Storage
 from ..queries.weaver import ValQuery, FuncQuery
 from .main import GlobalContext, MODES
+from .utils import format_as_outputs, bind_inputs
 
 
 class FuncInterface:
@@ -53,88 +54,6 @@ class FuncInterface:
         ]
         return wrapped_outputs
 
-    def bind_inputs(self, args, kwargs, mode: str) -> Dict[str, Any]:
-        """
-        Given args and kwargs passed by the user from python, this adds defaults
-        and returns a dict where they are indexed via internal names.
-        """
-        bound_args = self.op.py_sig.bind(*args, **kwargs)
-        bound_args.apply_defaults()
-        inputs_dict = dict(bound_args.arguments)
-        if mode == MODES.query:
-            # TODO: add a point constraint for defaults
-            for k in inputs_dict.keys():
-                if not isinstance(inputs_dict[k], ValQuery):
-                    inputs_dict[k] = Q()
-        return inputs_dict
-
-    def format_as_outputs(
-        self, outputs: List[ValueRef]
-    ) -> Union[None, Any, Tuple[Any]]:
-        if len(outputs) == 0:
-            return None
-        elif len(outputs) == 1:
-            return outputs[0]
-        else:
-            return tuple(outputs)
-
-    def call_run(
-        self, inputs: Dict[str, Union[Any, ValueRef]], storage: Storage
-    ) -> Tuple[List[ValueRef], Call]:
-        """
-        Run the function and return the outputs and the call object.
-        """
-        if self.is_invalidated:
-            raise RuntimeError(
-                "This function has been invalidated due to a change in the signature, and cannot be called"
-            )
-        # wrap inputs
-        wrapped_inputs = self.wrap_inputs(inputs)
-        # get call UID using *internal names* to guarantee the same UID will be
-        # assigned regardless of renamings
-        hashable_input_uids = {}
-        for k, v in wrapped_inputs.items():
-            internal_k = self.op.sig.ui_to_internal_input_map[k]
-            if internal_k in self.op.sig._new_input_defaults_uids:
-                if self.op.sig._new_input_defaults_uids[internal_k] == v.uid:
-                    continue
-            hashable_input_uids[internal_k] = v.uid
-        call_uid = Hashing.get_content_hash(
-            obj=[
-                hashable_input_uids,
-                self.op.sig.versioned_internal_name,
-            ]
-        )
-        # check if call UID exists in call storage
-        if storage.call_exists(call_uid):
-            # get call from call storage
-            call = storage.call_get(call_uid)
-            # get outputs from obj storage
-            storage.preload_objs([v.uid for v in call.outputs])
-            wrapped_outputs = [storage.obj_get(v.uid) for v in call.outputs]
-            # return outputs and call
-            return wrapped_outputs, call
-        else:
-            # compute op
-            if Config.autounwrap_inputs:
-                raw_inputs = {k: v.obj for k, v in wrapped_inputs.items()}
-            else:
-                raw_inputs = wrapped_inputs
-            outputs = self.op.compute(raw_inputs)
-            # wrap outputs
-            wrapped_outputs = self.wrap_outputs(outputs, call_uid=call_uid)
-            # create call
-            call = Call(
-                uid=call_uid, inputs=wrapped_inputs, outputs=wrapped_outputs, op=self.op
-            )
-            # save *detached* call in call storage
-            storage.call_set(call_uid, call)
-            # set inputs and outputs in obj storage
-            for v in itertools.chain(wrapped_outputs, wrapped_inputs.values()):
-                storage.obj_set(v.uid, v)
-            # return outputs and call
-            return wrapped_outputs, call
-
     def call_query(self, inputs: Dict[str, ValQuery]) -> List[ValQuery]:
         if not all(isinstance(inp, ValQuery) for inp in inputs.values()):
             raise NotImplementedError()
@@ -148,7 +67,7 @@ class FuncInterface:
         func_query.set_outputs(outputs=outputs)
         return outputs
 
-    def __call__(self, *args, **kwargs) -> List[ValueRef]:
+    def __call__(self, *args, **kwargs) -> Union[None, Any, Tuple[Any]]:
         context = GlobalContext.current
         if context is None:
             return self.op.func(*args, **kwargs)
@@ -157,9 +76,6 @@ class FuncInterface:
                 "This function has been invalidated due to a change in the signature, and cannot be called"
             )
         storage = context.storage
-        assert isinstance(storage, Storage)
-        if context is None:
-            raise RuntimeError()
         if not self.op.sig.has_internal_data:
             # synchronize if necessary
             synchronize(func=self, storage=context.storage)
@@ -169,15 +85,23 @@ class FuncInterface:
             is_synced, reason = storage.sig_adapter.is_synced(sig=self.op.sig)
             if not is_synced:
                 raise SyncException(reason)
-        inputs = self.bind_inputs(args, kwargs, mode=context.mode)
+        inputs = bind_inputs(args, kwargs, mode=context.mode, op=self.op)
         if context is None:
             raise RuntimeError("No context to call from")
         mode = context.mode
         if mode == MODES.run:
-            outputs, call = self.call_run(inputs, context.storage)
-            return self.format_as_outputs(outputs=outputs)
+            outputs, call = storage.call_run(op=self.op, inputs=inputs)
+            return format_as_outputs(outputs=outputs)
         elif mode == MODES.query:
-            return self.format_as_outputs(outputs=self.call_query(inputs))
+            return format_as_outputs(outputs=self.call_query(inputs))
+        elif mode == MODES.batch:
+            wrapped_inputs = self.wrap_inputs(inputs)
+            outputs = [
+                ValueRef(uid=None, obj=None, in_memory=False)
+                for _ in range(self.op.sig.n_outputs)
+            ]
+            context._call_structs.append((self.op, wrapped_inputs, outputs))
+            return format_as_outputs(outputs=outputs)
         else:
             raise ValueError()
 

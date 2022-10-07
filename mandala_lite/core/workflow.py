@@ -1,10 +1,7 @@
-from abc import ABC, abstractmethod
 from ..common_imports import *
 from ..queries.weaver import *
-from ..ui.main import Storage
 from .model import ValueRef, FuncOp, Call
 from .utils import Hashing
-from ..ui.execution import FuncInterface
 from ..utils import invert_dict
 
 
@@ -141,8 +138,12 @@ class Workflow:
     @staticmethod
     def from_call_structs(call_structs: List[CallStruct]) -> "Workflow":
         res = Workflow()
-        res.add_var()
+        input_var = res.add_var()
         for call_struct in call_structs:
+            op, inputs, outputs = call_struct
+            for inp in inputs.values():
+                if inp not in res.value_to_var.keys():
+                    res.add_value(value=inp, var=input_var)
             res.add_call_struct(call_struct)
         return res
 
@@ -188,30 +189,3 @@ class Workflow:
                 )
                 + ")"
             )
-
-
-class WorkflowExecutor(ABC):
-    @abstractmethod
-    def execute(self, workflow: Workflow, storage: Storage) -> List[Call]:
-        pass
-
-
-class SimpleWorkflowExecutor(WorkflowExecutor):
-    def execute(self, workflow: Workflow, storage: Storage) -> List[Call]:
-        result = []
-        for op_node in workflow.op_nodes:
-            call_structs = workflow.op_node_to_call_structs[op_node]
-            for op, inputs, outputs in call_structs:
-                assert all([inp.in_memory for inp in inputs.values()])
-                vref_outputs, call = FuncInterface(op=op).call_run(
-                    inputs=inputs, storage=storage
-                )
-                # overwrite things
-                for output, vref_output in zip(outputs, vref_outputs):
-                    output.obj = vref_output.obj
-                    output.uid = vref_output.uid
-                    output.in_memory = True
-                result.append(call)
-        # filter out repeated calls
-        result = list({call.uid: call for call in result}.values())
-        return result

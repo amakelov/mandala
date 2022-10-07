@@ -14,11 +14,11 @@ import string
 from mandala_lite.common_imports import *
 from mandala_lite.all import *
 from mandala_lite.tests.utils import *
-from mandala_lite.core.workflow import Workflow, SimpleWorkflowExecutor
+from mandala_lite.core.workflow import Workflow
 from mandala_lite.core.utils import Hashing, get_uid
 from mandala_lite.queries.compiler import *
-from mandala_lite.ui.main import execute_query
-from mandala_lite.ui.execution import synchronize_op
+from mandala_lite.ui.main import SimpleWorkflowExecutor
+from mandala_lite.ui.funcs import synchronize_op
 
 
 def combine_inputs(*args, **kwargs) -> str:
@@ -220,7 +220,7 @@ class SingleClientSimulator(RuleBasedStateMachine):
     #     # data = (op_nodes, workflow.var_nodes, self.storage)
     #     # joblib.dump(data, filename=path)
     #     val_queries, op_queries = workflow.var_nodes, workflow.op_nodes
-    #     df = execute_query(storage=self.storage, select_queries=val_queries)
+    #     df = self.storage.execute_query(select_queries=val_queries)
 
 
 TestCase = SingleClientSimulator.TestCase

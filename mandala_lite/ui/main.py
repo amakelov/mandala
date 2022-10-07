@@ -1,4 +1,5 @@
 from duckdb import DuckDBPyConnection as Connection
+from abc import ABC, abstractmethod
 from collections import defaultdict
 import datetime
 from pypika import Query, Table
@@ -12,41 +13,20 @@ from ..storages.sigs import SigSyncer
 from ..storages.remote_storage import RemoteStorage
 from ..common_imports import *
 from ..core.config import Config
-from ..core.model import Call
+from ..core.model import Call, FuncOp, ValueRef, unwrap
+from ..core.workflow import Workflow
+from ..core.utils import Hashing
 
-from ..core.model import unwrap
 from ..queries.weaver import ValQuery
 from ..queries.compiler import traverse_all, Compiler
 
-
-def execute_query(storage: "Storage", select_queries: List[ValQuery]) -> pd.DataFrame:
-    """
-    Execute the given queries and return the result as a pandas DataFrame.
-    """
-    if not select_queries:
-        return pd.DataFrame()
-    val_queries, func_queries = traverse_all(select_queries)
-    compiler = Compiler(val_queries=val_queries, func_queries=func_queries)
-    query = compiler.compile(select_queries=select_queries)
-    df = storage.rel_storage.execute_df(query=str(query))
-
-    # now, evaluate the table
-    keys_to_collect = [item for _, column in df.items() for _, item in column.items()]
-    storage.preload_objs(keys_to_collect)
-    result = df.applymap(lambda key: unwrap(storage.obj_get(key)))
-
-    # finally, name the columns
-    cols = [
-        f"unnamed_{i}" if query.column_name is None else query.column_name
-        for i, query in zip(range(len((result.columns))), select_queries)
-    ]
-    result.rename(columns=dict(zip(result.columns, cols)), inplace=True)
-    return result
+from .utils import wrap_inputs, wrap_outputs
 
 
 class MODES:
     run = "run"
     query = "query"
+    batch = "batch"
 
 
 class GlobalContext:
@@ -64,6 +44,7 @@ class Context:
         self.lazy = self.OVERRIDES.get("lazy", lazy)
         self.updates = {}
         self._updates_stack = []
+        self._call_structs = []
 
     def _backup_state(self, keys: Iterable[str]) -> Dict[str, Any]:
         res = {}
@@ -111,10 +92,20 @@ class Context:
     def __exit__(self, exc_type, exc_value, exc_traceback):
         exc = None
         try:
-            # commit calls from temp partition to main and tabulate them
-            if Config.autocommit:
-                self.storage.commit()
-            self.storage.sync_to_remote()
+            if self.mode == MODES.run:
+                # commit calls from temp partition to main and tabulate them
+                if Config.autocommit:
+                    self.storage.commit()
+                self.storage.sync_to_remote()
+            elif self.mode == MODES.query:
+                pass
+            elif self.mode == MODES.batch:
+                executor = SimpleWorkflowExecutor()
+                workflow = Workflow.from_call_structs(self._call_structs)
+                calls = executor.execute(workflow=workflow, storage=self.storage)
+                self.storage.commit(calls=calls)
+            else:
+                raise ValueError(self.mode)
         except Exception as e:
             exc = e
         self._undo_updates()
@@ -133,7 +124,7 @@ class Context:
         # We must sync any dirty cache elements to the DuckDB store before performing a query.
         # If we don't, we'll query a store that might be missing calls and objs.
         self.storage.commit()
-        return execute_query(storage=self.storage, select_queries=list(queries))
+        return self.storage.execute_query(select_queries=list(queries))
 
 
 class RunContext(Context):
@@ -146,8 +137,15 @@ class QueryContext(Context):
     }
 
 
+class BatchContext(Context):
+    OVERRIDES = {
+        "mode": MODES.batch,
+    }
+
+
 run = RunContext()
 query = QueryContext()
+batch = BatchContext()
 
 
 class Storage(Transactable):
@@ -234,14 +232,23 @@ class Storage(Transactable):
         for k in self.obj_cache.keys():
             self.obj_cache.delete(k=k)
 
-    def commit(self):
+    def commit(self, calls: Optional[list[Call]] = None):
         """
         Flush calls and objs from the cache that haven't yet been written to DuckDB.
         """
-        new_objs = {
-            key: self.obj_cache.get(key) for key in self.obj_cache.dirty_entries
-        }
-        new_calls = [self.call_cache.get(key) for key in self.call_cache.dirty_entries]
+        if calls is None:
+            new_objs = {
+                key: self.obj_cache.get(key) for key in self.obj_cache.dirty_entries
+            }
+            new_calls = [
+                self.call_cache.get(key) for key in self.call_cache.dirty_entries
+            ]
+        else:
+            new_objs = {}
+            for call in calls:
+                for vref in itertools.chain(call.inputs.values(), call.outputs):
+                    new_objs[vref.uid] = vref
+            new_calls = calls
         self.rel_adapter.obj_sets(new_objs)
         self.rel_adapter.upsert_calls(new_calls)
         if Config.evict_on_commit:
@@ -393,3 +400,114 @@ class Storage(Transactable):
 
     def query(self, **kwargs) -> Context:
         return query(storage=self, **kwargs)
+
+    def batch(self, **kwargs) -> Context:
+        return batch(storage=self, **kwargs)
+
+    def execute_query(self, select_queries: List[ValQuery]) -> pd.DataFrame:
+        """
+        Execute the given queries and return the result as a pandas DataFrame.
+        """
+        if not select_queries:
+            return pd.DataFrame()
+        val_queries, func_queries = traverse_all(select_queries)
+        compiler = Compiler(val_queries=val_queries, func_queries=func_queries)
+        query = compiler.compile(select_queries=select_queries)
+        df = self.rel_storage.execute_df(query=str(query))
+
+        # now, evaluate the table
+        keys_to_collect = [
+            item for _, column in df.items() for _, item in column.items()
+        ]
+        self.preload_objs(keys_to_collect)
+        result = df.applymap(lambda key: unwrap(self.obj_get(key)))
+
+        # finally, name the columns
+        cols = [
+            f"unnamed_{i}" if query.column_name is None else query.column_name
+            for i, query in zip(range(len((result.columns))), select_queries)
+        ]
+        result.rename(columns=dict(zip(result.columns, cols)), inplace=True)
+        return result
+
+    def call_run(
+        self, op: FuncOp, inputs: Dict[str, Union[Any, ValueRef]]
+    ) -> Tuple[List[ValueRef], Call]:
+        # if op.is_invalidated:
+        #     raise RuntimeError(
+        #         "This function has been invalidated due to a change in the signature, and cannot be called"
+        #     )
+        # wrap inputs
+        wrapped_inputs = wrap_inputs(inputs)
+        # get call UID using *internal names* to guarantee the same UID will be
+        # assigned regardless of renamings
+        hashable_input_uids = {}
+        for k, v in wrapped_inputs.items():
+            internal_k = op.sig.ui_to_internal_input_map[k]
+            if internal_k in op.sig._new_input_defaults_uids:
+                if op.sig._new_input_defaults_uids[internal_k] == v.uid:
+                    continue
+            hashable_input_uids[internal_k] = v.uid
+        call_uid = Hashing.get_content_hash(
+            obj=[
+                hashable_input_uids,
+                op.sig.versioned_internal_name,
+            ]
+        )
+        # check if call UID exists in call storage
+        if self.call_exists(call_uid):
+            # get call from call storage
+            call = self.call_get(call_uid)
+            # get outputs from obj storage
+            self.preload_objs([v.uid for v in call.outputs])
+            wrapped_outputs = [self.obj_get(v.uid) for v in call.outputs]
+            # return outputs and call
+            return wrapped_outputs, call
+        else:
+            # compute op
+            if Config.autounwrap_inputs:
+                raw_inputs = {k: v.obj for k, v in wrapped_inputs.items()}
+            else:
+                raw_inputs = wrapped_inputs
+            outputs = op.compute(raw_inputs)
+            # wrap outputs
+            wrapped_outputs = wrap_outputs(outputs, call_uid=call_uid)
+            # create call
+            call = Call(
+                uid=call_uid, inputs=wrapped_inputs, outputs=wrapped_outputs, op=op
+            )
+            # save *detached* call in call storage
+            self.call_set(call_uid, call)
+            # set inputs and outputs in obj storage
+            for v in itertools.chain(wrapped_outputs, wrapped_inputs.values()):
+                self.obj_set(v.uid, v)
+            # return outputs and call
+            return wrapped_outputs, call
+
+
+class WorkflowExecutor(ABC):
+    @abstractmethod
+    def execute(self, workflow: Workflow, storage: Storage) -> List[Call]:
+        pass
+
+
+class SimpleWorkflowExecutor(WorkflowExecutor):
+    def execute(self, workflow: Workflow, storage: Storage) -> List[Call]:
+        result = []
+        for op_node in workflow.op_nodes:
+            call_structs = workflow.op_node_to_call_structs[op_node]
+            for op, inputs, outputs in call_structs:
+                assert all([inp.in_memory for inp in inputs.values()])
+                vref_outputs, call = storage.call_run(
+                    op=op,
+                    inputs=inputs,
+                )
+                # overwrite things
+                for output, vref_output in zip(outputs, vref_outputs):
+                    output.obj = vref_output.obj
+                    output.uid = vref_output.uid
+                    output.in_memory = True
+                result.append(call)
+        # filter out repeated calls
+        result = list({call.uid: call for call in result}.values())
+        return result
