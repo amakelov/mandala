@@ -30,19 +30,19 @@ def test_computation():
             return x + y
 
         # chain some functions
-        with run(storage):
+        with storage.run():
             x = 23
             y = inc(x)
             z = add(x, y)
         check_invariants(storage)
         # run it again
-        with run(storage):
+        with storage.run():
             x = 23
             y = inc(x)
             z = add(x, y)
         check_invariants(storage)
         # do some more things
-        with run(storage):
+        with storage.run():
             x = 42
             y = inc(x)
             z = add(x, y)
@@ -72,7 +72,7 @@ def test_nosuperops():
             x = inc(x)
         return x
 
-    with run(storage):
+    with storage.run():
         n = add(x=wrap(23), y=wrap(42))
         a = inc_n_times(x=wrap(23), n=n)
     check_invariants(storage)

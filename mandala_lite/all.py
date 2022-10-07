@@ -2,9 +2,8 @@ from .common_imports import *
 from .core.model import ValueRef, Call, FuncOp, unwrap, wrap
 from .core.sig import Signature
 from .core.config import Config
-from .storages.main import Storage
+from .ui.main import Storage, Context, run, query, MODES
 from .ui.execution import op, Q, synchronize
-from .ui.context import Context, run, query, MODES
 from .ui.refactoring import *
 
 ### testing stuff

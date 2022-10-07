@@ -2,9 +2,9 @@ from ..common_imports import *
 from ..core.config import Config
 from ..core.model import FuncOp, ValueRef, Call, wrap
 from ..core.utils import Hashing
-from ..storages.main import Storage
+from .main import Storage
 from ..queries.weaver import ValQuery, FuncQuery
-from .context import GlobalContext, MODES
+from .main import GlobalContext, MODES
 
 
 class FuncInterface:

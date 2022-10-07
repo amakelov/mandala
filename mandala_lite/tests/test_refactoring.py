@@ -15,18 +15,18 @@ def test_add_input():
     def inc(x: int) -> int:
         return x + 1
 
-    with run(storage):
+    with storage.run():
         x = inc(23)
 
     @op
     def inc(x: int, y=42) -> int:
         return x + y
 
-    with run(storage):
+    with storage.run():
         x = inc(23)
 
     assert inc.op.sig.input_names == {"x", "y"}
-    with run(storage):
+    with storage.run():
         df = inc.get_table()
     assert df.shape == (1, 4)
 
@@ -45,12 +45,12 @@ def test_add_input():
 
     synchronize(func=add_many, storage=storage)
 
-    with run(storage):
+    with storage.run():
         add_many(0)
         add_many(0, 1)
         add_many(0, 1, 2)
 
-    with query(storage) as q:
+    with storage.query() as q:
         x, y, z = Q(), Q(), Q()
         w = add_many(x, y, z)
         df = q.get_table(x, y, z, w)
@@ -61,7 +61,7 @@ def test_add_input():
     ############################################################################
     ### check that queries work with defaults
     ############################################################################
-    with query(storage) as q:
+    with storage.query() as q:
         x = Q()
         w = add_many(x)
         df = q.get_table(x, w)
@@ -100,7 +100,7 @@ def test_func_renaming():
     def inc(x: int) -> int:
         return x + 1
 
-    with run(storage):
+    with storage.run():
         x = inc(23)
 
     rename_func(storage=storage, func=inc, new_name="inc_new")
@@ -111,10 +111,10 @@ def test_func_renaming():
     def inc_new(x: int) -> int:
         return x + 1
 
-    with run(storage):
+    with storage.run():
         inc_new(23)
 
-    with run(storage):
+    with storage.run():
         df = inc_new.get_table()
     # make sure the call was not new
     assert df.shape == (1, 3)
@@ -186,7 +186,7 @@ def test_arg_renaming():
     def inc(x: int) -> int:
         return x + 1
 
-    with run(storage):
+    with storage.run():
         x = inc(23)
 
     rename_arg(storage=storage, func=inc, name="x", new_name="x_new")
@@ -197,10 +197,10 @@ def test_arg_renaming():
     def inc(x_new: int) -> int:
         return x_new + 1
 
-    with run(storage):
+    with storage.run():
         inc(23)
 
-    with run(storage):
+    with storage.run():
         df = inc.get_table()
     # make sure the call was not new
     assert df.shape == (1, 3)
@@ -233,14 +233,14 @@ def test_versions():
     def inc(x: int) -> int:
         return x + 1
 
-    with run(storage):
+    with storage.run():
         inc(23)
 
     @op(version=1)
     def inc(x: int) -> int:
         return x + 1
 
-    with run(storage):
+    with storage.run():
         inc(23)
 
     assert len(storage.sig_adapter.load_state()) == 2

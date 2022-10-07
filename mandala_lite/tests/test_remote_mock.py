@@ -23,7 +23,7 @@ def test_disjoint_funcs():
     def inc(x: int) -> int:
         return x + 1
 
-    with run(storage_1):
+    with storage_1.run():
         inc(23)
 
     ### do work with storage 2
@@ -31,7 +31,7 @@ def test_disjoint_funcs():
     def mult(x: int, y: int) -> int:
         return x * y
 
-    with run(storage_2):
+    with storage_2.run():
         mult(23, 42)
 
     # synchronize storage_1 with the new work
@@ -109,7 +109,7 @@ def test_add_input():
 
     synchronize(func=inc_1, storage=storage_1)
     assert not signatures_are_equal(storage_1=storage_1, storage_2=storage_2)
-    with run(storage_2):
+    with storage_2.run():
         inc_2(23)
     assert signatures_are_equal(storage_1=storage_1, storage_2=storage_2)
     assert not data_is_equal(storage_1=storage_1, storage_2=storage_2)
@@ -156,7 +156,7 @@ def test_rename_func():
     rename_func(storage=storage_1, func=f_1, new_name="g")
 
     assert not signatures_are_equal(storage_1=storage_1, storage_2=storage_2)
-    with run(storage_2):
+    with storage_2.run():
         f_2(23)
     assert signatures_are_equal(storage_1=storage_1, storage_2=storage_2)
     assert not data_is_equal(storage_1=storage_1, storage_2=storage_2)
@@ -187,7 +187,7 @@ def test_rename_input():
     rename_arg(storage=storage_1, func=f_1, name="x", new_name="y")
 
     assert not signatures_are_equal(storage_1=storage_1, storage_2=storage_2)
-    with run(storage_2):
+    with storage_2.run():
         f_2(23)
     assert signatures_are_equal(storage_1=storage_1, storage_2=storage_2)
     assert not data_is_equal(storage_1=storage_1, storage_2=storage_2)
@@ -219,7 +219,7 @@ def test_remote_lots_of_stuff():
     def add(x: int, y: int) -> int:
         return x + y
 
-    with run(storage_1):
+    with storage_1.run():
         for i in range(20, 25):
             j = inc(x=i)
             final = add(i, j)
@@ -229,7 +229,7 @@ def test_remote_lots_of_stuff():
     def mult(x: int, y: int) -> int:
         return x * y
 
-    with run(storage_2):
+    with storage_2.run():
         for i, j in zip(range(20, 25), range(20, 25)):
             k = mult(i, j)
 
@@ -258,7 +258,7 @@ def test_remote_lots_of_stuff():
     synchronize(func=inc_new, storage=storage_1)
 
     # do work with the renamed function in storage 1
-    with run(storage_1):
+    with storage_1.run():
         for i in range(20, 30):
             j = inc_new(x_new=i)
             final = add(i, j)
@@ -270,7 +270,7 @@ def test_remote_lots_of_stuff():
     assert data_is_equal(storage_1=storage_1, storage_2=storage_2)
 
     # check we can do work with the renamed function in storage_2
-    with run(storage_2):
+    with storage_2.run():
         for i in range(20, 40):
             j = inc_new(x_new=i)
             final = add(i, j)
@@ -284,7 +284,7 @@ def test_remote_lots_of_stuff():
     def add(x: int, y: int, z: int) -> int:
         return x + y + z
 
-    with run(storage_2):
+    with storage_2.run():
         add(x=1, y=2, z=3)
 
     storage_2.sync_with_remote()

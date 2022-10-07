@@ -13,17 +13,17 @@ def test_basics():
     def add(x: int, y: int) -> int:
         return x + y
 
-    with run(storage):
+    with storage.run():
         for i in range(20, 25):
             j = inc(i)
             final = add(i, j)
 
-    with query(storage) as q:
+    with storage.query() as q:
         vref = Q().named("vref")
         df = q.get_table(vref)
         assert set(df["vref"]) == set(range(20, 26)) | set(range(41, 50, 2))
 
-    with query(storage) as q:
+    with storage.query() as q:
         i = Q().named("i")
         j = inc(i).named("j")
         final = add(i, j)
@@ -53,11 +53,11 @@ def test_superops_basic():
             x = inc(x)
         return x
 
-    with run(storage=storage):
+    with storage.run():
         n = add(x=wrap(23), y=wrap(42))
         a = inc_n_times(x=wrap(23), n=n)
 
-    with query(storage) as q:
+    with storage.query() as q:
         x, y = Q().named("x"), Q().named("y")
         n = add(x, y).named("n")
         z = Q().named("z")
@@ -84,12 +84,12 @@ def test_superops_multilevel():
                 result.append(add(wrap(x), wrap(y)))
         return result
 
-    with run(storage):
+    with storage.run():
         result = add_many(xs=wrap([1, 2, 3]), ys=wrap([4, 5, 6]))
     check_invariants(storage=storage)
 
     # individual adds
-    with query(storage) as q:
+    with storage.query() as q:
         x, y = Q().named("x"), Q().named("y")
         z = add(x, y).named("z")
         df = q.get_table(x, y, z)
@@ -99,7 +99,7 @@ def test_superops_multilevel():
     )
 
     # end-to-end
-    with query(storage) as q:
+    with storage.query() as q:
         xs, ys = Q().named("xs"), Q().named("ys")
         result = add_many(xs=xs, ys=ys).named("result")
         df = q.get_table(xs, ys, result)
@@ -116,13 +116,13 @@ def test_superops_multilevel():
         final = add_many(intermediate, zs)
         return final
 
-    with run(storage):
+    with storage.run():
         a = wrap([1, 2, 3])
         b = wrap([4, 5, 6])
         c = wrap([7, 8, 9])
         d = add_many_many(xs=a, ys=b, zs=c)
 
-    with query(storage) as q:
+    with storage.query() as q:
         xs, ys, zs = Q().named("xs"), Q().named("ys"), Q().named("zs")
         intermediate = add_many(xs, ys).named("intermediate")
         final = add_many(intermediate, zs).named("final")
@@ -160,7 +160,7 @@ def test_weird():
     for f in [a, b, c, d, e]:
         synchronize(f, storage)
 
-    with run(storage):
+    with storage.run():
         var_0 = 23
         var_1 = 42
         a(var_0, var_0)
@@ -172,7 +172,7 @@ def test_weird():
         b(k=var_4, l=var_1)
         var_6 = e(m=var_2)
 
-    with query(storage) as q:
+    with storage.query() as q:
         var_0 = Q()
         var_1 = Q()
         a(f=var_0, g=var_0)

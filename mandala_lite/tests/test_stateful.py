@@ -17,7 +17,7 @@ from mandala_lite.tests.utils import *
 from mandala_lite.core.workflow import Workflow, SimpleWorkflowExecutor
 from mandala_lite.core.utils import Hashing, get_uid
 from mandala_lite.queries.compiler import *
-from mandala_lite.ui.context import execute_query
+from mandala_lite.ui.main import execute_query
 from mandala_lite.ui.execution import synchronize_op
 
 

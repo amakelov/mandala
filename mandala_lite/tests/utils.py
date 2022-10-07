@@ -2,7 +2,7 @@ import mongomock
 
 from ..common_imports import *
 from mandala_lite.all import *
-from mandala_lite.ui.context import MODES
+from mandala_lite.ui.main import MODES
 from mandala_lite.storages.remote_impls.mongo_impl import MongoRemoteStorage
 from mandala_lite.storages.remote_impls.mongo_mock import MongoMockRemoteStorage
 

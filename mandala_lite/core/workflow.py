@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from ..common_imports import *
 from ..queries.weaver import *
-from ..storages.main import Storage
+from ..ui.main import Storage
 from .model import ValueRef, FuncOp, Call
 from .utils import Hashing
 from ..ui.execution import FuncInterface

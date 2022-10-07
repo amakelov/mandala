@@ -1,5 +1,5 @@
 from ..common_imports import *
-from ..storages.main import Storage
+from .main import Storage
 from .execution import FuncInterface, synchronize
 
 

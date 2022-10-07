@@ -18,3 +18,21 @@ def test_nesting():
             assert q.storage is storage
             assert q.mode == MODES.query
         assert c.mode == MODES.run
+
+
+def test_new_api():
+    storage = Storage()
+
+    with storage.run() as c:
+        assert c.mode == MODES.run
+
+    with storage.query() as q:
+        assert q.mode == MODES.query
+
+    with storage.run() as c:
+        assert c.mode == MODES.run
+        assert c.storage is storage
+        with storage.query() as q:
+            assert q.storage is storage
+            assert q.mode == MODES.query
+        assert c.mode == MODES.run
