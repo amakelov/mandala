@@ -36,3 +36,15 @@ def test_new_api():
             assert q.storage is storage
             assert q.mode == MODES.query
         assert c.mode == MODES.run
+
+
+def test_noop():
+    # check that ops are noops when not in a context
+
+    storage = Storage()
+
+    @op
+    def inc(x: int) -> int:
+        return x + 1
+
+    assert inc(23) == 24

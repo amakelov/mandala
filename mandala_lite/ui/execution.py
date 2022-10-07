@@ -149,11 +149,13 @@ class FuncInterface:
         return outputs
 
     def __call__(self, *args, **kwargs) -> List[ValueRef]:
+        context = GlobalContext.current
+        if context is None:
+            return self.op.func(*args, **kwargs)
         if self.is_invalidated:
             raise RuntimeError(
                 "This function has been invalidated due to a change in the signature, and cannot be called"
             )
-        context = GlobalContext.current
         storage = context.storage
         assert isinstance(storage, Storage)
         if context is None:
