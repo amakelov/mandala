@@ -3,6 +3,7 @@ import mongomock
 from ..common_imports import *
 from mandala_lite.all import *
 from mandala_lite.ui.main import MODES
+from mandala_lite.core.config import Config
 from mandala_lite.storages.remote_impls.mongo_impl import MongoRemoteStorage
 from mandala_lite.storages.remote_impls.mongo_mock import MongoMockRemoteStorage
 
@@ -30,31 +31,52 @@ def _sanitize_value(value: Any) -> Any:
             raise NotImplementedError(f"Got value of type {type(value)}")
 
 
-def compare_dfs_as_relations(df_1: pd.DataFrame, df_2: pd.DataFrame) -> bool:
+def compare_dfs_as_relations(df_1: pd.DataFrame, df_2: pd.DataFrame) -> Tuple[bool, str]:
     if df_1.shape != df_2.shape:
-        return False
+        return False, f"Shapes differ: {df_1.shape} vs {df_2.shape}"
     if set(df_1.columns) != set(df_2.columns):
-        return False
+        return False, f"Columns differ: {df_1.columns} vs {df_2.columns}"
     # reorder columns of df_2 to match df_1
     df_2 = df_2[df_1.columns]
     # sanitize values to make them hashable
     df_1 = df_1.applymap(_sanitize_value)
     df_2 = df_2.applymap(_sanitize_value)
     # compare as sets of tuples
-    return set(map(tuple, df_1.itertuples(index=False))) == set(
+    result =  set(map(tuple, df_1.itertuples(index=False))) == set(
         map(tuple, df_2.itertuples(index=False))
     )
+    if result:
+        reason = ''
+    else: 
+        reason = f"Dataframe rows differ: {df_1} vs {df_2}"
+    return result, reason
 
-
-def data_is_equal(storage_1: Storage, storage_2: Storage) -> bool:
+def data_is_equal(storage_1: Storage, storage_2: Storage, return_reason:bool=False) -> Union[bool, Tuple[bool, str]]:
     data_1 = storage_1.rel_storage.get_all_data()
     data_2 = storage_2.rel_storage.get_all_data()
+    # compare the keys
     if data_1.keys() != data_2.keys():
-        return False
-    if not all(compare_dfs_as_relations(data_1[k], data_2[k]) for k in data_1.keys()):
-        return False
-    return True
-
+        result, reason = False, f"Tables differ: {data_1.keys()} vs {data_2.keys()}"
+    # compare the signatures
+    sigs_1 = storage_1.sig_adapter.load_state()
+    sigs_2 = storage_2.sig_adapter.load_state()
+    if sigs_1.keys() != sigs_2.keys():
+        result, reason = False, f"Signature keys differ: {sigs_1.keys()} vs {sigs_2.keys()}"
+    if sigs_1 != sigs_2:
+        result, reason = False, f"Signatures differ: {sigs_1} vs {sigs_2}"
+    # compare the data
+    elementwise_comparisons = {
+        k: compare_dfs_as_relations(data_1[k], data_2[k])
+        for k in data_1.keys() if k != Config.schema_table
+    }
+    if all(result for result, _ in elementwise_comparisons.values()):
+        result, reason = True, ''
+    else:
+        result, reason = False, f"Found differences between tables: {elementwise_comparisons}"
+    if return_reason:
+        return result, reason
+    else:
+        return result
 
 def check_invariants(storage: Storage):
     # check that signatures match tables

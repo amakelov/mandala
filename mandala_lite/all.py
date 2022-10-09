@@ -9,3 +9,4 @@ from .ui.refactoring import *
 ### testing stuff
 from .storages.rel_impls.duckdb_impl import DuckDBRelStorage
 from .tests.utils import *
+from .storages.rels import serialize, deserialize
