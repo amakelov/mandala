@@ -31,7 +31,9 @@ def _sanitize_value(value: Any) -> Any:
             raise NotImplementedError(f"Got value of type {type(value)}")
 
 
-def compare_dfs_as_relations(df_1: pd.DataFrame, df_2: pd.DataFrame) -> Tuple[bool, str]:
+def compare_dfs_as_relations(
+    df_1: pd.DataFrame, df_2: pd.DataFrame
+) -> Tuple[bool, str]:
     if df_1.shape != df_2.shape:
         return False, f"Shapes differ: {df_1.shape} vs {df_2.shape}"
     if set(df_1.columns) != set(df_2.columns):
@@ -42,16 +44,19 @@ def compare_dfs_as_relations(df_1: pd.DataFrame, df_2: pd.DataFrame) -> Tuple[bo
     df_1 = df_1.applymap(_sanitize_value)
     df_2 = df_2.applymap(_sanitize_value)
     # compare as sets of tuples
-    result =  set(map(tuple, df_1.itertuples(index=False))) == set(
+    result = set(map(tuple, df_1.itertuples(index=False))) == set(
         map(tuple, df_2.itertuples(index=False))
     )
     if result:
-        reason = ''
-    else: 
+        reason = ""
+    else:
         reason = f"Dataframe rows differ: {df_1} vs {df_2}"
     return result, reason
 
-def data_is_equal(storage_1: Storage, storage_2: Storage, return_reason:bool=False) -> Union[bool, Tuple[bool, str]]:
+
+def data_is_equal(
+    storage_1: Storage, storage_2: Storage, return_reason: bool = False
+) -> Union[bool, Tuple[bool, str]]:
     data_1 = storage_1.rel_storage.get_all_data()
     data_2 = storage_2.rel_storage.get_all_data()
     # compare the keys
@@ -61,22 +66,30 @@ def data_is_equal(storage_1: Storage, storage_2: Storage, return_reason:bool=Fal
     sigs_1 = storage_1.sig_adapter.load_state()
     sigs_2 = storage_2.sig_adapter.load_state()
     if sigs_1.keys() != sigs_2.keys():
-        result, reason = False, f"Signature keys differ: {sigs_1.keys()} vs {sigs_2.keys()}"
+        result, reason = (
+            False,
+            f"Signature keys differ: {sigs_1.keys()} vs {sigs_2.keys()}",
+        )
     if sigs_1 != sigs_2:
         result, reason = False, f"Signatures differ: {sigs_1} vs {sigs_2}"
     # compare the data
     elementwise_comparisons = {
         k: compare_dfs_as_relations(data_1[k], data_2[k])
-        for k in data_1.keys() if k != Config.schema_table
+        for k in data_1.keys()
+        if k != Config.schema_table
     }
     if all(result for result, _ in elementwise_comparisons.values()):
-        result, reason = True, ''
+        result, reason = True, ""
     else:
-        result, reason = False, f"Found differences between tables: {elementwise_comparisons}"
+        result, reason = (
+            False,
+            f"Found differences between tables: {elementwise_comparisons}",
+        )
     if return_reason:
         return result, reason
     else:
         return result
+
 
 def check_invariants(storage: Storage):
     # check that signatures match tables

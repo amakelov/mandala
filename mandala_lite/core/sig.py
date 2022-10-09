@@ -130,7 +130,7 @@ class Signature:
             and self._ui_to_internal_input_map == other._ui_to_internal_input_map
             and self._new_input_defaults_uids == other._new_input_defaults_uids
         )
-    
+
     ############################################################################
     ### PURE methods for manipulating the signature
     ### to avoid broken state

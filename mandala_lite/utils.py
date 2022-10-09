@@ -15,7 +15,7 @@ def upsert_df(current: pd.DataFrame, new: pd.DataFrame) -> pd.DataFrame:
 def serialize(obj: Any) -> bytes:
     """
     ! this may lead to different serializations for objects x, y such that x
-    ! == y in Python. This is because of things like set ordering, which is not 
+    ! == y in Python. This is because of things like set ordering, which is not
     ! determined by the contents of the set. For example, {1, 2} and {2, 1} would
     ! `serialize()` to different things, but they would be equal in Python.
     """
