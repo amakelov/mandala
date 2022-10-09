@@ -17,7 +17,7 @@ from ..core.model import Call, FuncOp, ValueRef, unwrap
 from ..core.workflow import Workflow
 from ..core.utils import Hashing
 
-from ..queries.weaver import ValQuery
+from ..queries.weaver import ValQuery, FuncQuery
 from ..queries.compiler import traverse_all, Compiler
 
 from .utils import wrap_inputs, wrap_outputs
@@ -404,6 +404,9 @@ class Storage(Transactable):
     def batch(self, **kwargs) -> Context:
         return batch(storage=self, **kwargs)
 
+    ############################################################################
+    ### low-level primitives to make calls in contexts
+    ############################################################################
     def execute_query(self, select_queries: List[ValQuery]) -> pd.DataFrame:
         """
         Execute the given queries and return the result as a pandas DataFrame.
@@ -483,6 +486,18 @@ class Storage(Transactable):
                 self.obj_set(v.uid, v)
             # return outputs and call
             return wrapped_outputs, call
+
+    def call_query(self, op: FuncOp, inputs: Dict[str, ValQuery]) -> List[ValQuery]:
+        if not all(isinstance(inp, ValQuery) for inp in inputs.values()):
+            raise NotImplementedError()
+        func_query = FuncQuery(op=op, inputs=inputs)
+        for k, v in inputs.items():
+            v.add_consumer(consumer=func_query, consumed_as=k)
+        outputs = [
+            ValQuery(creator=func_query, created_as=i) for i in range(op.sig.n_outputs)
+        ]
+        func_query.set_outputs(outputs=outputs)
+        return outputs
 
 
 class WorkflowExecutor(ABC):

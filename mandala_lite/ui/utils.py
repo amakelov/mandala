@@ -68,7 +68,9 @@ def bind_inputs(args, kwargs, mode: str, op: FuncOp) -> Dict[str, Any]:
     return inputs_dict
 
 
-def format_as_outputs(outputs: List[ValueRef]) -> Union[None, Any, Tuple[Any]]:
+def format_as_outputs(
+    outputs: Union[List[ValueRef], List[ValQuery]]
+) -> Union[None, Any, Tuple[Any]]:
     if len(outputs) == 0:
         return None
     elif len(outputs) == 1:

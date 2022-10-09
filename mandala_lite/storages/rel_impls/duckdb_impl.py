@@ -289,7 +289,6 @@ class DuckDBRelStorage(RelStorage, Transactable):
         parameters: list[Any] = None,
         conn: Optional[Connection] = None,
     ) -> pd.DataFrame:
-        print(query)
         if parameters is None:
             parameters = []
         if not isinstance(query, str):

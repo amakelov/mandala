@@ -5,7 +5,7 @@ from ..core.utils import Hashing
 from .main import Storage
 from ..queries.weaver import ValQuery, FuncQuery
 from .main import GlobalContext, MODES
-from .utils import format_as_outputs, bind_inputs
+from .utils import format_as_outputs, bind_inputs, wrap_inputs, wrap_outputs
 
 
 class FuncInterface:
@@ -24,48 +24,6 @@ class FuncInterface:
     def invalidate(self):
         self.is_invalidated = True
         self.is_synchronized = False
-
-    def wrap_inputs(self, inputs: Dict[str, Any]) -> Dict[str, ValueRef]:
-        # check if we allow implicit wrapping
-        if Config.autowrap_inputs:
-            return {k: wrap(v) for k, v in inputs.items()}
-        else:
-            assert all(isinstance(v, ValueRef) for v in inputs.values())
-            return inputs
-
-    def wrap_outputs(self, outputs: List[Any], call_uid: str) -> List[ValueRef]:
-        """
-        Wrap the outputs of a call as value references.
-
-        If the function happens to return value references, they are returned as
-        they are. Otherwise, a UID is assigned depending on the configuration
-        settings of the library.
-        """
-        wrapped_outputs = []
-        if Config.output_wrap_method == "content":
-            uid_generator = lambda i, x: Hashing.get_content_hash(x)
-        elif Config.output_wrap_method == "causal":
-            uid_generator = lambda i, x: Hashing.get_content_hash(obj=(call_uid, i))
-        else:
-            raise ValueError()
-        wrapped_outputs = [
-            wrap(obj=x, uid=uid_generator(i, x)) if not isinstance(x, ValueRef) else x
-            for i, x in enumerate(outputs)
-        ]
-        return wrapped_outputs
-
-    def call_query(self, inputs: Dict[str, ValQuery]) -> List[ValQuery]:
-        if not all(isinstance(inp, ValQuery) for inp in inputs.values()):
-            raise NotImplementedError()
-        func_query = FuncQuery(op=self.op, inputs=inputs)
-        for k, v in inputs.items():
-            v.add_consumer(consumer=func_query, consumed_as=k)
-        outputs = [
-            ValQuery(creator=func_query, created_as=i)
-            for i in range(self.op.sig.n_outputs)
-        ]
-        func_query.set_outputs(outputs=outputs)
-        return outputs
 
     def __call__(self, *args, **kwargs) -> Union[None, Any, Tuple[Any]]:
         context = GlobalContext.current
@@ -93,9 +51,11 @@ class FuncInterface:
             outputs, call = storage.call_run(op=self.op, inputs=inputs)
             return format_as_outputs(outputs=outputs)
         elif mode == MODES.query:
-            return format_as_outputs(outputs=self.call_query(inputs))
+            return format_as_outputs(
+                outputs=storage.call_query(op=self.op, inputs=inputs)
+            )
         elif mode == MODES.batch:
-            wrapped_inputs = self.wrap_inputs(inputs)
+            wrapped_inputs = wrap_inputs(inputs)
             outputs = [
                 ValueRef(uid=None, obj=None, in_memory=False)
                 for _ in range(self.op.sig.n_outputs)
