@@ -33,9 +33,9 @@ class SigSyncer(Transactable):
         sig_adapter: SigAdapter,
         root: Optional[Union[Path, RemoteStorage]] = None,
     ):
-        self.x = sig_adapter
+        self.sig_adapter = sig_adapter
         self.root = root
-        self.rel_storage = self.x.rel_storage
+        self.rel_storage = self.sig_adapter.rel_storage
 
     ############################################################################
     ### `Transactable` interface
@@ -84,26 +84,48 @@ class SigSyncer(Transactable):
             sigs = self.pull_signatures()
             for sig in sigs:
                 logging.debug(f"Processing signature {sig}")
-                if self.x.exists_internal(sig=sig, conn=conn):
-                    self.x.update_ui_name(sig=sig, conn=conn)
-                    self.x.update_input_ui_names(sig=sig, conn=conn)
-                    self.x.update_sig(sig=sig, conn=conn)
+                if self.sig_adapter.exists_internal(sig=sig, conn=conn):
+                    self.sig_adapter.update_ui_name(sig=sig, conn=conn)
+                    self.sig_adapter.update_input_ui_names(sig=sig, conn=conn)
+                    self.sig_adapter.update_sig(sig=sig, conn=conn)
                 else:
-                    self.x.create_sig(sig=sig, conn=conn)
+                    self.sig_adapter.create_sig(sig=sig, conn=conn)
 
     ############################################################################
     ### atomic operations by the client
     ############################################################################
+    def validate_transaction(
+        self, new_sig: Signature, all_sigs: Dict[Tuple[str, int], Signature]
+    ) -> bool:
+        """
+        Check that a new signature is compatible with a current state of the
+        signatures WITHOUT actually updating the state. This is used to check
+        that a transaction is valid before committing it.
+        """
+        assert new_sig.has_internal_data
+        if self.sig_adapter.exists_internal(sig=new_sig):
+            current = all_sigs[new_sig.internal_name, new_sig.version]
+            compatible, reason_not = current.is_compatible(new=new_sig)
+            if compatible:
+                return True
+            else:
+                raise ValueError(reason_not)
+        else:
+            return True
+
     @transaction()
     def sync_create(
         self, sig: Signature, conn: Optional[Connection] = None
     ) -> Signature:
         self.sync_from_remote(conn=conn)
         new_sig = sig._generate_internal()
-        all_sigs = list(self.x.load_state(conn=conn).values())
+        self.validate_transaction(
+            new_sig=new_sig, all_sigs=self.sig_adapter.load_state(conn=conn)
+        )
+        all_sigs = list(self.sig_adapter.load_state(conn=conn).values())
         all_sigs.append(new_sig)
         self.push_signatures(sigs=all_sigs)
-        self.x.create_sig(sig=new_sig, conn=conn)
+        self.sig_adapter.create_sig(sig=new_sig, conn=conn)
         return new_sig
 
     @transaction()
@@ -111,12 +133,15 @@ class SigSyncer(Transactable):
         self, sig: Signature, conn: Optional[Connection] = None
     ) -> Signature:
         self.sync_from_remote(conn=conn)
-        current = self.x.load_ui_sigs(conn=conn)[sig.ui_name, sig.version]
+        current = self.sig_adapter.load_ui_sigs(conn=conn)[sig.ui_name, sig.version]
         new_sig, _ = current.update(new=sig)
-        all_sigs = self.x.load_state(conn=conn)
+        self.validate_transaction(
+            new_sig=new_sig, all_sigs=self.sig_adapter.load_state(conn=conn)
+        )
+        all_sigs = self.sig_adapter.load_state(conn=conn)
         all_sigs[(current.internal_name, current.version)] = new_sig
         self.push_signatures(sigs=list(all_sigs.values()))
-        self.x.update_sig(sig=new_sig, conn=conn)
+        self.sig_adapter.update_sig(sig=new_sig, conn=conn)
         return new_sig
 
     @transaction()
@@ -124,17 +149,20 @@ class SigSyncer(Transactable):
         self, sig: Signature, conn: Optional[Connection] = None
     ) -> Signature:
         self.sync_from_remote(conn=conn)
-        if not self.x.exists_any_version(sig=sig, conn=conn):
+        if not self.sig_adapter.exists_any_version(sig=sig, conn=conn):
             raise ValueError()
-        latest_sig = self.x.get_latest_version(sig=sig, conn=conn)
+        latest_sig = self.sig_adapter.get_latest_version(sig=sig, conn=conn)
         new_version = latest_sig.version + 1
         if not sig.version == new_version:
             raise ValueError()
         new_sig = sig._generate_internal(internal_name=latest_sig.internal_name)
-        all_sigs = self.x.load_state(conn=conn)
+        self.validate_transaction(
+            new_sig=new_sig, all_sigs=self.sig_adapter.load_state(conn=conn)
+        )
+        all_sigs = self.sig_adapter.load_state(conn=conn)
         all_sigs[(new_sig.internal_name, new_sig.version)] = new_sig
         self.push_signatures(sigs=list(all_sigs.values()))
-        self.x.create_new_version(sig=new_sig, conn=conn)
+        self.sig_adapter.create_new_version(sig=new_sig, conn=conn)
         return new_sig
 
     @transaction()
@@ -142,11 +170,16 @@ class SigSyncer(Transactable):
         self, sig: Signature, new_name: str, conn: Optional[Connection] = None
     ) -> Signature:
         self.sync_from_remote(conn=conn)
+        #! note: we validate before the renaming. Ideally we should have logic
+        # to do this for the new signature directly
+        self.validate_transaction(
+            new_sig=sig, all_sigs=self.sig_adapter.load_state(conn=conn)
+        )
         new_sig = sig.rename(new_name=new_name)
-        all_sigs = self.x.load_state(conn=conn)
+        all_sigs = self.sig_adapter.load_state(conn=conn)
         all_sigs[(new_sig.internal_name, new_sig.version)] = new_sig
         self.push_signatures(sigs=list(all_sigs.values()))
-        self.x.update_ui_name(sig=new_sig, conn=conn)
+        self.sig_adapter.update_ui_name(sig=new_sig, conn=conn)
         return new_sig
 
     @transaction()
@@ -158,11 +191,16 @@ class SigSyncer(Transactable):
         conn: Optional[Connection] = None,
     ) -> Signature:
         self.sync_from_remote(conn=conn)
+        #! note: we validate before the renaming. Ideally we should have logic
+        # to do this for the new signature directly
+        self.validate_transaction(
+            new_sig=sig, all_sigs=self.sig_adapter.load_state(conn=conn)
+        )
         new_sig = sig.rename_inputs(mapping={input_name: new_input_name})
-        all_sigs = self.x.load_state(conn=conn)
+        all_sigs = self.sig_adapter.load_state(conn=conn)
         all_sigs[(new_sig.internal_name, new_sig.version)] = new_sig
         self.push_signatures(sigs=list(all_sigs.values()))
-        self.x.update_input_ui_names(sig=new_sig, conn=conn)
+        self.sig_adapter.update_input_ui_names(sig=new_sig, conn=conn)
         return new_sig
 
     @transaction()
@@ -173,10 +211,9 @@ class SigSyncer(Transactable):
         Create a new signature, create a new version, or update an existing one,
         and immediately send changes to the server.
         """
-        # todo: versioning
-        if self.x.exists_ui(sig=sig, conn=conn):
+        if self.sig_adapter.exists_ui(sig=sig, conn=conn):
             res = self.sync_update(sig=sig, conn=conn)
-        elif self.x.exists_any_version(sig=sig, conn=conn):
+        elif self.sig_adapter.exists_any_version(sig=sig, conn=conn):
             res = self.sync_new_version(sig=sig, conn=conn)
         else:
             res = self.sync_create(sig=sig, conn=conn)

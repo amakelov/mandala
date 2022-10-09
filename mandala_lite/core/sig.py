@@ -33,7 +33,7 @@ class Signature:
         ui_name: str,
         input_names: Set[str],
         n_outputs: int,
-        defaults: Dict[str, Any],
+        defaults: Dict[str, Any],  # ui name -> default value
         version: int,
     ):
         self.ui_name = ui_name
@@ -172,6 +172,10 @@ class Signature:
                 self.ui_to_internal_input_map, new.ui_to_internal_input_map
             ):
                 return False, "UI -> internal input mapping is inconsistent"
+            new_internal_names = set(new._ui_to_internal_input_map.values())
+            current_internal_names = set(self._ui_to_internal_input_map.values())
+            if not set.issubset(current_internal_names, new_internal_names):
+                return False, "Internal input names must be a superset of current"
         if not set.issubset(set(self.input_names), set(new.input_names)):
             return False, "Removing inputs is not supported"
         if not self.n_outputs == new.n_outputs:
