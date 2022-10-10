@@ -16,7 +16,7 @@ from mandala_lite.all import *
 from mandala_lite.tests.utils import *
 from mandala_lite.core.workflow import Workflow
 from mandala_lite.core.utils import Hashing, get_uid
-from mandala_lite.queries.compiler import *
+from mandala_lite.core.compiler import *
 from mandala_lite.ui.main import SimpleWorkflowExecutor
 from mandala_lite.ui.funcs import synchronize_op
 
@@ -209,6 +209,11 @@ class SingleClientSimulator(RuleBasedStateMachine):
             workflow=workflow, storage=self.storage
         )
         self.storage.commit(calls=calls)
+
+    @invariant()
+    def call_storage_funcs(self):
+        # make sure that functions called on the storage work
+        self.storage.rel_adapter.get_all_call_data()
 
     # @precondition(Preconditions.query_workflow)
     # @rule()

@@ -3,7 +3,7 @@ from ..core.config import Config
 from ..core.model import FuncOp, ValueRef, Call, wrap
 from ..core.utils import Hashing
 from .main import Storage
-from ..queries.weaver import ValQuery, FuncQuery
+from ..core.weaver import ValQuery, FuncQuery
 from .main import GlobalContext, MODES
 from .utils import format_as_outputs, bind_inputs, wrap_inputs, wrap_outputs
 

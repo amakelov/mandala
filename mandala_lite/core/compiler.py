@@ -1,5 +1,5 @@
 from ..common_imports import *
-from ..core.config import Config, dump_output_name
+from .config import Config, dump_output_name
 from .weaver import ValQuery, FuncQuery
 from pypika import Query, Table, Field, Column, Criterion
 

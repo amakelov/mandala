@@ -1,5 +1,5 @@
 from ..common_imports import *
-from ..core.model import FuncOp
+from .model import FuncOp
 
 
 class ValQuery:

@@ -2,7 +2,7 @@ from ..common_imports import *
 from ..core.model import FuncOp, ValueRef, Call, wrap
 from ..core.utils import Hashing
 from ..core.config import Config
-from ..queries.weaver import ValQuery
+from ..core.weaver import ValQuery
 
 
 class MODES:

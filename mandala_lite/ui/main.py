@@ -17,8 +17,8 @@ from ..core.model import Call, FuncOp, ValueRef, unwrap
 from ..core.workflow import Workflow
 from ..core.utils import Hashing
 
-from ..queries.weaver import ValQuery, FuncQuery
-from ..queries.compiler import traverse_all, Compiler
+from ..core.weaver import ValQuery, FuncQuery
+from ..core.compiler import traverse_all, Compiler
 
 from .utils import wrap_inputs, wrap_outputs
 

@@ -27,10 +27,9 @@ extras_require["complete"] = sorted({v for req in extras_require.values() for v 
 packages = [
     "mandala_lite",
     "mandala_lite.core",
-    "mandala_lite.queries",
     "mandala_lite.storages",
-    "mandala_lite.tests",
     "mandala_lite.ui",
+    "mandala_lite.tests",
 ]
 
 setup(
