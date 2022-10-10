@@ -175,16 +175,7 @@ class Storage(Transactable):
         self.rel_adapter = RelAdapter(rel_storage=self.rel_storage)
         self.sig_adapter = self.rel_adapter.sig_adapter
         self.sig_syncer = SigSyncer(sig_adapter=self.sig_adapter, root=self.root)
-        # stores the signatures of the operations connected to this storage
-        # (name, version) -> signature
-        # self.sigs: Dict[Tuple[str, int], Signature] = {}
 
-        # self.remote_sync_manager = None
-        # # manage remote storage
-        # if isinstance(root, RemoteStorage):
-        #     self.remote_sync_manager = RemoteSyncManager(
-        #         local_storage=self, remote_storage=root
-        #     )
         self.last_timestamp = (
             timestamp if timestamp is not None else datetime.datetime.fromtimestamp(0)
         )
@@ -461,6 +452,8 @@ class Storage(Transactable):
         if self.call_exists(call_uid):
             # get call from call storage
             call = self.call_get(call_uid)
+            #! a hack
+            call.op = op
             # get outputs from obj storage
             self.preload_objs([v.uid for v in call.outputs])
             wrapped_outputs = [self.obj_get(v.uid) for v in call.outputs]

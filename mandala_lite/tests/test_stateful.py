@@ -20,6 +20,8 @@ from mandala_lite.queries.compiler import *
 from mandala_lite.ui.main import SimpleWorkflowExecutor
 from mandala_lite.ui.funcs import synchronize_op
 
+import cloudpickle
+
 
 def combine_inputs(*args, **kwargs) -> str:
     return Hashing.get_content_hash(obj=(args, kwargs))
@@ -206,20 +208,21 @@ class SingleClientSimulator(RuleBasedStateMachine):
         calls = SimpleWorkflowExecutor().execute(
             workflow=workflow, storage=self.storage
         )
-        self.storage.rel_adapter.upsert_calls(calls=calls)
+        self.storage.commit(calls=calls)
 
     # @precondition(Preconditions.query_workflow)
     # @rule()
     # def query_workflow(self):
     #     workflow = random.choice([w for w in self._workflows if w.is_saturated])
-    #     # workflow.print_shape()
-    #     # path = Path(__file__).parent / f"bug.joblib"
-    #     # op_nodes = copy.deepcopy(workflow.op_nodes)
-    #     # for op_node in op_nodes:
-    #     #     op_node.op.func = None
-    #     # data = (op_nodes, workflow.var_nodes, self.storage)
-    #     # joblib.dump(data, filename=path)
+    #     path = Path(__file__).parent / f"bug.cloudpickle"
+    #     op_nodes = copy.deepcopy(workflow.op_nodes)
+    #     db_dump_path = Path(__file__).parent.absolute() / 'db_dump/'
+    #     self.storage.rel_storage.execute_no_results(query=f"EXPORT DATABASE '{db_dump_path}';")
+    #     data = (self._ops)
+    #     with open(path, "wb") as f:
+    #         cloudpickle.dump(data, f)
     #     val_queries, op_queries = workflow.var_nodes, workflow.op_nodes
+    #     workflow.print_shape()
     #     df = self.storage.execute_query(select_queries=val_queries)
 
 

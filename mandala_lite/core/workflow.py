@@ -179,7 +179,7 @@ class Workflow:
     def print_shape(self):
         var_names = {var: f"var_{i}" for i, var in enumerate(self.var_nodes)}
         for var in self.inputs:
-            print(f"{var_names[var]} = Query()")
+            print(f"{var_names[var]} = Q()")
         for op_node in self.op_nodes:
             lhs = ", ".join([var_names[var] for var in op_node.outputs])
             print(
