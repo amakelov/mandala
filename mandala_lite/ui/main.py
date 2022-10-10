@@ -296,7 +296,7 @@ class Storage(Transactable):
             buffer = io.BytesIO()
             pq.write_table(table, buffer)
             output[table_name] = buffer.getvalue()
-        self.rel_adapter.clear_event_log(conn=conn)
+        # self.rel_adapter.clear_event_log(conn=conn)
         return output
 
     @transaction()
@@ -361,8 +361,8 @@ class Storage(Transactable):
             # collect new work and send it to the server
             changes = self.bundle_to_remote()
             self.root.save_event_log_entry(changes)
-            # apply signature changes from the server
-            # self.sig_adapter.sync_from_remote()
+            # clear the event log only *after* the changes have been received
+            self.rel_adapter.clear_event_log()
             logger.debug("synced to remote")
 
     def sync_with_remote(self):
