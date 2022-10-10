@@ -81,19 +81,19 @@ class Workflow:
         return res
 
     def add_op(
-        self, inputs: Dict[str, ValQuery], op: FuncOp
+        self, inputs: Dict[str, ValQuery], func_op: FuncOp
     ) -> Tuple[FuncQuery, List[ValQuery]]:
-        res = FuncQuery(inputs=inputs, op=op)
+        res = FuncQuery(inputs=inputs, func_op=func_op)
         op_representation = [
             {name: self.var_node_to_causal_hash[inp] for name, inp in inputs.items()},
-            op.sig.versioned_internal_name,
+            func_op.sig.versioned_internal_name,
         ]
         causal_hash = Hashing.get_content_hash(obj=op_representation)
         self.op_nodes.append(res)
         self.causal_hash_to_op_node[causal_hash] = res
         # create outputs
         outputs = []
-        for i in range(op.sig.n_outputs):
+        for i in range(func_op.sig.n_outputs):
             output = self.add_var(val_query=ValQuery(creator=res, created_as=i))
             outputs.append(output)
         # assign outputs to op
@@ -106,7 +106,7 @@ class Workflow:
 
     def add_call_struct(self, call_struct: CallStruct):
         # process inputs
-        op, inputs, outputs = call_struct
+        func_op, inputs, outputs = call_struct
         if any([inp not in self.value_to_var.keys() for inp in inputs.values()]):
             raise NotImplementedError()
         # process call
@@ -115,14 +115,14 @@ class Workflow:
                 name: self.var_node_to_causal_hash[self.value_to_var[inp]]
                 for name, inp in inputs.items()
             },
-            op.sig.versioned_internal_name,
+            func_op.sig.versioned_internal_name,
         ]
         op_hash = Hashing.get_content_hash(obj=op_representation)
         if op_hash not in self.causal_hash_to_op_node.keys():
             # create op
             op_node, output_nodes = self.add_op(
                 inputs={name: self.value_to_var[inp] for name, inp in inputs.items()},
-                op=op,
+                func_op=func_op,
             )
         else:
             op_node = self.causal_hash_to_op_node[op_hash]
@@ -140,7 +140,7 @@ class Workflow:
         res = Workflow()
         input_var = res.add_var()
         for call_struct in call_structs:
-            op, inputs, outputs = call_struct
+            func_op, inputs, outputs = call_struct
             for inp in inputs.values():
                 if inp not in res.value_to_var.keys():
                     res.add_value(value=inp, var=input_var)
@@ -183,7 +183,7 @@ class Workflow:
         for op_node in self.op_nodes:
             lhs = ", ".join([var_names[var] for var in op_node.outputs])
             print(
-                f"{lhs} = {op_node.op.sig.ui_name}("
+                f"{lhs} = {op_node.func_op.sig.ui_name}("
                 + ", ".join(
                     [f"{name}={var_names[var]}" for name, var in op_node.inputs.items()]
                 )

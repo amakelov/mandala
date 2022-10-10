@@ -425,7 +425,7 @@ class Storage(Transactable):
         return result
 
     def call_run(
-        self, op: FuncOp, inputs: Dict[str, Union[Any, ValueRef]]
+        self, func_op: FuncOp, inputs: Dict[str, Union[Any, ValueRef]]
     ) -> Tuple[List[ValueRef], Call]:
         # if op.is_invalidated:
         #     raise RuntimeError(
@@ -437,15 +437,15 @@ class Storage(Transactable):
         # assigned regardless of renamings
         hashable_input_uids = {}
         for k, v in wrapped_inputs.items():
-            internal_k = op.sig.ui_to_internal_input_map[k]
-            if internal_k in op.sig._new_input_defaults_uids:
-                if op.sig._new_input_defaults_uids[internal_k] == v.uid:
+            internal_k = func_op.sig.ui_to_internal_input_map[k]
+            if internal_k in func_op.sig._new_input_defaults_uids:
+                if func_op.sig._new_input_defaults_uids[internal_k] == v.uid:
                     continue
             hashable_input_uids[internal_k] = v.uid
         call_uid = Hashing.get_content_hash(
             obj=[
                 hashable_input_uids,
-                op.sig.versioned_internal_name,
+                func_op.sig.versioned_internal_name,
             ]
         )
         # check if call UID exists in call storage
@@ -453,7 +453,7 @@ class Storage(Transactable):
             # get call from call storage
             call = self.call_get(call_uid)
             #! a hack
-            call.op = op
+            call.func_op = func_op
             # get outputs from obj storage
             self.preload_objs([v.uid for v in call.outputs])
             wrapped_outputs = [self.obj_get(v.uid) for v in call.outputs]
@@ -465,12 +465,15 @@ class Storage(Transactable):
                 raw_inputs = {k: v.obj for k, v in wrapped_inputs.items()}
             else:
                 raw_inputs = wrapped_inputs
-            outputs = op.compute(raw_inputs)
+            outputs = func_op.compute(raw_inputs)
             # wrap outputs
             wrapped_outputs = wrap_outputs(outputs, call_uid=call_uid)
             # create call
             call = Call(
-                uid=call_uid, inputs=wrapped_inputs, outputs=wrapped_outputs, op=op
+                uid=call_uid,
+                inputs=wrapped_inputs,
+                outputs=wrapped_outputs,
+                func_op=func_op,
             )
             # save *detached* call in call storage
             self.call_set(call_uid, call)
@@ -480,14 +483,17 @@ class Storage(Transactable):
             # return outputs and call
             return wrapped_outputs, call
 
-    def call_query(self, op: FuncOp, inputs: Dict[str, ValQuery]) -> List[ValQuery]:
+    def call_query(
+        self, func_op: FuncOp, inputs: Dict[str, ValQuery]
+    ) -> List[ValQuery]:
         if not all(isinstance(inp, ValQuery) for inp in inputs.values()):
             raise NotImplementedError()
-        func_query = FuncQuery(op=op, inputs=inputs)
+        func_query = FuncQuery(func_op=func_op, inputs=inputs)
         for k, v in inputs.items():
             v.add_consumer(consumer=func_query, consumed_as=k)
         outputs = [
-            ValQuery(creator=func_query, created_as=i) for i in range(op.sig.n_outputs)
+            ValQuery(creator=func_query, created_as=i)
+            for i in range(func_op.sig.n_outputs)
         ]
         func_query.set_outputs(outputs=outputs)
         return outputs
@@ -507,7 +513,7 @@ class SimpleWorkflowExecutor(WorkflowExecutor):
             for op, inputs, outputs in call_structs:
                 assert all([inp.in_memory for inp in inputs.values()])
                 vref_outputs, call = storage.call_run(
-                    op=op,
+                    func_op=op,
                     inputs=inputs,
                 )
                 # overwrite things

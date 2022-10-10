@@ -53,10 +53,10 @@ class FuncQuery:
     for an explanation.
     """
 
-    def __init__(self, inputs: Dict[str, ValQuery], op: FuncOp):
+    def __init__(self, inputs: Dict[str, ValQuery], func_op: FuncOp):
         self.inputs = inputs
         self.outputs = []
-        self.op = op
+        self.func_op = func_op
 
     def set_outputs(self, outputs: List[ValQuery]):
         self.outputs = outputs

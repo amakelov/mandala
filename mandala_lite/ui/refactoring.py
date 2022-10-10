@@ -26,7 +26,7 @@ def rename_func(storage: Storage, func: FuncInterface, new_name: str):
         - invalidate the function (making it impossible to compute with it)
     """
     _check_rename_precondition(storage=storage, func=func)
-    storage.sig_syncer.sync_rename_sig(sig=func.op.sig, new_name=new_name)
+    storage.sig_syncer.sync_rename_sig(sig=func.func_op.sig, new_name=new_name)
     func.invalidate()
 
 
@@ -42,6 +42,6 @@ def rename_arg(storage: Storage, func: FuncInterface, name: str, new_name: str):
     """
     _check_rename_precondition(storage=storage, func=func)
     storage.sig_syncer.sync_rename_input(
-        sig=func.op.sig, input_name=name, new_input_name=new_name
+        sig=func.func_op.sig, input_name=name, new_input_name=new_name
     )
     func.invalidate()

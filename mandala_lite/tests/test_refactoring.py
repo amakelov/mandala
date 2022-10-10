@@ -25,7 +25,7 @@ def test_add_input():
     with storage.run():
         x = inc(23)
 
-    assert inc.op.sig.input_names == {"x", "y"}
+    assert inc.func_op.sig.input_names == {"x", "y"}
     with storage.run():
         df = inc.get_table()
     assert df.shape == (1, 4)

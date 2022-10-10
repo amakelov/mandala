@@ -9,9 +9,9 @@ def test_func_creation():
     def add(x: int, y: int = 42) -> int:
         return x + y
 
-    assert add.op.sig.n_outputs == 1
-    assert add.op.sig.input_names == {"x", "y"}
-    assert add.op.sig.defaults == {"y": 42}
+    assert add.func_op.sig.n_outputs == 1
+    assert add.func_op.sig.input_names == {"x", "y"}
+    assert add.func_op.sig.defaults == {"y": 42}
     check_invariants(storage)
 
 

@@ -52,12 +52,12 @@ def Q() -> ValQuery:
     return ValQuery(creator=None, created_as=None)
 
 
-def bind_inputs(args, kwargs, mode: str, op: FuncOp) -> Dict[str, Any]:
+def bind_inputs(args, kwargs, mode: str, func_op: FuncOp) -> Dict[str, Any]:
     """
     Given args and kwargs passed by the user from python, this adds defaults
     and returns a dict where they are indexed via internal names.
     """
-    bound_args = op.py_sig.bind(*args, **kwargs)
+    bound_args = func_op.py_sig.bind(*args, **kwargs)
     bound_args.apply_defaults()
     inputs_dict = dict(bound_args.arguments)
     if mode == MODES.query:

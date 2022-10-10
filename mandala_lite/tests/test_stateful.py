@@ -20,8 +20,6 @@ from mandala_lite.core.compiler import *
 from mandala_lite.ui.main import SimpleWorkflowExecutor
 from mandala_lite.ui.funcs import synchronize_op
 
-import cloudpickle
-
 
 def combine_inputs(*args, **kwargs) -> str:
     return Hashing.get_content_hash(obj=(args, kwargs))
@@ -137,7 +135,7 @@ class SingleClientSimulator(RuleBasedStateMachine):
             version=0,
             deterministic=True,
         )
-        synchronize_op(op=res, storage=self.storage)
+        synchronize_op(func_op=res, storage=self.storage)
         self._ops.append(res)
 
     ############################################################################
@@ -166,14 +164,14 @@ class SingleClientSimulator(RuleBasedStateMachine):
         """
         Add an instance of some op to some workflow.
         """
-        op = random.choice(self._ops)
+        func_op = random.choice(self._ops)
         workflow = random.choice([w for w in self._workflows if len(w.var_nodes) > 0])
         # pick inputs randomly from workflow
         inputs = {
-            name: random.choice(workflow.var_nodes) for name in op.sig.input_names
+            name: random.choice(workflow.var_nodes) for name in func_op.sig.input_names
         }
         # add function over these inputs
-        op_node, output_nodes = workflow.add_op(inputs=inputs, op=op)
+        op_node, output_nodes = workflow.add_op(inputs=inputs, func_op=func_op)
 
     @precondition(Preconditions.add_call_to_workflow)
     @rule()
@@ -191,11 +189,11 @@ class SingleClientSimulator(RuleBasedStateMachine):
         }
         call_struct = tuple(
             [
-                op_node.op,
+                op_node.func_op,
                 input_values,
                 [
                     ValueRef(obj=None, in_memory=False, uid=None)
-                    for _ in range(op_node.op.sig.n_outputs)
+                    for _ in range(op_node.func_op.sig.n_outputs)
                 ],
             ]
         )

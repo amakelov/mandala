@@ -27,11 +27,11 @@ def debug():
         # storage.call_query(op=ops_by_name["TYQOaNFvpU"], inputs={"CffuGFgtJs": var_2, "TemKopZjZI": var_3})
         # var_4, var_5, var_6 = RvEJgwBuNO(JECHqdZJaf=var_0)
         var_4, var_5, var_6 = storage.call_query(
-            op=ops_by_name["RvEJgwBuNO"], inputs={"JECHqdZJaf": var_0}
+            func_op=ops_by_name["RvEJgwBuNO"], inputs={"JECHqdZJaf": var_0}
         )
         # var_7, var_8, var_9 = RvEJgwBuNO(JECHqdZJaf=var_3)
         var_7, var_8, var_9 = storage.call_query(
-            op=ops_by_name["RvEJgwBuNO"], inputs={"JECHqdZJaf": var_3}
+            func_op=ops_by_name["RvEJgwBuNO"], inputs={"JECHqdZJaf": var_3}
         )
         # df = q.get_table(var_0, var_1, var_2, var_3, var_4, var_5, var_6, var_7, var_8, var_9)
         df = q.get_table(var_0, var_3, var_4, var_5, var_6, var_7, var_8, var_9)

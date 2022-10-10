@@ -17,4 +17,4 @@ def test_unit():
     assert y.uid is not None
     all_data = storage.rel_storage.get_all_data()
     assert all_data[Config.vref_table].shape[0] == 2
-    assert all_data[inc.op.sig.versioned_ui_name].shape[0] == 1
+    assert all_data[inc.func_op.sig.versioned_ui_name].shape[0] == 1

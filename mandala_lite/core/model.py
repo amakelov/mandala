@@ -85,12 +85,12 @@ class Call:
         uid: str,
         inputs: Dict[str, ValueRef],
         outputs: List[ValueRef],
-        op: "FuncOp",
+        func_op: "FuncOp",
     ):
         self.uid = uid
         self.inputs = inputs
         self.outputs = outputs
-        self.op = op
+        self.func_op = func_op
 
     def detached(self) -> "Call":
         """
@@ -105,7 +105,7 @@ class Call:
             uid=self.uid,
             inputs={k: v.detached() for k, v in self.inputs.items()},
             outputs=[v.detached() for v in self.outputs],
-            op=self.op,
+            func_op=self.func_op,
         )
 
     @staticmethod
@@ -135,7 +135,7 @@ class Call:
                 ValueRef(row.column(k)[0].as_py(), obj=None, in_memory=False)
                 for k in sorted(output_columns, key=lambda x: int(x[7:]))
             ],
-            op=None,
+            func_op=None,
         )
 
 

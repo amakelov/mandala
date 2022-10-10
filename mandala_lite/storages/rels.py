@@ -555,8 +555,8 @@ class RelAdapter(Transactable):
         calls_by_op = defaultdict(list)
         sigs_by_op = {}
         for call in calls:
-            calls_by_op[call.op.sig.versioned_ui_name].append(call)
-            sigs_by_op[call.op.sig.versioned_ui_name] = call.op.sig
+            calls_by_op[call.func_op.sig.versioned_ui_name].append(call)
+            sigs_by_op[call.func_op.sig.versioned_ui_name] = call.func_op.sig
         res = {}
         for versioned_ui_name, calls in calls_by_op.items():
             sig = sigs_by_op[versioned_ui_name]
