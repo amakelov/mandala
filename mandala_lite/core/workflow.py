@@ -5,11 +5,20 @@ from .utils import Hashing
 from ..utils import invert_dict
 
 
-CallStruct = Tuple[
-    FuncOp,
-    Dict[str, ValueRef],  # inputs
-    List[ValueRef],  # outputs
-]
+# CallStruct = Tuple[
+#     FuncOp,
+#     Dict[str, ValueRef],  # inputs
+#     List[ValueRef],  # outputs
+# ]
+
+
+class CallStruct:
+    def __init__(
+        self, func_op: FuncOp, inputs: Dict[str, ValueRef], outputs: List[ValueRef]
+    ):
+        self.func_op = func_op
+        self.inputs = inputs
+        self.outputs = outputs
 
 
 class Workflow:
@@ -106,7 +115,11 @@ class Workflow:
 
     def add_call_struct(self, call_struct: CallStruct):
         # process inputs
-        func_op, inputs, outputs = call_struct
+        func_op, inputs, outputs = (
+            call_struct.func_op,
+            call_struct.inputs,
+            call_struct.outputs,
+        )
         if any([inp not in self.value_to_var.keys() for inp in inputs.values()]):
             raise NotImplementedError()
         # process call
@@ -140,7 +153,7 @@ class Workflow:
         res = Workflow()
         input_var = res.add_var()
         for call_struct in call_structs:
-            func_op, inputs, outputs = call_struct
+            _, inputs, _ = call_struct.func_op, call_struct.inputs, call_struct.outputs
             for inp in inputs.values():
                 if inp not in res.value_to_var.keys():
                     res.add_value(value=inp, var=input_var)
@@ -174,7 +187,9 @@ class Workflow:
 
     @property
     def has_delayed(self) -> bool:
-        return any([not value.in_memory for value in self.value_to_var.keys()])
+        return any(
+            [ValueRef.is_delayed(vref=value) for value in self.value_to_var.keys()]
+        )
 
     def print_shape(self):
         var_names = {var: f"var_{i}" for i, var in enumerate(self.var_nodes)}

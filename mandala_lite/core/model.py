@@ -6,6 +6,10 @@ from .utils import Hashing
 from .sig import Signature
 
 
+class Delayed:
+    pass
+
+
 class ValueRef:
     """
     Wraps objects with storage metadata.
@@ -32,6 +36,14 @@ class ValueRef:
         (Correspondingly, this is marked as not `in_memory`.)
         """
         return ValueRef(uid=self.uid, obj=None, in_memory=False)
+
+    @staticmethod
+    def is_delayed(vref: "ValueRef") -> bool:
+        return isinstance(vref.obj, Delayed)
+
+    @staticmethod
+    def make_delayed() -> "ValueRef":
+        return ValueRef(uid="", obj=Delayed(), in_memory=False)
 
 
 def wrap(obj: Any, uid: Optional[str] = None) -> ValueRef:

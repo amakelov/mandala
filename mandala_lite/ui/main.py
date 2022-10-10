@@ -13,8 +13,8 @@ from ..storages.sigs import SigSyncer
 from ..storages.remote_storage import RemoteStorage
 from ..common_imports import *
 from ..core.config import Config
-from ..core.model import Call, FuncOp, ValueRef, unwrap
-from ..core.workflow import Workflow
+from ..core.model import Call, FuncOp, ValueRef, unwrap, Delayed
+from ..core.workflow import Workflow, CallStruct
 from ..core.utils import Hashing
 
 from ..core.weaver import ValQuery, FuncQuery
@@ -498,6 +498,14 @@ class Storage(Transactable):
         func_query.set_outputs(outputs=outputs)
         return outputs
 
+    def call_batch(
+        self, func_op: FuncOp, inputs: Dict[str, ValueRef]
+    ) -> Tuple[List[ValueRef], CallStruct]:
+        outputs = [ValueRef.make_delayed() for _ in range(func_op.sig.n_outputs)]
+        call_struct = CallStruct(func_op=func_op, inputs=inputs, outputs=outputs)
+        # context._call_structs.append((self.func_op, wrapped_inputs, outputs))
+        return outputs, call_struct
+
 
 class WorkflowExecutor(ABC):
     @abstractmethod
@@ -510,10 +518,17 @@ class SimpleWorkflowExecutor(WorkflowExecutor):
         result = []
         for op_node in workflow.op_nodes:
             call_structs = workflow.op_node_to_call_structs[op_node]
-            for op, inputs, outputs in call_structs:
-                assert all([inp.in_memory for inp in inputs.values()])
+            for call_struct in call_structs:
+                func_op, inputs, outputs = (
+                    call_struct.func_op,
+                    call_struct.inputs,
+                    call_struct.outputs,
+                )
+                assert all(
+                    [not ValueRef.is_delayed(vref=inp) for inp in inputs.values()]
+                )
                 vref_outputs, call = storage.call_run(
-                    func_op=op,
+                    func_op=func_op,
                     inputs=inputs,
                 )
                 # overwrite things

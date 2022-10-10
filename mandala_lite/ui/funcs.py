@@ -56,11 +56,10 @@ class FuncInterface:
             )
         elif mode == MODES.batch:
             wrapped_inputs = wrap_inputs(inputs)
-            outputs = [
-                ValueRef(uid=None, obj=None, in_memory=False)
-                for _ in range(self.func_op.sig.n_outputs)
-            ]
-            context._call_structs.append((self.func_op, wrapped_inputs, outputs))
+            outputs, call_struct = storage.call_batch(
+                func_op=self.func_op, inputs=wrapped_inputs
+            )
+            context._call_structs.append(call_struct)
             return format_as_outputs(outputs=outputs)
         else:
             raise ValueError()
