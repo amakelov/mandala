@@ -53,7 +53,7 @@ class SigSyncer(Transactable):
     def has_remote(self) -> bool:
         return self.root is not None
 
-    def pull_signatures(self) -> List[Signature]:
+    def pull_signatures(self) -> Dict[Tuple[str, int], Signature]:
         """
         Pull the current state of the signatures from the remote, make sure that
         they are compatible with the current ones, and then update or create
@@ -65,7 +65,7 @@ class SigSyncer(Transactable):
         else:
             raise ValueError("No remote storage to pull from.")
 
-    def push_signatures(self, sigs: List[Signature]):
+    def push_signatures(self, sigs: Dict[Tuple[str, int], Signature]):
         if isinstance(self.root, RemoteStorage):
             assert isinstance(self.root, RemoteStorage)
             self.root.push_signatures(new_sigs=sigs)
@@ -82,7 +82,7 @@ class SigSyncer(Transactable):
         logger.debug("Syncing signatures from remote...")
         if self.has_remote:
             sigs = self.pull_signatures()
-            for sig in sigs:
+            for (internal_name, version), sig in sigs.items():
                 logging.debug(f"Processing signature {sig}")
                 if self.sig_adapter.exists_internal(sig=sig, conn=conn):
                     self.sig_adapter.update_ui_name(sig=sig, conn=conn)
@@ -122,8 +122,8 @@ class SigSyncer(Transactable):
         self.validate_transaction(
             new_sig=new_sig, all_sigs=self.sig_adapter.load_state(conn=conn)
         )
-        all_sigs = list(self.sig_adapter.load_state(conn=conn).values())
-        all_sigs.append(new_sig)
+        all_sigs = self.sig_adapter.load_state(conn=conn)
+        all_sigs[new_sig.internal_name, new_sig.version] = new_sig
         self.push_signatures(sigs=all_sigs)
         self.sig_adapter.create_sig(sig=new_sig, conn=conn)
         return new_sig
@@ -140,7 +140,7 @@ class SigSyncer(Transactable):
         )
         all_sigs = self.sig_adapter.load_state(conn=conn)
         all_sigs[(current.internal_name, current.version)] = new_sig
-        self.push_signatures(sigs=list(all_sigs.values()))
+        self.push_signatures(sigs=all_sigs)
         self.sig_adapter.update_sig(sig=new_sig, conn=conn)
         return new_sig
 
@@ -161,7 +161,7 @@ class SigSyncer(Transactable):
         )
         all_sigs = self.sig_adapter.load_state(conn=conn)
         all_sigs[(new_sig.internal_name, new_sig.version)] = new_sig
-        self.push_signatures(sigs=list(all_sigs.values()))
+        self.push_signatures(sigs=all_sigs)
         self.sig_adapter.create_new_version(sig=new_sig, conn=conn)
         return new_sig
 
@@ -178,7 +178,7 @@ class SigSyncer(Transactable):
         new_sig = sig.rename(new_name=new_name)
         all_sigs = self.sig_adapter.load_state(conn=conn)
         all_sigs[(new_sig.internal_name, new_sig.version)] = new_sig
-        self.push_signatures(sigs=list(all_sigs.values()))
+        self.push_signatures(sigs=all_sigs)
         self.sig_adapter.update_ui_name(sig=new_sig, conn=conn)
         return new_sig
 
@@ -199,7 +199,7 @@ class SigSyncer(Transactable):
         new_sig = sig.rename_inputs(mapping={input_name: new_input_name})
         all_sigs = self.sig_adapter.load_state(conn=conn)
         all_sigs[(new_sig.internal_name, new_sig.version)] = new_sig
-        self.push_signatures(sigs=list(all_sigs.values()))
+        self.push_signatures(sigs=all_sigs)
         self.sig_adapter.update_input_ui_names(sig=new_sig, conn=conn)
         return new_sig
 

@@ -12,17 +12,14 @@ class MongoMockRemoteStorage(RemoteStorage):
         self.db_name = db_name
         self.client = client
         self.log = client.experiment_data[self.db_name].event_log
-        self.sigs = []
+        self.sigs: Dict[Tuple[str, int], Signature] = {}
 
-    def pull_signatures(self) -> List[Signature]:
+    def pull_signatures(self) -> Dict[Tuple[str, int], Signature]:
         return self.sigs
 
-    def push_signatures(self, new_sigs: List[Signature]) -> None:
-        current_internal_sigs = {
-            (sig.internal_name, sig.version): sig for sig in self.sigs
-        }
-        for new_sig in new_sigs:
-            internal_name, version = new_sig.internal_name, new_sig.version
+    def push_signatures(self, new_sigs: Dict[Tuple[str, int], Signature]) -> None:
+        current_internal_sigs = self.sigs
+        for (internal_name, version), new_sig in new_sigs.items():
             if (internal_name, version) in current_internal_sigs:
                 current_sig = current_internal_sigs[(internal_name, version)]
                 if not current_sig.is_compatible(new_sig):

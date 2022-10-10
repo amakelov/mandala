@@ -21,11 +21,11 @@ class RemoteStorage(abc.ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    def pull_signatures(self) -> List[Signature]:
+    def pull_signatures(self) -> Dict[Tuple[str, int], Signature]:
         raise NotImplementedError()
 
     @abstractmethod
-    def push_signatures(self, new_sigs: List[Signature]) -> None:
+    def push_signatures(self, new_sigs: Dict[Tuple[str, int], Signature]) -> None:
         raise NotImplementedError()
 
 
