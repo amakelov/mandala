@@ -112,6 +112,7 @@ def synchronize(func: FuncInterface, storage: Storage):
     new_sig = storage.sig_syncer.sync_from_local(sig=func.func_op.sig)
     func.func_op.sig = new_sig
     func.is_synchronized = True
+    storage.sync_to_remote()
 
 
 def synchronize_op(func_op: FuncOp, storage: Storage):

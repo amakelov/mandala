@@ -8,7 +8,7 @@ from duckdb import DuckDBPyConnection as Connection
 
 from ..common_imports import *
 from ..core.config import Config, Prov, dump_output_name
-from ..core.model import Call, unwrap
+from ..core.model import Call, unwrap, FuncOp
 from ..core.sig import Signature
 from ..utils import upsert_df, serialize, deserialize, _rename_cols
 from .rel_impls.duckdb_impl import DuckDBRelStorage
@@ -96,9 +96,11 @@ class SigAdapter(Transactable):
         return {(sig.ui_name, sig.version): sig for sig in sigs.values()}
 
     @transaction()
-    def exists_ui(self, sig: Signature, conn: Optional[Connection] = None) -> bool:
+    def exists_versioned_ui(
+        self, sig: Signature, conn: Optional[Connection] = None
+    ) -> bool:
         """
-        Check if the signature exists based on its UI name
+        Check if the signature exists based on its UI name *and* version
         """
         return (sig.ui_name, sig.version) in self.load_ui_sigs(conn=conn)
 
@@ -528,12 +530,18 @@ class RelAdapter(Transactable):
     def _get_current_names(
         self, sig: Signature, conn: Optional[Connection] = None
     ) -> Tuple[str, Dict[str, str]]:
+        """
+        Given a possibly stale signature `sig`, return
+            - the current ui name for this signature
+            - a mapping of stale input names to their current values
+        """
         current_sigs = self.sig_adapter.load_state()
         current_sig = current_sigs[sig.internal_name, sig.version]
         true_versioned_ui_name = current_sig.versioned_ui_name
         stale_to_true_input_mapping = {
             k: current_sig.internal_to_ui_input_map[v]
             for k, v in sig.ui_to_internal_input_map.items()
+            # for k, v in current_sig.ui_to_internal_input_map.items()
         }
         return true_versioned_ui_name, stale_to_true_input_mapping
 
@@ -545,42 +553,59 @@ class RelAdapter(Transactable):
         Converts call objects to a dictionary of {relation name: table
         to upsert} pairs.
 
+        Note that the calls can involve functions in different stages of
+        staleness. This method can handle calls to many different variants of
+        the same function (adding inputs, renaming the function or its inputs).
         To handle calls to stale functions, this passes through internal names
         to get the current UI names.
         """
         if not len(calls) == len(set([call.uid for call in calls])):
             # something fishy may be going on
             raise ValueError("Calls must have unique UIDs")
-        # split by operation internal name
+        # split by operation *internal* name to group calls to the same op in
+        # the same group, even if UI names are different.
         calls_by_op = defaultdict(list)
-        sigs_by_op = {}
         for call in calls:
-            calls_by_op[call.func_op.sig.versioned_ui_name].append(call)
-            sigs_by_op[call.func_op.sig.versioned_ui_name] = call.func_op.sig
+            calls_by_op[call.func_op.sig.versioned_internal_name].append(call)
         res = {}
-        for versioned_ui_name, calls in calls_by_op.items():
-            sig = sigs_by_op[versioned_ui_name]
-            (
-                true_versioned_ui_name,
-                stale_to_true_input_mapping,
-            ) = self._get_current_names(sig, conn=conn)
-            res[true_versioned_ui_name] = pa.Table.from_pylist(
-                [
-                    {
-                        Config.uid_col: call.uid,
-                        **{
-                            stale_to_true_input_mapping[k]: v.uid
-                            for k, v in call.inputs.items()
-                        },
-                        **{
-                            dump_output_name(index=i): v.uid
-                            for i, v in enumerate(call.outputs)
-                        },
-                    }
-                    for call in calls
-                ]
-            )
-
+        for versioned_internal_name, calls in calls_by_op.items():
+            rows = []
+            true_sig = self.sig_adapter.load_state()[
+                Signature.parse_versioned_name(versioned_internal_name)
+            ]
+            true_versioned_ui_name = None
+            for call in calls:
+                # it is necessary to process each call individually to properly
+                # handle multiple stale variants of this op
+                sig = call.func_op.sig
+                # get the current state of this signature
+                (
+                    true_versioned_ui_name,
+                    # stale UI input -> current UI input. This could vary across calls
+                    stale_to_true_input_mapping,
+                ) = self._get_current_names(sig, conn=conn)
+                # form the input UIDs
+                input_uids = {
+                    stale_to_true_input_mapping[k]: v.uid
+                    for k, v in call.inputs.items()
+                }
+                # patch the input uids using the true signature. This is
+                # necesary to do here because it seems duckdb has issues with
+                # interpreting NaNs from pyarrow as nulls
+                for k, v in true_sig.new_ui_input_default_uids.items():
+                    if k not in input_uids:
+                        input_uids[k] = v
+                row = {
+                    Config.uid_col: call.uid,
+                    **input_uids,
+                    **{
+                        dump_output_name(index=i): v.uid
+                        for i, v in enumerate(call.outputs)
+                    },
+                }
+                rows.append(row)
+            if true_versioned_ui_name is not None:
+                res[true_versioned_ui_name] = pa.Table.from_pylist(rows)
         return res
 
     @transaction()
@@ -630,7 +655,12 @@ class RelAdapter(Transactable):
             .select(table.star)
         )
         results = self.rel_storage.execute_arrow(query, [call_uid], conn=conn)
-        return Call.from_row(results)
+        # determine the signature for this call
+        ui_name, version = Signature.parse_versioned_name(
+            versioned_name=str(table_name)
+        )
+        sig = self.sig_adapter.load_ui_sigs(conn=conn)[ui_name, version]
+        return Call.from_row(results, func_op=FuncOp._from_data(f=None, sig=sig))
 
     @transaction()
     def call_set(
@@ -683,7 +713,7 @@ class RelAdapter(Transactable):
 
     @transaction()
     def obj_set(self, uid: str, value: Any, conn: Optional[Connection] = None) -> None:
-        if self.obj_exists(uids=[uid], conn=conn):
+        if self.obj_exists(uids=[uid], conn=conn)[0]:
             return  # guarantees no overwriting of values
         serialized_value = serialize(value)
         query = Query.into(Config.vref_table).insert(Parameter("$1"), Parameter("$2"))

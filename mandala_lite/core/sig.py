@@ -118,6 +118,13 @@ class Signature:
     def internal_input_names(self) -> Set[str]:
         return set(self.ui_to_internal_input_map.values())
 
+    @property
+    def new_ui_input_default_uids(self) -> Dict[str, str]:
+        return {
+            self.internal_to_ui_input_map[k]: v
+            for k, v in self._new_input_defaults_uids.items()
+        }
+
     def __eq__(self, other: Any) -> bool:
         return (
             isinstance(other, Signature)

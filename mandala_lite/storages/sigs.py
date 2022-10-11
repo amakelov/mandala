@@ -154,7 +154,7 @@ class SigSyncer(Transactable):
         latest_sig = self.sig_adapter.get_latest_version(sig=sig, conn=conn)
         new_version = latest_sig.version + 1
         if not sig.version == new_version:
-            raise ValueError()
+            raise ValueError(f"New version must be {new_version}, not {sig.version}")
         new_sig = sig._generate_internal(internal_name=latest_sig.internal_name)
         self.validate_transaction(
             new_sig=new_sig, all_sigs=self.sig_adapter.load_state(conn=conn)
@@ -211,7 +211,7 @@ class SigSyncer(Transactable):
         Create a new signature, create a new version, or update an existing one,
         and immediately send changes to the server.
         """
-        if self.sig_adapter.exists_ui(sig=sig, conn=conn):
+        if self.sig_adapter.exists_versioned_ui(sig=sig, conn=conn):
             res = self.sync_update(sig=sig, conn=conn)
         elif self.sig_adapter.exists_any_version(sig=sig, conn=conn):
             res = self.sync_new_version(sig=sig, conn=conn)

@@ -5,13 +5,6 @@ from .utils import Hashing
 from ..utils import invert_dict
 
 
-# CallStruct = Tuple[
-#     FuncOp,
-#     Dict[str, ValueRef],  # inputs
-#     List[ValueRef],  # outputs
-# ]
-
-
 class CallStruct:
     def __init__(
         self, func_op: FuncOp, inputs: Dict[str, ValueRef], outputs: List[ValueRef]
@@ -23,11 +16,11 @@ class CallStruct:
 
 class Workflow:
     """
-    An intermediate representation of a collection of calls not all of which
-    have been executed, following a particular computational graph.
+    An intermediate representation of a collection of calls, possibly not all of
+    which have been executed, following a particular computational graph.
 
-    How it's used:
-        - represent work to be done in a `batch` context
+    Used to:
+        - represent work to be done in a `batch` context as a data structure
         - encode an entire workflow for e.g. testing scenarios that simulate
           real-world workloads
     """
@@ -36,16 +29,30 @@ class Workflow:
         ### encoding the shape
         # in topological order
         self.var_nodes: List[ValQuery] = []
+        # note that there may be many var nodes with the same causal hash (but
+        # they must be among the inputs of the workflow)
         self.var_node_to_causal_hash: Dict[ValQuery, str] = {}
-        # self.causal_hash_to_var_node:Dict[str, ValQuery] = {}
         # in topological order
         self.op_nodes: List[FuncQuery] = []
-        self.causal_hash_to_op_node: Dict[str, FuncQuery] = {}
+        # self.causal_hash_to_op_node: Dict[str, FuncQuery] = {}
+        self.op_node_to_causal_hash: Dict[FuncQuery, str] = {}
         ### encoding the data
         self.value_to_var: Dict[ValueRef, ValQuery] = {}
-        self.op_node_to_call_structs: Dict[FuncQuery, List[CallStruct]] = defaultdict(
-            list
-        )
+        self.op_node_to_call_structs: Dict[FuncQuery, List[CallStruct]] = {}
+
+    def check_invariants(self):
+        assert set(self.var_node_to_causal_hash.keys()) == set(self.var_nodes)
+        assert set(self.op_node_to_causal_hash.keys()) == set(self.op_nodes)
+        assert set(self.op_node_to_call_structs.keys()) == set(self.op_nodes)
+        assert set(self.value_to_var.values()) <= set(self.var_nodes)
+        for op_node in self.op_nodes:
+            for call_struct in self.op_node_to_call_structs[op_node]:
+                input_locations = {
+                    k: self.value_to_var[v] for k, v in call_struct.inputs.items()
+                }
+                assert input_locations == op_node.inputs
+                output_locations = [self.value_to_var[v] for v in call_struct.outputs]
+                assert output_locations == op_node.outputs
 
     def get_default_hash(self) -> str:
         return Hashing.get_content_hash(obj="null")
@@ -64,9 +71,9 @@ class Workflow:
     def inputs(self) -> List[ValQuery]:
         return [var for var in self.var_nodes if var.creator is None]
 
-    @property
-    def op_to_causal_hash(self) -> Dict[FuncQuery, str]:
-        return invert_dict(self.causal_hash_to_op_node)
+    # @property
+    # def op_to_causal_hash(self) -> Dict[FuncQuery, str]:
+    #     return invert_dict(self.causal_hash_to_op_node)
 
     def var_to_values(self) -> Dict[ValQuery, List[ValueRef]]:
         res = defaultdict(list)
@@ -83,14 +90,16 @@ class Workflow:
         if res.creator is None:
             causal_hash = self.get_default_hash()
         else:
-            creator_hash = self.op_to_causal_hash[res.creator]
+            creator_hash = self.op_node_to_causal_hash[res.creator]
             causal_hash = Hashing.get_content_hash(obj=[creator_hash, res.created_as])
         self.var_nodes.append(res)
         self.var_node_to_causal_hash[res] = causal_hash
         return res
 
     def add_op(
-        self, inputs: Dict[str, ValQuery], func_op: FuncOp
+        self,
+        inputs: Dict[str, ValQuery],
+        func_op: FuncOp,
     ) -> Tuple[FuncQuery, List[ValQuery]]:
         res = FuncQuery(inputs=inputs, func_op=func_op)
         op_representation = [
@@ -99,7 +108,8 @@ class Workflow:
         ]
         causal_hash = Hashing.get_content_hash(obj=op_representation)
         self.op_nodes.append(res)
-        self.causal_hash_to_op_node[causal_hash] = res
+        self.op_node_to_causal_hash[res] = causal_hash
+        # self.causal_hash_to_op_node[causal_hash] = res
         # create outputs
         outputs = []
         for i in range(func_op.sig.n_outputs):
@@ -107,6 +117,7 @@ class Workflow:
             outputs.append(output)
         # assign outputs to op
         res.set_outputs(outputs=outputs)
+        self.op_node_to_call_structs[res] = []
         return res, outputs
 
     def add_value(self, value: ValueRef, var: ValQuery):
@@ -131,14 +142,21 @@ class Workflow:
             func_op.sig.versioned_internal_name,
         ]
         op_hash = Hashing.get_content_hash(obj=op_representation)
-        if op_hash not in self.causal_hash_to_op_node.keys():
+        if op_hash not in self.op_node_to_causal_hash.values():
             # create op
             op_node, output_nodes = self.add_op(
                 inputs={name: self.value_to_var[inp] for name, inp in inputs.items()},
                 func_op=func_op,
             )
         else:
-            op_node = self.causal_hash_to_op_node[op_hash]
+            candidates = [
+                op_node
+                for op_node in self.op_nodes
+                if self.op_node_to_causal_hash[op_node] == op_hash
+                and op_node.inputs
+                == {name: self.value_to_var[inp] for name, inp in inputs.items()}
+            ]
+            op_node = candidates[0]
             output_nodes = op_node.outputs
         # process outputs
         for output_node, output in zip(output_nodes, outputs):

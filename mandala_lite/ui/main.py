@@ -452,8 +452,6 @@ class Storage(Transactable):
         if self.call_exists(call_uid):
             # get call from call storage
             call = self.call_get(call_uid)
-            #! a hack
-            call.func_op = func_op
             # get outputs from obj storage
             self.preload_objs([v.uid for v in call.outputs])
             wrapped_outputs = [self.obj_get(v.uid) for v in call.outputs]

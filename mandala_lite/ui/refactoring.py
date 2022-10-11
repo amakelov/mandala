@@ -1,4 +1,5 @@
 from ..common_imports import *
+from ..core.sig import Signature
 from .main import Storage
 from .funcs import FuncInterface, synchronize
 
@@ -14,7 +15,7 @@ def _check_rename_precondition(storage: Storage, func: FuncInterface):
         raise RuntimeError("Cannot rename while there is uncommited work.")
 
 
-def rename_func(storage: Storage, func: FuncInterface, new_name: str):
+def rename_func(storage: Storage, func: FuncInterface, new_name: str) -> Signature:
     """
     Rename a memoized function.
 
@@ -26,11 +27,14 @@ def rename_func(storage: Storage, func: FuncInterface, new_name: str):
         - invalidate the function (making it impossible to compute with it)
     """
     _check_rename_precondition(storage=storage, func=func)
-    storage.sig_syncer.sync_rename_sig(sig=func.func_op.sig, new_name=new_name)
+    sig = storage.sig_syncer.sync_rename_sig(sig=func.func_op.sig, new_name=new_name)
     func.invalidate()
+    return sig
 
 
-def rename_arg(storage: Storage, func: FuncInterface, name: str, new_name: str):
+def rename_arg(
+    storage: Storage, func: FuncInterface, name: str, new_name: str
+) -> Signature:
     """
     Rename memoized function argument.
 
@@ -41,7 +45,8 @@ def rename_arg(storage: Storage, func: FuncInterface, name: str, new_name: str):
         - invalidate the function (making it impossible to compute with it)
     """
     _check_rename_precondition(storage=storage, func=func)
-    storage.sig_syncer.sync_rename_input(
+    sig = storage.sig_syncer.sync_rename_input(
         sig=func.func_op.sig, input_name=name, new_input_name=new_name
     )
     func.invalidate()
+    return sig

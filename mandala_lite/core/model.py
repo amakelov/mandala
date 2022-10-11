@@ -121,7 +121,7 @@ class Call:
         )
 
     @staticmethod
-    def from_row(row: pa.Table) -> "Call":
+    def from_row(row: pa.Table, func_op: "FuncOp") -> "Call":
         """
         Generate a `Call` from a single-row table encoding the UID, input and
         output UIDs.
@@ -147,7 +147,7 @@ class Call:
                 ValueRef(row.column(k)[0].as_py(), obj=None, in_memory=False)
                 for k in sorted(output_columns, key=lambda x: int(x[7:]))
             ],
-            func_op=None,
+            func_op=func_op,
         )
 
 
@@ -176,12 +176,6 @@ class FuncOp:
         )
         self.is_synchronized = False
 
-    @staticmethod
-    def from_data(f: Callable, sig: Signature) -> "FuncOp":
-        res = FuncOp(func=f, version=sig.version, ui_name=sig.ui_name)
-        res.sig = sig
-        return res
-
     def compute(self, inputs: Dict[str, Any]) -> List[Any]:
         """
         Computes the function on the given *unwrapped* inputs. Returns a list of
@@ -206,3 +200,19 @@ class FuncOp:
                 len(result) == self.sig.n_outputs
             ), f"Operation {self} has {self.sig.n_outputs} outputs, but its function returned a tuple of length {len(result)}"
             return list(result)
+
+    @staticmethod
+    def _from_data(sig: Signature, f: Optional[Callable] = None) -> "FuncOp":
+        """
+        Create a `FuncOp` object based on a signature and maybe a function. For
+        internal use only.
+        """
+        if f is None:
+            f = lambda *args, **kwargs: None
+            res = FuncOp(func=f, version=sig.version, ui_name=sig.ui_name)
+            res.sig = sig
+            res.func = None
+        else:
+            res = FuncOp(func=f, version=sig.version, ui_name=sig.ui_name)
+            res.sig = sig
+        return res
