@@ -276,7 +276,12 @@ class SigAdapter(Transactable):
             )
 
     @transaction()
-    def update_ui_name(self, sig: Signature, conn: Optional[Connection] = None):
+    def update_ui_name(
+        self,
+        sig: Signature,
+        conn: Optional[Connection] = None,
+        validate_only: bool = False,
+    ) -> Dict[Tuple[str, int], Signature]:
         """
         Update a signature's UI name from the given `Signature` object.
         `sig` must have internal data, and must carry the new UI name.
@@ -291,19 +296,23 @@ class SigAdapter(Transactable):
             current = sigs[(sig.internal_name, version)]
             if current.ui_name != sig.ui_name:
                 new_sig = current.rename(new_name=sig.ui_name)
-                # update signature object
+                # update signature object in memory
                 sigs[(sig.internal_name, version)] = new_sig
-                self.dump_state(state=sigs, conn=conn)
-                # update table
-                self.rel_storage.rename_relation(
-                    name=current.versioned_ui_name,
-                    new_name=new_sig.versioned_ui_name,
-                    conn=conn,
+                if not validate_only:
+                    # update table
+                    self.rel_storage.rename_relation(
+                        name=current.versioned_ui_name,
+                        new_name=new_sig.versioned_ui_name,
+                        conn=conn,
+                    )
+        if not validate_only:
+            # update signatures state
+            self.dump_state(state=sigs, conn=conn)
+            if current_ui_name != new_ui_name:
+                logger.debug(
+                    f"Updated UI name of signature: from {current_ui_name} to {new_ui_name}"
                 )
-        if current_ui_name != new_ui_name:
-            logger.debug(
-                f"Updated UI name of signature: from {current_ui_name} to {new_ui_name}"
-            )
+        return sigs
 
     @transaction()
     def update_input_ui_names(self, sig: Signature, conn: Optional[Connection] = None):
@@ -693,18 +702,12 @@ class RelAdapter(Transactable):
 
     @transaction()
     def obj_exists(
-        self, uids: Union[str, list[str]], conn: Optional[Connection] = None
-    ) -> Union[bool, list[bool]]:
-        if isinstance(uids, str):
-            all_uids = [uids]
-        else:
-            all_uids = uids
-        df = self.obj_gets(all_uids, conn=conn)
-        results = [len(df[df[Config.uid_col] == uid]) > 0 for uid in all_uids]
-        if isinstance(uids, str):
-            return results[0]
-        else:
-            return results
+        self, uids: List[str], conn: Optional[Connection] = None
+    ) -> List[bool]:
+        assert isinstance(uids, list)
+        df = self.obj_gets(uids, conn=conn)
+        results = [len(df[df[Config.uid_col] == uid]) > 0 for uid in uids]
+        return results
 
     @transaction()
     def obj_get(self, uid: str, conn: Optional[Connection] = None) -> Any:

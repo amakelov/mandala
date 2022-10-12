@@ -147,3 +147,10 @@ def test_6():
     state.add_call_to_workflow()
     state.execute_workflow()
     state.verify_state()
+
+
+def test_7():
+    state = SingleClientSimulator()
+    state.create_op()
+    state.create_new_version()
+    state.rename_func()

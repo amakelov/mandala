@@ -172,12 +172,15 @@ class SigSyncer(Transactable):
         self.sync_from_remote(conn=conn)
         #! note: we validate before the renaming. Ideally we should have logic
         # to do this for the new signature directly
-        self.validate_transaction(
-            new_sig=sig, all_sigs=self.sig_adapter.load_state(conn=conn)
-        )
+        # self.validate_transaction(
+        #     new_sig=sig, all_sigs=self.sig_adapter.load_state(conn=conn)
+        # )
         new_sig = sig.rename(new_name=new_name)
-        all_sigs = self.sig_adapter.load_state(conn=conn)
-        all_sigs[(new_sig.internal_name, new_sig.version)] = new_sig
+        all_sigs = self.sig_adapter.update_ui_name(
+            sig=new_sig, conn=conn, validate_only=True
+        )
+        # all_sigs = self.sig_adapter.load_state(conn=conn)
+        # all_sigs[(new_sig.internal_name, new_sig.version)] = new_sig
         self.push_signatures(sigs=all_sigs)
         self.sig_adapter.update_ui_name(sig=new_sig, conn=conn)
         return new_sig

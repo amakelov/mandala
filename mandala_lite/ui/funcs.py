@@ -112,6 +112,7 @@ def synchronize(func: FuncInterface, storage: Storage):
     new_sig = storage.sig_syncer.sync_from_local(sig=func.func_op.sig)
     func.func_op.sig = new_sig
     func.is_synchronized = True
+    # to send any default values that were created by adding inputs
     storage.sync_to_remote()
 
 

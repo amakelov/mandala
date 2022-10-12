@@ -96,17 +96,39 @@ class Workflow:
         self.var_node_to_causal_hash[res] = causal_hash
         return res
 
+    def _get_op_hash(
+        self,
+        func_op: FuncOp,
+        node_inputs: Optional[Dict[str, ValQuery]] = None,
+        val_inputs: Optional[Dict[str, ValueRef]] = None,
+    ) -> str:
+        assert (node_inputs is None) != (val_inputs is None)
+        if val_inputs is not None:
+            node_inputs = {
+                name: self.value_to_var[val] for name, val in val_inputs.items()
+            }
+        assert node_inputs is not None
+        op_representation = [
+            {
+                name: self.var_node_to_causal_hash[inp]
+                for name, inp in node_inputs.items()
+            },
+            func_op.sig.versioned_internal_name,
+        ]
+        causal_hash = Hashing.get_content_hash(obj=op_representation)
+        return causal_hash
+
     def add_op(
         self,
         inputs: Dict[str, ValQuery],
         func_op: FuncOp,
     ) -> Tuple[FuncQuery, List[ValQuery]]:
         res = FuncQuery(inputs=inputs, func_op=func_op)
-        op_representation = [
-            {name: self.var_node_to_causal_hash[inp] for name, inp in inputs.items()},
-            func_op.sig.versioned_internal_name,
-        ]
-        causal_hash = Hashing.get_content_hash(obj=op_representation)
+        # op_representation = [
+        #     {name: self.var_node_to_causal_hash[inp] for name, inp in inputs.items()},
+        #     func_op.sig.versioned_internal_name,
+        # ]
+        causal_hash = self._get_op_hash(node_inputs=inputs, func_op=func_op)
         self.op_nodes.append(res)
         self.op_node_to_causal_hash[res] = causal_hash
         # self.causal_hash_to_op_node[causal_hash] = res
@@ -134,14 +156,15 @@ class Workflow:
         if any([inp not in self.value_to_var.keys() for inp in inputs.values()]):
             raise NotImplementedError()
         # process call
-        op_representation = [
-            {
-                name: self.var_node_to_causal_hash[self.value_to_var[inp]]
-                for name, inp in inputs.items()
-            },
-            func_op.sig.versioned_internal_name,
-        ]
-        op_hash = Hashing.get_content_hash(obj=op_representation)
+        # op_representation = [
+        #     {
+        #         name: self.var_node_to_causal_hash[self.value_to_var[inp]]
+        #         for name, inp in inputs.items()
+        #     },
+        #     func_op.sig.versioned_internal_name,
+        # ]
+        # op_hash = Hashing.get_content_hash(obj=op_representation)
+        op_hash = self._get_op_hash(func_op=func_op, val_inputs=inputs)
         if op_hash not in self.op_node_to_causal_hash.values():
             # create op
             op_node, output_nodes = self.add_op(
