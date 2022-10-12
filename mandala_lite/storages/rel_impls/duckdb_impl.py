@@ -86,7 +86,7 @@ class DuckDBRelStorage(RelStorage, Transactable):
                         column_type=column_type
                         if column_type is not None
                         else self.UID_DTYPE,
-                        nullable=False,
+                        # nullable=False,
                     )
                     for column_name, column_type in columns
                 ],

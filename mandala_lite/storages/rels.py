@@ -315,7 +315,9 @@ class SigAdapter(Transactable):
         return sigs
 
     @transaction()
-    def update_input_ui_names(self, sig: Signature, conn: Optional[Connection] = None):
+    def update_input_ui_names(
+        self, sig: Signature, conn: Optional[Connection] = None
+    ) -> Signature:
         """
         Update a signature's input UI names from the given `Signature` object.
         `sig` must have internal data, and must carry the new UI input names.
@@ -342,6 +344,7 @@ class SigAdapter(Transactable):
             logger.debug(
                 f"Updated input UI names of signature named {sig.ui_name}: via mapping {renaming_map}"
             )
+        return new_sig
 
     ############################################################################
     ### helpers

@@ -109,6 +109,7 @@ def synchronize(func: FuncInterface, storage: Storage):
     """
     # first, pull the current data from the remote!
     storage.sig_syncer.sync_from_remote()
+    # this step also sends the signature to the remote
     new_sig = storage.sig_syncer.sync_from_local(sig=func.func_op.sig)
     func.func_op.sig = new_sig
     func.is_synchronized = True

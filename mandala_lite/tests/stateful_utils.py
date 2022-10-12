@@ -3,6 +3,7 @@ from mandala_lite.all import *
 from mandala_lite.tests.utils import *
 from mandala_lite.core.utils import Hashing
 from mandala_lite.core.compiler import *
+import string
 
 
 def combine_inputs(*args, **kwargs) -> str:
@@ -19,7 +20,7 @@ def generate_deterministic(seed: str, n_outputs: int) -> List[str]:
     return result
 
 
-def random_string(size: int) -> str:
+def random_string(size: int = 10) -> str:
     return "".join(random.choice(string.ascii_letters) for _ in range(size))
 
 

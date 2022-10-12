@@ -49,6 +49,14 @@ class Signature:
         # added to the function since its creation
         self._new_input_defaults_uids = {}
 
+    def check_invariants(self):
+        assert set(self.defaults.keys()) <= self.input_names
+        if self.has_internal_data:
+            assert set(self._ui_to_internal_input_map.keys()) == self.input_names
+            assert set(self._new_input_defaults_uids.keys()) <= set(
+                self._ui_to_internal_input_map.values()
+            )
+
     def __repr__(self) -> str:
         return (
             f"Signature(ui_name={self.ui_name}, input_names={self.input_names}, "
@@ -279,10 +287,14 @@ class Signature:
         if len(set(new_names)) != len(new_names):
             raise ValueError("Input name collision")
         res = copy.deepcopy(self)
+        # migrate input names
         for current_name in mapping.keys():
             res.input_names.remove(current_name)
         for new_name in mapping.values():
             res.input_names.add(new_name)
+        # migrate defaults
+        res.defaults = {mapping.get(k, k): v for k, v in res.defaults.items()}
+        # migrate internal data
         for current_name, new_name in mapping.items():
             res.ui_to_internal_input_map[new_name] = res.ui_to_internal_input_map.pop(
                 current_name

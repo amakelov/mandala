@@ -9,7 +9,6 @@ from hypothesis.stateful import (
 )
 from hypothesis._settings import settings, Verbosity
 from hypothesis import strategies as st
-import string
 
 from mandala_lite.common_imports import *
 from mandala_lite.all import *
@@ -26,10 +25,10 @@ from mandala_lite.ui.funcs import synchronize_op
 class ClientState:
     def __init__(self, root: RemoteStorage):
         self.storage = Storage(root=root)
-        self._workflows: List[Workflow] = []
-        self._func_ops: List[FuncOp] = []
-        self._num_func_renames = 0
-        self._num_input_renames = 0
+        self.workflows: List[Workflow] = []
+        self.func_ops: List[FuncOp] = []
+        self.num_func_renames = 0
+        self.num_input_renames = 0
 
 
 class Preconditions:
@@ -43,20 +42,22 @@ class Preconditions:
     # control some of the transitions to avoid long chains, especially ones that
     # make the DB larger
     #! (does this actually optimize things? we need to benchmark)
-    MAX_OPS = 10
+    MAX_OPS_PER_CLIENT = 10
     MAX_INPUTS_PER_OP = 5
-    MAX_WORKFLOWS = 5
+    MAX_WORKFLOWS_PER_CLIENT = 5
     MAX_WORKFLOW_SIZE_TO_ADD_VAR = 5
     MAX_WORKFLOW_SIZE_TO_ADD_OP = 10
     # prevent too many renames
-    MAX_FUNC_RENAMES = 20
-    MAX_INPUT_RENAMES = 20
+    MAX_FUNC_RENAMES_PER_CLIENT = 20
+    MAX_INPUT_RENAMES_PER_CLIENT = 20
 
     @staticmethod
     def create_op(instance: "SingleClientSimulator") -> Tuple[bool, List[ClientState]]:
         # return clients for which an op can be created
         candidates = [
-            c for c in instance.clients if len(c._func_ops) < Preconditions.MAX_OPS
+            c
+            for c in instance.clients
+            if len(c.func_ops) < Preconditions.MAX_OPS_PER_CLIENT
         ]
         return len(candidates) > 0, candidates
 
@@ -70,7 +71,7 @@ class Preconditions:
         # return tuples of (client, op, op_idx) for which an input can be added
         candidates = []
         for c in instance.clients:
-            for idx, func_op in enumerate(c._func_ops):
+            for idx, func_op in enumerate(c.func_ops):
                 if len(func_op.sig.input_names) < Preconditions.MAX_INPUTS_PER_OP:
                     candidates.append((c, func_op, idx))
         return len(candidates) > 0, candidates
@@ -82,8 +83,8 @@ class Preconditions:
         # return tuples of (client, op, idx) for which the op can be renamed
         candidates = []
         for c in instance.clients:
-            if c._num_func_renames < Preconditions.MAX_FUNC_RENAMES:
-                for idx, func_op in enumerate(c._func_ops):
+            if c.num_func_renames < Preconditions.MAX_FUNC_RENAMES_PER_CLIENT:
+                for idx, func_op in enumerate(c.func_ops):
                     candidates.append((c, func_op, idx))
         return len(candidates) > 0, candidates
 
@@ -94,8 +95,8 @@ class Preconditions:
         # return tuples of (client, op, idx) for which an input can be renamed
         candidates = []
         for c in instance.clients:
-            if c._num_input_renames < Preconditions.MAX_INPUT_RENAMES:
-                candidates += [(c, op, idx) for idx, op in enumerate(c._func_ops)]
+            if c.num_input_renames < Preconditions.MAX_INPUT_RENAMES_PER_CLIENT:
+                candidates += [(c, op, idx) for idx, op in enumerate(c.func_ops)]
         return len(candidates) > 0, candidates
 
     @staticmethod
@@ -105,9 +106,9 @@ class Preconditions:
         # return tuples of (client, op, idx of this op) for which a new version can be created
         candidates = []
         for c in instance.clients:
-            num_ops = len(c._func_ops)
-            if num_ops > 0 and num_ops < Preconditions.MAX_OPS:
-                candidates += [(c, op, idx) for idx, op in enumerate(c._func_ops)]
+            num_ops = len(c.func_ops)
+            if num_ops > 0 and num_ops < Preconditions.MAX_OPS_PER_CLIENT:
+                candidates += [(c, op, idx) for idx, op in enumerate(c.func_ops)]
         return len(candidates) > 0, candidates
 
     ############################################################################
@@ -121,7 +122,7 @@ class Preconditions:
         candidates = [
             c
             for c in instance.clients
-            if len(c._workflows) < Preconditions.MAX_WORKFLOWS
+            if len(c.workflows) < Preconditions.MAX_WORKFLOWS_PER_CLIENT
         ]
         return len(candidates) > 0, candidates
 
@@ -132,7 +133,7 @@ class Preconditions:
         # return tuples of (client, workflow) for which an input var can be added
         candidates = []
         for c in instance.clients:
-            for w in c._workflows:
+            for w in c.workflows:
                 if w.shape_size < Preconditions.MAX_WORKFLOW_SIZE_TO_ADD_VAR:
                     candidates.append((c, w))
         return len(candidates) > 0, candidates
@@ -144,12 +145,12 @@ class Preconditions:
         # return tuples of (client, workflow, op) for which an op can be added
         candidates = []
         for c in instance.clients:
-            for w in c._workflows:
+            for w in c.workflows:
                 if (
                     w.shape_size < Preconditions.MAX_WORKFLOW_SIZE_TO_ADD_OP
                     and len(w.var_nodes) > 0
                 ):
-                    candidates += [(c, w, op) for op in c._func_ops]
+                    candidates += [(c, w, op) for op in c.func_ops]
         return len(candidates) > 0, candidates
 
     @staticmethod
@@ -159,7 +160,7 @@ class Preconditions:
         # return tuples of (client, workflow, op_node) for which a call can be added
         candidates = []
         for c in instance.clients:
-            for w in c._workflows:
+            for w in c.workflows:
                 candidates += [(c, w, op_node) for op_node in w.callable_op_nodes]
         return len(candidates) > 0, candidates
 
@@ -171,7 +172,7 @@ class Preconditions:
         # executed
         candidates = []
         for c in instance.clients:
-            for w in c._workflows:
+            for w in c.workflows:
                 if w.num_calls > 0:
                     candidates.append((c, w))
         return len(candidates) > 0, candidates
@@ -184,7 +185,7 @@ class Preconditions:
         # queried
         candidates = []
         for c in instance.clients:
-            for w in c._workflows:
+            for w in c.workflows:
                 if len(w.var_nodes) > 0 and w.is_saturated:
                     candidates.append((c, w))
         return len(candidates) > 0, candidates
@@ -217,15 +218,15 @@ class SingleClientSimulator(RuleBasedStateMachine):
         """
         client = random.choice(Preconditions.create_op(self)[1])
         new_func_op = make_op(
-            ui_name=random_string(size=10),
-            input_names=[random_string(size=10) for _ in range(random.randint(1, 3))],
+            ui_name=random_string(),
+            input_names=[random_string() for _ in range(random.randint(1, 3))],
             n_outputs=random.randint(0, 3),
             defaults={},
             version=0,
             deterministic=True,
         )
         synchronize_op(func_op=new_func_op, storage=client.storage)
-        client._func_ops.append(new_func_op)
+        client.func_ops.append(new_func_op)
 
     @precondition(lambda machine: Preconditions.add_input(machine)[0])
     @rule()
@@ -237,11 +238,11 @@ class SingleClientSimulator(RuleBasedStateMachine):
         f = func_op.func
         sig = func_op.sig
         # simulate update using low-level API
-        new_sig = sig.create_input(name=random_string(size=10), default=23)
+        new_sig = sig.create_input(name=random_string(), default=23)
         # TODO: provide a new function with extra input as a user would
         new_func_op = FuncOp._from_data(f=f, sig=new_sig)
         synchronize_op(func_op=new_func_op, storage=client.storage)
-        client._func_ops[idx] = new_func_op
+        client.func_ops[idx] = new_func_op
 
     @precondition(lambda machine: Preconditions.rename_func(machine)[0])
     @rule()
@@ -250,11 +251,11 @@ class SingleClientSimulator(RuleBasedStateMachine):
         client, func_op, idx = random.choice(candidates)
         # idx = random.randint(0, len(self._func_ops) - 1)
         # func_op = self._func_ops[idx]
-        new_name = random_string(size=10)
+        new_name = random_string()
         # find and rename all versions
         all_versions = [
             (i, other_func_op)
-            for i, other_func_op in enumerate(client._func_ops)
+            for i, other_func_op in enumerate(client.func_ops)
             if other_func_op.sig.internal_name == func_op.sig.internal_name
         ]
         rename_done = False
@@ -267,8 +268,6 @@ class SingleClientSimulator(RuleBasedStateMachine):
                 new_sig = rename_func(
                     storage=client.storage, func=func_interface, new_name=new_name
                 )
-                # sess.d = locals()
-                # raise
                 rename_done = True
             else:
                 # after the rename, get the true signature from the storage
@@ -278,8 +277,8 @@ class SingleClientSimulator(RuleBasedStateMachine):
             # now update the state of the simulator
             new_func_op_version = FuncOp._from_data(f=func_op_version.func, sig=new_sig)
             synchronize_op(func_op=new_func_op_version, storage=client.storage)
-            client._func_ops[version_idx] = new_func_op_version
-        client._num_func_renames += 1
+            client.func_ops[version_idx] = new_func_op_version
+        client.num_func_renames += 1
 
     @precondition(lambda machine: Preconditions.rename_input(machine)[0])
     @rule()
@@ -289,7 +288,7 @@ class SingleClientSimulator(RuleBasedStateMachine):
         # func_idx = random.randint(0, len(self._func_ops) - 1)
         # func_op = self._func_ops[func_idx]
         input_to_rename = random.choice(sorted(list(func_op.sig.input_names)))
-        new_name = random_string(size=10)
+        new_name = random_string()
         # use the API the user would use to rename
         func_interface = FuncInterface(func_op=func_op)
         synchronize(func=func_interface, storage=client.storage)
@@ -302,8 +301,8 @@ class SingleClientSimulator(RuleBasedStateMachine):
         # now update the state of the simulator
         new_func_op = FuncOp._from_data(f=func_op.func, sig=new_sig)
         synchronize_op(func_op=new_func_op, storage=client.storage)
-        client._func_ops[func_idx] = new_func_op
-        client._num_input_renames += 1
+        client.func_ops[func_idx] = new_func_op
+        client.num_input_renames += 1
 
     @precondition(lambda machine: Preconditions.create_new_version(machine)[0])
     @rule()
@@ -316,14 +315,14 @@ class SingleClientSimulator(RuleBasedStateMachine):
         new_version = latest_version.version + 1
         new_func_op = make_op(
             ui_name=func_op.sig.ui_name,
-            input_names=[random_string(size=10) for _ in range(random.randint(1, 3))],
+            input_names=[random_string() for _ in range(random.randint(1, 3))],
             n_outputs=random.randint(0, 3),
             defaults={},
             version=new_version,
             deterministic=True,
         )
         synchronize_op(func_op=new_func_op, storage=client.storage)
-        client._func_ops.append(new_func_op)
+        client.func_ops.append(new_func_op)
 
     ############################################################################
     ### generating workflows
@@ -337,7 +336,7 @@ class SingleClientSimulator(RuleBasedStateMachine):
         candidates = Preconditions.create_workflow(self)[1]
         client = random.choice(candidates)
         res = Workflow()
-        client._workflows.append(res)
+        client.workflows.append(res)
 
     @precondition(lambda machine: Preconditions.add_input_var_to_workflow(machine)[0])
     @rule()
@@ -356,6 +355,7 @@ class SingleClientSimulator(RuleBasedStateMachine):
         Add an instance of some op to some workflow.
         """
         candidates = Preconditions.add_op_to_workflow(self)[1]
+        sess.d = locals()
         client, workflow, func_op = random.choice(candidates)
         # func_op = random.choice(self._func_ops)
         # workflow = random.choice([w for w in self._workflows if len(w.var_nodes) > 0])
@@ -396,11 +396,21 @@ class SingleClientSimulator(RuleBasedStateMachine):
     def execute_workflow(self):
         candidates = Preconditions.execute_workflow(self)[1]
         client, workflow = random.choice(candidates)
+        client.storage.sync_from_remote()
         # workflow = random.choice([w for w in self._workflows if w.num_calls > 0])
         calls = SimpleWorkflowExecutor().execute(
             workflow=workflow, storage=client.storage
         )
         client.storage.commit(calls=calls)
+        client.storage.sync_to_remote()
+
+    ############################################################################
+    ### multi-client rules
+    ############################################################################
+    @rule()
+    def sync(self):
+        client = random.choice(self.clients)
+        client.storage.sync_with_remote()
 
     @invariant()
     def verify_state(self):
@@ -410,8 +420,10 @@ class SingleClientSimulator(RuleBasedStateMachine):
             # check storage invariants
             check_invariants(storage=client.storage)
             # check invariants on the workflows
-            for w in client._workflows:
+            for w in client.workflows:
                 w.check_invariants()
+            for func_op in client.func_ops:
+                func_op.sig.check_invariants()
 
     def check_sig_synchronization(self):
         for client in self.clients:
@@ -433,5 +445,17 @@ class SingleClientSimulator(RuleBasedStateMachine):
     #     df = self.storage.execute_query(select_queries=val_queries)
 
 
-TestCase = SingleClientSimulator.TestCase
-TestCase.settings = settings(max_examples=100, deadline=None, stateful_step_count=50)
+class MultiClientSimulator(SingleClientSimulator):
+    def __init__(self, n_clients: int = 3):
+        super().__init__(n_clients=n_clients)
+
+
+TestCaseSingle = SingleClientSimulator.TestCase
+TestCaseSingle.settings = settings(
+    max_examples=100, deadline=None, stateful_step_count=20
+)
+
+TestCaseMany = MultiClientSimulator.TestCase
+TestCaseMany.settings = settings(
+    max_examples=100, deadline=None, stateful_step_count=20
+)

@@ -85,8 +85,12 @@ class SigSyncer(Transactable):
             for (internal_name, version), sig in sigs.items():
                 logging.debug(f"Processing signature {sig}")
                 if self.sig_adapter.exists_internal(sig=sig, conn=conn):
+                    sess.d = locals()
+                    # first set the ui name to the current one (if necessary)
                     self.sig_adapter.update_ui_name(sig=sig, conn=conn)
+                    # then, update the input names too (if necessary)
                     self.sig_adapter.update_input_ui_names(sig=sig, conn=conn)
+                    # now, update the (already name-aligned) signature from the new
                     self.sig_adapter.update_sig(sig=sig, conn=conn)
                 else:
                     self.sig_adapter.create_sig(sig=sig, conn=conn)

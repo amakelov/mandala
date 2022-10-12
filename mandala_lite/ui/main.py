@@ -316,8 +316,9 @@ class Storage(Transactable):
                 changeset_data[table_name] = deserialized_table
             # pass to UI names
             changeset_data = self.sig_adapter.rename_tables(
-                tables=changeset_data, to="ui"
+                tables=changeset_data, to="ui", conn=conn
             )
+            sess.d = locals()
             for table_name, deserialized_table in changeset_data.items():
                 self.rel_storage.upsert(table_name, deserialized_table, conn=conn)
         # evaluated_tables = {k: self.rel_adapter.evaluate_call_table(ta=v, conn=conn) for k, v in data.items() if k != Config.vref_table}
