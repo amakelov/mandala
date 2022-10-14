@@ -29,6 +29,10 @@ class MockStorage:
     - only uses internal names for signatures;
     - can be synced in a "naive" way with another storage: the state of the
     other storage is upserted into this storage.
+
+    It is invariant-checked at the entry and exit of every method. The
+    state of this object should only be changed through these methods. This
+    makes it easy to track down when an inconsistent update happened.
     """
 
     def __init__(self):
@@ -36,6 +40,18 @@ class MockStorage:
         self.values: Dict[str, Any] = {}
         # versioned internal op name -> (internal input name -> default uid)
         self.default_uids: Dict[str, Dict[str, str]] = {}
+        self.check_invariants()
+
+    def __eq__(self, other: Any):
+        if not isinstance(other, MockStorage):
+            return False
+        values_equal = self.values == other.values
+        default_uids_equal = self.default_uids == other.default_uids
+        calls_equal = self.calls.keys() == other.calls.keys() and all(
+            compare_dfs_as_relations(self.calls[k], other.calls[k])
+            for k in self.calls.keys()
+        )
+        return values_equal and default_uids_equal and calls_equal
 
     def check_invariants(self):
         assert self.default_uids.keys() == self.calls.keys()
@@ -52,22 +68,30 @@ class MockStorage:
                 assert internal_input_name in df.columns
 
     def create_op(self, func_op: FuncOp):
+        self.check_invariants()
         sig = func_op.sig
+        if sig.versioned_internal_name in self.calls.keys():
+            raise ValueError()
+        if sig.versioned_internal_name in self.default_uids:
+            raise ValueError()
         self.calls[sig.versioned_internal_name] = pd.DataFrame(
             columns=[Config.uid_col]
             + list(sig.ui_to_internal_input_map.values())
             + [dump_output_name(index=i) for i in range(sig.n_outputs)]
         )
         self.default_uids[sig.versioned_internal_name] = {}
+        self.check_invariants()
 
     def add_input(
         self, func_op: FuncOp, internal_name: str, default_value: Any, default_uid: str
     ):
+        self.check_invariants()
         sig = func_op.sig
         df = self.calls[sig.versioned_internal_name]
         df[internal_name] = [default_uid for _ in range(len(df))]
         self.values[default_uid] = default_value
         self.default_uids[sig.versioned_internal_name][internal_name] = default_uid
+        self.check_invariants()
 
     def rename_func(self, func_op: FuncOp, new_name: str):
         pass
@@ -76,9 +100,12 @@ class MockStorage:
         pass
 
     def create_new_version(self, new_version: FuncOp):
+        self.check_invariants()
         self.create_op(func_op=new_version)
+        self.check_invariants()
 
     def add_call(self, call: Call):
+        self.check_invariants()
         func_op, inputs, outputs = call.func_op, call.inputs, call.outputs
         sig = func_op.sig
         row = {
@@ -99,12 +126,23 @@ class MockStorage:
             )
         for vref in itertools.chain(inputs.values(), outputs):
             self.values[vref.uid] = unwrap(vref)
+        self.check_invariants()
 
     def sync_from_other(self, other: "MockStorage"):
+        """
+        Update this storage with the new data from another storage.
+
+        NOTE: always copy the other storage's state into this storage; never use
+        shared objects.
+        """
+        self.check_invariants()
+        # update values
         for k, v in other.values.items():
             if k in self.values.keys():
                 assert v == self.values[k]
-            self.values[k] = v
+            # avoid shared objects
+            self.values[k] = copy.deepcopy(v)
+        # update defaults
         for versioned_internal_name, defaults in other.default_uids.items():
             if versioned_internal_name in self.calls.keys():
                 df = self.calls[versioned_internal_name]
@@ -115,18 +153,22 @@ class MockStorage:
                             internal_input_name
                         ] = default_uid
             else:
-                self.default_uids[versioned_internal_name] = defaults
+                # use a copy to avoid a shared mutable object
+                self.default_uids[versioned_internal_name] = copy.deepcopy(defaults)
+        # update calls
         for versioned_internal_name, df in other.calls.items():
             if versioned_internal_name in self.calls.keys():
                 current_df = self.calls[versioned_internal_name]
-                new_df = df[~df[Config.uid_col].isin(current_df[Config.uid_col])]
+                new_df = df[~df[Config.uid_col].isin(current_df[Config.uid_col])].copy()
                 self.calls[versioned_internal_name] = pd.concat(
                     [current_df, new_df], ignore_index=True
                 )
             else:
-                self.calls[versioned_internal_name] = df
+                self.calls[versioned_internal_name] = df.copy()
+        self.check_invariants()
 
     def compare_with_real(self, real_storage: Storage):
+        self.check_invariants()
         # extract values
         values_df = real_storage.rel_adapter.get_vrefs()
         values = {
@@ -145,7 +187,6 @@ class MockStorage:
                 columns=sig.ui_to_internal_input_map
             )
             default_uids[versioned_internal_name] = sig._new_input_defaults_uids
-            sess.d = locals()
         return (
             values == self.values
             and all(
@@ -249,7 +290,7 @@ class Preconditions:
     ### growing workflows
     ############################################################################
     @staticmethod
-    def create_workflow(
+    def add_workflow(
         instance: "SingleClientSimulator",
     ) -> Tuple[bool, List[ClientState]]:
         # return clients for which a workflow can be created
@@ -317,6 +358,19 @@ class Preconditions:
     ) -> Tuple[bool, List[ClientState]]:
         candidates = [c for c in instance.clients if len(c.workflows) > 0]
         return len(candidates) > 0, candidates
+
+    @staticmethod
+    def sync_all(
+        instance: "SingleClientSimulator",
+    ) -> bool:
+        # require at least some calls to be executed
+        for client in instance.clients:
+            if any(
+                len(df) > 0
+                for df in client.storage.rel_adapter.get_all_call_data().values()
+            ):
+                return True
+        return False
 
     @staticmethod
     def query_workflow(
@@ -487,13 +541,13 @@ class SingleClientSimulator(RuleBasedStateMachine):
     ############################################################################
     ### generating workflows
     ############################################################################
-    @precondition(lambda machine: Preconditions.create_workflow(machine)[0])
+    @precondition(lambda machine: Preconditions.add_workflow(machine)[0])
     @rule()
     def add_workflow(self):
         """
         Add a new (empty) workflow to the test.
         """
-        candidates = Preconditions.create_workflow(self)[1]
+        candidates = Preconditions.add_workflow(self)[1]
         client = random.choice(candidates)
         res = Workflow()
         client.workflows.append(res)
@@ -581,7 +635,7 @@ class SingleClientSimulator(RuleBasedStateMachine):
     ### multi-client rules
     ############################################################################
     @rule()
-    def sync(self):
+    def sync_one(self):
         client = random.choice(self.clients)
         client.storage.sync_with_remote()
 
@@ -595,6 +649,20 @@ class SingleClientSimulator(RuleBasedStateMachine):
         for workflow in client.workflows:
             self._execute_workflow(client=client, workflow=workflow)
         assert client.mock_storage.compare_with_real(client.storage)
+
+    @precondition(lambda machine: Preconditions.sync_all(machine))
+    @rule()
+    def sync_all(self):
+        for client in self.clients:
+            client.storage.sync_with_remote()
+            client.mock_storage.sync_from_other(other=self.mock_storage)
+        for client in self.clients:
+            # have to do it again!
+            client.storage.sync_with_remote()
+            client.mock_storage.sync_from_other(other=self.mock_storage)
+        for client in self.clients:
+            assert client.mock_storage == self.mock_storage
+            assert self.mock_storage.compare_with_real(real_storage=client.storage)
 
     @invariant()
     def verify_state(self):

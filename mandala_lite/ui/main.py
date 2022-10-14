@@ -536,13 +536,11 @@ class SimpleWorkflowExecutor(WorkflowExecutor):
                     inputs=inputs,
                 )
                 # overwrite things
-                print(vref_outputs)
                 for output, vref_output in zip(outputs, vref_outputs):
                     output.obj = vref_output.obj
                     output.uid = vref_output.uid
                     output.in_memory = True
                 result.append(call)
-                # print(call.outputs)
         # filter out repeated calls
         result = list({call.uid: call for call in result}.values())
         return result

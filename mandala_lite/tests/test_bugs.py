@@ -180,8 +180,8 @@ def test_9():
     state = MultiClientSimulator(n_clients=3)
     state.create_op()
     state.rename_input()
-    state.sync()
-    state.sync()
+    state.sync_one()
+    state.sync_one()
     state.add_workflow()
     state.rename_func()
     state.add_workflow()
@@ -196,7 +196,7 @@ def test_9():
     state.add_call_to_workflow()
     state.add_input()
     state.add_input_var_to_workflow()
-    state.sync()
+    state.sync_one()
 
 
 def test_10():
@@ -211,7 +211,7 @@ def test_10():
     state.add_call_to_workflow()
     state.execute_workflow()
     state.add_input()
-    state.sync()
+    state.sync_one()
 
 
 def test_11():
@@ -225,7 +225,7 @@ def test_11():
     state.add_call_to_workflow()
     state.execute_workflow()
     state.add_input()
-    state.sync()
+    state.sync_one()
     state.verify_state()
 
 
@@ -241,5 +241,33 @@ def test_12():
     state.add_call_to_workflow()
     state.execute_workflow()
     state.add_input()
-    state.sync()
+    state.sync_one()
+    state.verify_state()
+
+
+def test_13():
+    state = MultiClientSimulator(n_clients=3)
+    state.create_op()
+    state.rename_func()
+    state.rename_input()
+    state.add_input()
+    state.rename_func()
+    state.rename_func()
+    state.add_input()
+    state.create_op()
+    state.add_workflow()
+    state.check_mock_storage_single()
+    state.create_op()
+    state.sync_one()
+    state.create_op()
+    state.add_input()
+    state.rename_func()
+    state.add_input()
+    state.rename_input()
+    state.check_mock_storage_single()
+    state.rename_func()
+    state.create_op()
+    state.create_op()
+    state.add_input()
+    state.create_new_version()
     state.verify_state()
