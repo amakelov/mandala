@@ -126,7 +126,7 @@ class Call:
         Generate a `Call` from a single-row table encoding the UID, input and
         output UIDs.
 
-        TODO: this currently does not include the operation
+        NOTE: this does not include the objects for the inputs and outputs to the call!
         """
         columns = row.column_names
         output_columns = [
@@ -149,6 +149,26 @@ class Call:
             ],
             func_op=func_op,
         )
+
+    def set_input_values(self, inputs: Dict[str, ValueRef]) -> "Call":
+        res = copy.deepcopy(self)
+        assert set(inputs.keys()) == set(res.inputs.keys())
+        for k, v in inputs.items():
+            current = res.inputs[k]
+            assert v.in_memory and not current.in_memory
+            current.obj = v.obj
+            current.in_memory = True
+        return res
+
+    def set_output_values(self, outputs: List[ValueRef]) -> "Call":
+        res = copy.deepcopy(self)
+        assert len(outputs) == len(res.outputs)
+        for i, v in enumerate(outputs):
+            current = res.outputs[i]
+            assert v.in_memory and not current.in_memory
+            current.obj = v.obj
+            current.in_memory = True
+        return res
 
 
 class FuncOp:

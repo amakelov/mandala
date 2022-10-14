@@ -16,7 +16,12 @@ class RelStorage(ABC):
     """
 
     @abstractmethod
-    def create_relation(self, name: str, columns: List[tuple[str, str]]):
+    def create_relation(
+        self,
+        name: str,
+        columns: List[tuple[str, Optional[str]]],
+        defaults: Dict[str, Any],
+    ):
         """
         Create a relation with the given name and columns.
         """

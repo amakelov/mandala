@@ -8,7 +8,7 @@ from duckdb import DuckDBPyConnection as Connection
 
 from ..common_imports import *
 from ..core.config import Config, Prov, dump_output_name
-from ..core.model import Call, unwrap, FuncOp
+from ..core.model import Call, unwrap, FuncOp, ValueRef
 from ..core.sig import Signature
 from ..utils import upsert_df, serialize, deserialize, _rename_cols
 from .rel_impls.duckdb_impl import DuckDBRelStorage
@@ -217,6 +217,7 @@ class SigAdapter(Transactable):
             name=sig.versioned_ui_name,
             columns=columns,
             primary_key=Config.uid_col,
+            defaults=sig.new_ui_input_default_uids,
             conn=conn,
         )
         logger.debug(f"Created signature:\n{sig}")
@@ -238,6 +239,7 @@ class SigAdapter(Transactable):
             name=sig.versioned_ui_name,
             columns=columns,
             primary_key=Config.uid_col,
+            defaults=sig.new_ui_input_default_uids,
             conn=conn,
         )
         logger.debug(f"Created new version:\n{sig}")
@@ -269,7 +271,8 @@ class SigAdapter(Transactable):
             )
             # insert the default in the objects *in the database*, if it's
             # not there already
-            self.rel_adapter.obj_set(uid=default_uid, value=default_value, conn=conn)
+            default_vref = ValueRef(uid=default_uid, obj=default_value, in_memory=True)
+            self.rel_adapter.obj_set(uid=default_uid, value=default_vref, conn=conn)
         if len(updates) > 0:
             logger.debug(
                 f"Updated signature:\n    new inputs:{updates} new signature:\n    {sig}"
@@ -431,8 +434,9 @@ class RelAdapter(Transactable):
     def init(self, conn: Optional[Connection] = None):
         self.rel_storage.create_relation(
             name=self.VREF_TABLE,
-            columns=[(Config.uid_col, None), ("value", "blob")],
+            columns=[(Config.uid_col, None), (Config.vref_value_col, "blob")],
             primary_key=Config.uid_col,
+            defaults={},
             conn=conn,
         )
         # Initialize the event log.
@@ -443,6 +447,7 @@ class RelAdapter(Transactable):
             name=self.EVENT_LOG_TABLE,
             columns=[(Config.uid_col, None), ("table", "varchar")],
             primary_key=Config.uid_col,
+            defaults={},
             conn=conn,
         )
         # The signatures table is a binary dump of the signatures
@@ -453,6 +458,7 @@ class RelAdapter(Transactable):
                 ("signatures", "blob"),
             ],
             primary_key="index",
+            defaults={},
             conn=conn,
         )
 
@@ -657,7 +663,10 @@ class RelAdapter(Transactable):
         return len(self._query_call(call_uid, conn=conn)) > 0
 
     @transaction()
-    def call_get(self, call_uid: str, conn: Optional[Connection] = None) -> Call:
+    def call_get_lazy(self, call_uid: str, conn: Optional[Connection] = None) -> Call:
+        """
+        Return the call with the inputs/outputs as lazy value references.
+        """
         row = self._query_call(call_uid, conn=conn).take([0])
         table_name = row.column(1)[0]
         table = Table(table_name)
@@ -713,12 +722,14 @@ class RelAdapter(Transactable):
         return results
 
     @transaction()
-    def obj_get(self, uid: str, conn: Optional[Connection] = None) -> Any:
+    def obj_get(self, uid: str, conn: Optional[Connection] = None) -> ValueRef:
         df = self.obj_gets(uids=[uid], conn=conn)
         return df.loc[0, "value"]
 
     @transaction()
-    def obj_set(self, uid: str, value: Any, conn: Optional[Connection] = None) -> None:
+    def obj_set(
+        self, uid: str, value: ValueRef, conn: Optional[Connection] = None
+    ) -> None:
         if self.obj_exists(uids=[uid], conn=conn)[0]:
             return  # guarantees no overwriting of values
         serialized_value = serialize(value)

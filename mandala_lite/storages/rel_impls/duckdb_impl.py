@@ -67,7 +67,8 @@ class DuckDBRelStorage(RelStorage, Transactable):
     def create_relation(
         self,
         name: str,
-        columns: List[tuple[str, Optional[str]]],
+        columns: List[tuple[str, Optional[str]]],  # [(col name, type), ...]
+        defaults: Dict[str, Any],  # {col name: default value, ...}
         primary_key: Optional[str] = None,
         conn: Optional[Connection] = None,
     ):
@@ -86,6 +87,7 @@ class DuckDBRelStorage(RelStorage, Transactable):
                         column_type=column_type
                         if column_type is not None
                         else self.UID_DTYPE,
+                        default=defaults.get(column_name, None),
                         # nullable=False,
                     )
                     for column_name, column_type in columns
@@ -218,18 +220,8 @@ class DuckDBRelStorage(RelStorage, Transactable):
         """
         if len(ta) == 0:
             return
-        # TODO this a temporary hack until we get function signature sync working!
         if not self.table_exists(relation, conn=conn):
             raise RuntimeError()
-            self.create_relation(
-                relation,
-                [(col, None) for col in ta.column_names],
-                primary_key=Config.uid_col,
-                conn=conn,
-            )
-        table_cols = self._get_cols(relation=relation, conn=conn)
-        # this assertion is not necessary true if we have defaults on the table!
-        # assert set(ta.column_names) == set(table_cols)
         cols_string = ", ".join([f'"{column_name}"' for column_name in ta.column_names])
         primary_keys = self._get_primary_keys(relation=relation, conn=conn)
         if len(primary_keys) != 1:

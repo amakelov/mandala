@@ -107,14 +107,14 @@ def synchronize(func: FuncInterface, storage: Storage):
     """
     Synchronize a function in-place.
     """
-    # first, pull the current data from the remote!
-    storage.sig_syncer.sync_from_remote()
-    # this step also sends the signature to the remote
-    new_sig = storage.sig_syncer.sync_from_local(sig=func.func_op.sig)
-    func.func_op.sig = new_sig
+    synchronize_op(func_op=func.func_op, storage=storage)
+    # # first, pull the current data from the remote!
+    # storage.sig_syncer.sync_from_remote()
+    # # this step also sends the signature to the remote
+    # new_sig = storage.sig_syncer.sync_from_local(sig=func.func_op.sig)
     func.is_synchronized = True
-    # to send any default values that were created by adding inputs
-    storage.sync_to_remote()
+    # # to send any default values that were created by adding inputs
+    # storage.sync_to_remote()
 
 
 def synchronize_op(func_op: FuncOp, storage: Storage):
@@ -123,6 +123,9 @@ def synchronize_op(func_op: FuncOp, storage: Storage):
     """
     # first, pull the current data from the remote!
     storage.sig_syncer.sync_from_remote()
+    # this step also sends the signature to the remote
     new_sig = storage.sig_syncer.sync_from_local(sig=func_op.sig)
     func_op.sig = new_sig
     func_op.is_synchronized = True
+    # to send any default values that were created by adding inputs
+    storage.sync_to_remote()

@@ -24,6 +24,7 @@ class Config:
     uid_col = "__uid__"
     # name for the table that holds the value reference UIDs
     vref_table = "__vrefs__"
+    vref_value_col = "value"
     # name for the event log table
     event_log_table = "__event_log__"
     # todo: currently unused?

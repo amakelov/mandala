@@ -30,7 +30,10 @@ import numpy as np
 
 
 class Session:
-    pass
+    # for debugging
+
+    def __init__(self):
+        self.items = []
 
 
 logger = logging.getLogger("mandala_lite")

@@ -227,3 +227,19 @@ def test_11():
     state.add_input()
     state.sync()
     state.verify_state()
+
+
+def test_12():
+    state = MultiClientSimulator(n_clients=3)
+    state.add_workflow()
+    state.add_input_var_to_workflow()
+    state.add_input_var_to_workflow()
+    state.create_op()
+    state.add_input_var_to_workflow()
+    state.add_input_var_to_workflow()
+    state.add_op_to_workflow()
+    state.add_call_to_workflow()
+    state.execute_workflow()
+    state.add_input()
+    state.sync()
+    state.verify_state()

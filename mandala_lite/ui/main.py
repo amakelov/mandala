@@ -199,18 +199,24 @@ class Storage(Transactable):
         if self.call_cache.exists(call_uid):
             return self.call_cache.get(call_uid)
         else:
-            return self.rel_adapter.call_get(call_uid)
+            lazy_call = self.rel_adapter.call_get_lazy(call_uid)
+            # load the values of the inputs and outputs
+            inputs = {k: self.obj_get(v.uid) for k, v in lazy_call.inputs.items()}
+            outputs = [self.obj_get(v.uid) for v in lazy_call.outputs]
+            call_without_outputs = lazy_call.set_input_values(inputs=inputs)
+            call = call_without_outputs.set_output_values(outputs=outputs)
+            return call
 
     def call_set(self, call_uid: str, call: Call) -> None:
         self.call_cache.set(call_uid, call)
 
-    def obj_get(self, obj_uid: str) -> Any:
+    def obj_get(self, obj_uid: str) -> ValueRef:
         if self.obj_cache.exists(obj_uid):
             return self.obj_cache.get(obj_uid)
         return self.rel_adapter.obj_get(uid=obj_uid)
 
-    def obj_set(self, obj_uid: str, value: Any) -> None:
-        self.obj_cache.set(obj_uid, value)
+    def obj_set(self, obj_uid: str, vref: ValueRef) -> None:
+        self.obj_cache.set(obj_uid, vref)
 
     def preload_objs(self, keys: list[str]):
         keys_not_in_cache = [key for key in keys if not self.obj_cache.exists(key)]
@@ -318,7 +324,6 @@ class Storage(Transactable):
             changeset_data = self.sig_adapter.rename_tables(
                 tables=changeset_data, to="ui", conn=conn
             )
-            sess.d = locals()
             for table_name, deserialized_table in changeset_data.items():
                 self.rel_storage.upsert(table_name, deserialized_table, conn=conn)
         # evaluated_tables = {k: self.rel_adapter.evaluate_call_table(ta=v, conn=conn) for k, v in data.items() if k != Config.vref_table}
@@ -531,11 +536,13 @@ class SimpleWorkflowExecutor(WorkflowExecutor):
                     inputs=inputs,
                 )
                 # overwrite things
+                print(vref_outputs)
                 for output, vref_output in zip(outputs, vref_outputs):
                     output.obj = vref_output.obj
                     output.uid = vref_output.uid
                     output.in_memory = True
                 result.append(call)
+                # print(call.outputs)
         # filter out repeated calls
         result = list({call.uid: call for call in result}.values())
         return result

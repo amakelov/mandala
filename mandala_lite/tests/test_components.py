@@ -6,7 +6,7 @@ def test_rel_storage():
     rel_storage = DuckDBRelStorage()
     assert set(rel_storage.get_tables()) == set()
     rel_storage.create_relation(
-        name="test", columns=[("a", None), ("b", None)], primary_key="a"
+        name="test", columns=[("a", None), ("b", None)], primary_key="a", defaults={}
     )
     assert set(rel_storage.get_tables()) == {"test"}
     assert rel_storage.get_data(table="test").empty
