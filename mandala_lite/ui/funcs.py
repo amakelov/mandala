@@ -91,7 +91,7 @@ class FuncDecorator:
         return FuncInterface(func_op=func_op)
 
 
-def op(*args, **kwargs) -> FuncInterface:
+def op(*args, **kwargs) -> Callable:
     if len(args) == 1 and len(kwargs) == 0 and callable(args[0]):
         # @op case
         func_op = FuncOp(func=args[0])

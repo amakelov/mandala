@@ -52,6 +52,8 @@
 # eggs
 mandala_lite.egg-info/*
 
+mandala_lite/demos/data/
+
 ### fancier things
 # visualizations
 # Ignore files cached by Hypothesis

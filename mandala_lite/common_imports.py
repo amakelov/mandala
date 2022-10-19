@@ -40,7 +40,7 @@ logger = logging.getLogger("mandala_lite")
 # logger.addHandler(logging.StreamHandler())
 FORMAT = "[%(filename)s:%(lineno)s - %(funcName)20s() ] %(message)s"
 logging.basicConfig(format=FORMAT)
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.INFO)
 sess = Session()
 
 TableType = TypeVar("TableType", pa.Table, pd.DataFrame)
