@@ -681,20 +681,22 @@ class SingleClientSimulator(RuleBasedStateMachine):
         for client in self.clients:
             assert client.storage.root.sigs == client.storage.sig_adapter.load_state()
 
-    # @precondition(Preconditions.query_workflow)
+    # @precondition(lambda machine: Preconditions.query_workflow(machine)[0])
     # @rule()
     # def query_workflow(self):
-    #     workflow = random.choice([w for w in self._workflows if w.is_saturated])
-    #     path = Path(__file__).parent / f"bug.cloudpickle"
-    #     op_nodes = copy.deepcopy(workflow.op_nodes)
-    #     db_dump_path = Path(__file__).parent.absolute() / 'db_dump/'
-    #     self.storage.rel_storage.execute_no_results(query=f"EXPORT DATABASE '{db_dump_path}';")
-    #     data = (self._ops)
-    #     with open(path, "wb") as f:
-    #         cloudpickle.dump(data, f)
+    #     candidates = Preconditions.query_workflow(self)[1]
+    #     client, workflow = random.choice(candidates)
+    #     # workflow = random.choice([w for w in client.workflows if w.is_saturated])
+    #     # path = Path(__file__).parent / f"bug.cloudpickle"
+    #     # op_nodes = copy.deepcopy(workflow.op_nodes)
+    #     # db_dump_path = Path(__file__).parent.absolute() / 'db_dump/'
+    #     # self.storage.rel_storage.execute_no_results(query=f"EXPORT DATABASE '{db_dump_path}';")
+    #     # data = (self._ops)
+    #     # with open(path, "wb") as f:
+    #     #     cloudpickle.dump(data, f)
     #     val_queries, op_queries = workflow.var_nodes, workflow.op_nodes
-    #     workflow.print_shape()
-    #     df = self.storage.execute_query(select_queries=val_queries)
+    #     # workflow.print_shape()
+    #     df = client.storage.execute_query(select_queries=val_queries, engine='naive')
 
 
 class MultiClientSimulator(SingleClientSimulator):

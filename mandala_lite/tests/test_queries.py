@@ -32,6 +32,13 @@ def test_basics():
         assert all(df["j"] == df["i"] + 1)
     check_invariants(storage)
 
+    with storage.query() as q:
+        i = Q().named("i")
+        j = inc(i).named("j")
+        final = add(i, j)
+        df_naive = q.get_table(i, j, final, engine="naive")
+        assert compare_dfs_as_relations(df, df_naive)
+
 
 def test_superops_basic():
     Config.autowrap_inputs = False
@@ -64,6 +71,14 @@ def test_superops_basic():
         a = inc_n_times(x=z, n=n).named("a")
         df = q.get_table(x, y, n, a, z)
         assert df.values.tolist() == [[23, 42, 65, 88, 23]]
+
+    with storage.query() as q:
+        x, y = Q().named("x"), Q().named("y")
+        n = add(x, y).named("n")
+        z = Q().named("z")
+        a = inc_n_times(x=z, n=n).named("a")
+        df_naive = q.get_table(x, y, n, a, z, engine="naive")
+        assert compare_dfs_as_relations(df, df_naive)
 
 
 def test_superops_multilevel():
@@ -108,6 +123,11 @@ def test_superops_multilevel():
     assert [unwrap(x) for x in df["result"].item()] == [
         a + b for a in [1, 2, 3] for b in [4, 5, 6]
     ]
+    with storage.query() as q:
+        xs, ys = Q().named("xs"), Q().named("ys")
+        result = add_many(xs=xs, ys=ys).named("result")
+        df_naive = q.get_table(xs, ys, result, engine="naive")
+        assert compare_dfs_as_relations(df, df_naive)
 
     # two levels of nesting
     @op
@@ -129,6 +149,12 @@ def test_superops_multilevel():
         df = q.get_table(xs, ys, intermediate, final)
         assert len(df["intermediate"].item()) == 9
         assert len(df["final"].item()) == 27
+    with storage.query() as q:
+        xs, ys, zs = Q().named("xs"), Q().named("ys"), Q().named("zs")
+        intermediate = add_many(xs, ys).named("intermediate")
+        final = add_many(intermediate, zs).named("final")
+        df_naive = q.get_table(xs, ys, intermediate, final, engine="naive")
+        assert compare_dfs_as_relations(df, df_naive)
 
 
 def test_weird():
@@ -184,3 +210,19 @@ def test_weird():
         b(k=var_4, l=var_1)
         var_6 = e(m=var_2)
         df = q.get_table(var_0, var_1, var_2, var_3, var_4, var_5, var_6)
+
+    with storage.query() as q:
+        var_0 = Q()
+        var_1 = Q()
+        a(f=var_0, g=var_0)
+        b(k=var_0, l=var_0)
+        a(f=var_0, g=var_0)
+        var_2 = c(h=var_0, i=var_0)
+        a(f=var_0, g=var_0)
+        var_3, var_4, var_5 = d(j=var_1)
+        b(k=var_4, l=var_1)
+        var_6 = e(m=var_2)
+        df_naive = q.get_table(
+            var_0, var_1, var_2, var_3, var_4, var_5, var_6, engine="naive"
+        )
+        assert compare_dfs_as_relations(df, df_naive)

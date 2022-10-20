@@ -18,7 +18,7 @@ from ..core.workflow import Workflow, CallStruct
 from ..core.utils import Hashing
 
 from ..core.weaver import ValQuery, FuncQuery
-from ..core.compiler import traverse_all, Compiler
+from ..core.compiler import traverse_all, Compiler, QueryGraph
 
 from .utils import wrap_inputs, wrap_outputs
 
@@ -119,12 +119,12 @@ class Context:
         self.updates = {"storage": storage, **updates}
         return self
 
-    def get_table(self, *queries: ValQuery) -> pd.DataFrame:
+    def get_table(self, *queries: ValQuery, engine: str = "sql") -> pd.DataFrame:
         # ! EXTREMELY IMPORTANT
         # We must sync any dirty cache elements to the DuckDB store before performing a query.
         # If we don't, we'll query a store that might be missing calls and objs.
         self.storage.commit()
-        return self.storage.execute_query(select_queries=list(queries))
+        return self.storage.execute_query(select_queries=list(queries), engine=engine)
 
 
 class RunContext(Context):
@@ -404,17 +404,35 @@ class Storage(Transactable):
     ############################################################################
     ### low-level primitives to make calls in contexts
     ############################################################################
-    def execute_query(self, select_queries: List[ValQuery]) -> pd.DataFrame:
+    def execute_query(
+        self, select_queries: List[ValQuery], engine: str = "sql"
+    ) -> pd.DataFrame:
         """
         Execute the given queries and return the result as a pandas DataFrame.
         """
+
         if not select_queries:
             return pd.DataFrame()
         val_queries, func_queries = traverse_all(select_queries)
-        compiler = Compiler(val_queries=val_queries, func_queries=func_queries)
-        query = compiler.compile(select_queries=select_queries)
-        df = self.rel_storage.execute_df(query=str(query))
-
+        if engine == "sql":
+            compiler = Compiler(val_queries=val_queries, func_queries=func_queries)
+            query = compiler.compile(select_queries=select_queries)
+            df = self.rel_storage.execute_df(query=str(query))
+        elif engine == "naive":
+            sigs = self.sig_adapter.load_state()
+            ui_to_internal = {
+                sig.versioned_ui_name: sig.versioned_internal_name
+                for sig in sigs.values()
+            }
+            ui_call_data = self.rel_adapter.get_all_call_data()
+            call_data = {ui_to_internal[k]: v for k, v in ui_call_data.items()}
+            # sess.d = locals()
+            query_graph = QueryGraph.from_mandala(
+                val_queries=val_queries, func_queries=func_queries, call_data=call_data
+            )
+            df = query_graph.solve(select_vqs=select_queries)
+        else:
+            raise NotImplementedError()
         # now, evaluate the table
         keys_to_collect = [
             item for _, column in df.items() for _, item in column.items()

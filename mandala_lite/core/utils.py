@@ -17,6 +17,13 @@ def is_subdict(a: Dict, b: Dict) -> bool:
     return all((k in b and a[k] == b[k]) for k in a)
 
 
+def invert_dict(d: Dict) -> Dict:
+    """
+    Invert a dictionary, assuming that all values are unique.
+    """
+    return {v: k for k, v in d.items()}
+
+
 class Hashing:
     """
     Helpers for hashing e.g. function inputs and call metadata.

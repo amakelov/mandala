@@ -4,6 +4,7 @@ from ..common_imports import *
 from mandala_lite.all import *
 from mandala_lite.ui.main import MODES
 from mandala_lite.core.config import Config
+from mandala_lite.core.model import ValueRef
 from mandala_lite.storages.remote_impls.mongo_impl import MongoRemoteStorage
 from mandala_lite.storages.remote_impls.mongo_mock import MongoMockRemoteStorage
 
@@ -27,13 +28,17 @@ def _sanitize_value(value: Any) -> Any:
     except TypeError:
         if isinstance(value, bytearray):
             return value.hex()
+        elif isinstance(value, list):
+            return tuple([_sanitize_value(v) for v in value])
+        elif isinstance(value, ValueRef):
+            return (_sanitize_value(value.obj), value.in_memory, value.uid)
         else:
             raise NotImplementedError(f"Got value of type {type(value)}")
 
 
 def compare_dfs_as_relations(
-    df_1: pd.DataFrame, df_2: pd.DataFrame
-) -> Tuple[bool, str]:
+    df_1: pd.DataFrame, df_2: pd.DataFrame, return_reason: bool = False
+) -> Union[bool, Tuple[bool, str]]:
     if df_1.shape != df_2.shape:
         return False, f"Shapes differ: {df_1.shape} vs {df_2.shape}"
     if set(df_1.columns) != set(df_2.columns):
@@ -51,7 +56,10 @@ def compare_dfs_as_relations(
         reason = ""
     else:
         reason = f"Dataframe rows differ: {df_1} vs {df_2}"
-    return result, reason
+    if return_reason:
+        return result, reason
+    else:
+        return result
 
 
 def data_is_equal(
@@ -74,7 +82,7 @@ def data_is_equal(
         result, reason = False, f"Signatures differ: {sigs_1} vs {sigs_2}"
     # compare the data
     elementwise_comparisons = {
-        k: compare_dfs_as_relations(data_1[k], data_2[k])
+        k: compare_dfs_as_relations(data_1[k], data_2[k], return_reason=True)
         for k in data_1.keys()
         if k != Config.schema_table
     }

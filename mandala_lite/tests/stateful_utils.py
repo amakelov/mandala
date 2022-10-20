@@ -2,7 +2,7 @@ from collections import OrderedDict
 from mandala_lite.common_imports import *
 from mandala_lite.all import *
 from mandala_lite.tests.utils import *
-from mandala_lite.core.utils import Hashing
+from mandala_lite.core.utils import Hashing, invert_dict
 from mandala_lite.core.compiler import *
 from mandala_lite.core.weaver import ValQuery, FuncQuery
 import string

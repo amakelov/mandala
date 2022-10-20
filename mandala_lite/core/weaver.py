@@ -68,3 +68,14 @@ class FuncQuery:
                 self.inputs.values(), self.outputs if self.outputs is not None else []
             )
         ]
+
+    def unlink(self):
+        for inp in self.inputs.values():
+            idxs = [i for i, x in enumerate(inp.consumers) if x is self]
+            inp.consumers = [x for i, x in enumerate(inp.consumers) if i not in idxs]
+            inp.consumed_as = [
+                x for i, x in enumerate(inp.consumed_as) if i not in idxs
+            ]
+        for out in self.outputs:
+            out.creator = None
+            out.created_as = None
