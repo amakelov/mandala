@@ -426,7 +426,6 @@ class Storage(Transactable):
             }
             ui_call_data = self.rel_adapter.get_all_call_data()
             call_data = {ui_to_internal[k]: v for k, v in ui_call_data.items()}
-            # sess.d = locals()
             query_graph = QueryGraph.from_mandala(
                 val_queries=val_queries, func_queries=func_queries, call_data=call_data
             )

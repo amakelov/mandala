@@ -22,15 +22,6 @@ class ValueRef:
         self.obj = obj
         self.in_memory = in_memory
 
-    def __eq__(self, other: Any) -> bool:
-        if not isinstance(other, ValueRef):
-            return False
-        return (
-            self.uid == other.uid
-            and self.obj == other.obj
-            and self.in_memory == other.in_memory
-        )
-
     def __repr__(self) -> str:
         if self.in_memory:
             return f"ValueRef({self.obj}, uid={self.uid})"

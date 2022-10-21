@@ -22,6 +22,8 @@ def signatures_are_equal(storage_1: Storage, storage_2: Storage) -> bool:
 
 
 def _sanitize_value(value: Any) -> Any:
+    if isinstance(value, ValueRef):
+        return (_sanitize_value(value.obj), value.in_memory, value.uid)
     try:
         hash(value)
         return value
@@ -30,8 +32,6 @@ def _sanitize_value(value: Any) -> Any:
             return value.hex()
         elif isinstance(value, list):
             return tuple([_sanitize_value(v) for v in value])
-        elif isinstance(value, ValueRef):
-            return (_sanitize_value(value.obj), value.in_memory, value.uid)
         else:
             raise NotImplementedError(f"Got value of type {type(value)}")
 
@@ -40,9 +40,9 @@ def compare_dfs_as_relations(
     df_1: pd.DataFrame, df_2: pd.DataFrame, return_reason: bool = False
 ) -> Union[bool, Tuple[bool, str]]:
     if df_1.shape != df_2.shape:
-        return False, f"Shapes differ: {df_1.shape} vs {df_2.shape}"
+        result, reason = False, f"Shapes differ: {df_1.shape} vs {df_2.shape}"
     if set(df_1.columns) != set(df_2.columns):
-        return False, f"Columns differ: {df_1.columns} vs {df_2.columns}"
+        result, reason = False, f"Columns differ: {df_1.columns} vs {df_2.columns}"
     # reorder columns of df_2 to match df_1
     df_2 = df_2[df_1.columns]
     # sanitize values to make them hashable
