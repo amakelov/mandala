@@ -282,9 +282,9 @@ class QueryGraph:
         return len(set(col_to_vq1.values()) & set(col_to_vq2.values()))
 
     def solve(self, select_vqs: List[ValQuery]) -> pd.DataFrame:
-        # compute pairwise intersections
         while len(self.func_queries) > 1:
             intersections = {}
+            # compute pairwise intersections
             for f1 in self.func_queries:
                 for f2 in self.func_queries:
                     if f1 == f2:
