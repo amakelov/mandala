@@ -89,6 +89,35 @@ def test_add_input():
         assert True
 
 
+def test_add_input_bug():
+    """
+    The issue was that the sync logic was expecting to see the UIDs for the
+    defaults upon re-synchronizing the updated version.
+    """
+    storage = Storage()
+
+    @op
+    def f() -> int:
+        return 1
+
+    with storage.run():
+        f()
+
+    @op
+    def f(x: int = 23) -> int:
+        return x
+
+    with storage.run():
+        f()
+
+    @op
+    def f(x: int = 23) -> int:
+        return x
+
+    with storage.run():
+        f()
+
+
 def test_func_renaming():
 
     storage = Storage()

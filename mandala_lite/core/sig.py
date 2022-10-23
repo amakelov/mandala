@@ -197,7 +197,9 @@ class Signature:
             return False, "Changing the number of outputs is not supported"
         if not is_subdict(self.defaults, new.defaults):
             return False, "New defaults are inconsistent with current defaults"
-        if not is_subdict(self._new_input_defaults_uids, new._new_input_defaults_uids):
+        if new.has_internal_data and not is_subdict(
+            self._new_input_defaults_uids, new._new_input_defaults_uids
+        ):
             return False, "New default UIDs are inconsistent with current default UIDs"
         for k in new.input_names:
             if k not in self.input_names:
