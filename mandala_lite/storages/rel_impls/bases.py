@@ -27,9 +27,9 @@ class RelStorage(ABC):
         """
         raise NotImplementedError()
 
-    @abstractmethod
-    def delete_relation(self, name: str):
-        raise NotImplementedError()
+    # @abstractmethod
+    # def delete_relation(self, name: str):
+    #     raise NotImplementedError()
 
     @abstractmethod
     def create_column(self, relation: str, name: str, default_value: str):

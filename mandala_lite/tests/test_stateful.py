@@ -669,13 +669,19 @@ class SingleClientSimulator(RuleBasedStateMachine):
         for client in self.clients:
             # make sure that functions called on the storage work
             client.storage.rel_adapter.get_all_call_data()
+            for table in client.storage.rel_storage.get_tables():
+                client.storage.rel_storage.get_count(table=table)
             # check storage invariants
             check_invariants(storage=client.storage)
             # check invariants on the workflows
             for w in client.workflows:
                 w.check_invariants()
+                w.print_shape()
+            # check the individual signatures
             for func_op in client.func_ops:
                 func_op.sig.check_invariants()
+            # check the set of signatures
+            client.storage.sig_adapter.check_invariants()
 
     def check_sig_synchronization(self):
         for client in self.clients:
@@ -704,12 +710,15 @@ class MultiClientSimulator(SingleClientSimulator):
         super().__init__(n_clients=n_clients)
 
 
+MAX_EXAMPLES = 100
+STEP_COUNT = 25
+
 TestCaseSingle = SingleClientSimulator.TestCase
 TestCaseSingle.settings = settings(
-    max_examples=100, deadline=None, stateful_step_count=50
+    max_examples=MAX_EXAMPLES, deadline=None, stateful_step_count=STEP_COUNT
 )
 
 TestCaseMany = MultiClientSimulator.TestCase
 TestCaseMany.settings = settings(
-    max_examples=100, deadline=None, stateful_step_count=50
+    max_examples=MAX_EXAMPLES, deadline=None, stateful_step_count=STEP_COUNT
 )

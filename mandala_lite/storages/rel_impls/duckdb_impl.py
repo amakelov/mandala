@@ -101,14 +101,14 @@ class DuckDBRelStorage(RelStorage, Transactable):
             f'Created table "{name}" with columns {[elt[0] for elt in columns]}'
         )
 
-    @transaction()
-    def delete_relation(self, name: str, conn: Optional[Connection] = None):
-        """
-        Delete a (memoization) table
-        """
-        query = Query.drop_table(table=name)
-        conn.execute(str(query))
-        logger.debug(f'Deleted table "{name}"')
+    # @transaction()
+    # def delete_relation(self, name: str, conn: Optional[Connection] = None):
+    #     """
+    #     Delete a (memoization) table
+    #     """
+    #     query = Query.drop_table(table=name)
+    #     conn.execute(str(query))
+    #     logger.debug(f'Deleted table "{name}"')
 
     @transaction()
     def create_column(
@@ -189,7 +189,7 @@ class DuckDBRelStorage(RelStorage, Transactable):
             (df["table_name"] == relation) & (df["constraint_type"] == constraint_type)
         ]
         if len(df) == 0:
-            return []
+            raise NotImplementedError()
         elif len(df) == 1:
             return df["constraint_column_names"].item()
         else:

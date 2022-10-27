@@ -123,10 +123,6 @@ class Signature:
         )
 
     @property
-    def internal_input_names(self) -> Set[str]:
-        return set(self.ui_to_internal_input_map.values())
-
-    @property
     def new_ui_input_default_uids(self) -> Dict[str, str]:
         return {
             self.internal_to_ui_input_map[k]: v
@@ -257,13 +253,14 @@ class Signature:
         if name in self.input_names:
             raise ValueError(f'Input "{name}" already exists')
         if not self.has_internal_data:
-            raise ValueError("Cannot add inputs to a signature without internal data")
+            raise InternalError(
+                "Cannot add inputs to a signature without internal data"
+            )
         res = copy.deepcopy(self)
         res.input_names.add(name)
         internal_name = get_uid() if internal_name is None else internal_name
         res.ui_to_internal_input_map[name] = internal_name
         res.defaults[name] = default
-        #! if we implement custom types, this will need to be updated
         default_uid = Hashing.get_content_hash(obj=default)
         res._new_input_defaults_uids[internal_name] = default_uid
         return res

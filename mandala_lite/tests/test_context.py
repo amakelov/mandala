@@ -5,13 +5,13 @@ from mandala_lite.tests.utils import *
 def test_nesting_old_api():
     storage = Storage()
 
-    with run(storage) as c:
+    with FreeContexts.run(storage) as c:
         assert c.mode == MODES.run
 
-    with query(storage) as q:
+    with FreeContexts.query(storage) as q:
         assert q.mode == MODES.query
 
-    with run(storage) as c:
+    with FreeContexts.run(storage) as c:
         assert c.mode == MODES.run
         assert c.storage is storage
         with c(mode=MODES.query) as q:
@@ -48,3 +48,14 @@ def test_noop():
         return x + 1
 
     assert inc(23) == 24
+
+
+def test_failures():
+    storage = Storage()
+
+    try:
+        with storage.run(bla=23):
+            pass
+        assert False
+    except:
+        assert True

@@ -46,5 +46,5 @@ sess = Session()
 TableType = TypeVar("TableType", pa.Table, pd.DataFrame)
 
 
-class SyncException(Exception):
+class InternalError(Exception):
     pass

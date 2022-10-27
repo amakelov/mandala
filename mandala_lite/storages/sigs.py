@@ -82,7 +82,10 @@ class SigSyncer(Transactable):
         logger.debug("Syncing signatures from remote...")
         if self.has_remote:
             sigs = self.pull_signatures()
-            for (internal_name, version), sig in sigs.items():
+            # sort them by internal name and version to ensure earlier versions
+            # are updated first
+            sigs = sorted(sigs.values(), key=lambda s: (s.internal_name, s.version))
+            for sig in sigs:
                 logging.debug(f"Processing signature {sig}")
                 if self.sig_adapter.exists_internal(sig=sig, conn=conn):
                     # first set the ui name to the current one (if necessary)
@@ -91,6 +94,8 @@ class SigSyncer(Transactable):
                     self.sig_adapter.update_input_ui_names(sig=sig, conn=conn)
                     # now, update the (already name-aligned) signature from the new
                     self.sig_adapter.update_sig(sig=sig, conn=conn)
+                elif self.sig_adapter.exists_any_version(sig=sig, conn=conn):
+                    self.sig_adapter.create_new_version(sig=sig, conn=conn)
                 else:
                     self.sig_adapter.create_sig(sig=sig, conn=conn)
 
@@ -120,6 +125,11 @@ class SigSyncer(Transactable):
     def sync_create(
         self, sig: Signature, conn: Optional[Connection] = None
     ) -> Signature:
+        """
+        Pull the current state of the signatures from the remote, make sure that
+        they are compatible with the creation of this signature, then push the
+        updated signatures to the remote and create the signature locally.
+        """
         self.sync_from_remote(conn=conn)
         new_sig = sig._generate_internal()
         self.validate_transaction(
@@ -135,6 +145,11 @@ class SigSyncer(Transactable):
     def sync_update(
         self, sig: Signature, conn: Optional[Connection] = None
     ) -> Signature:
+        """
+        Pull the current state of the signatures from the remote, make sure that
+        they are compatible with the update of this signature, then push the
+        updated signatures to the remote and update the signature locally.
+        """
         self.sync_from_remote(conn=conn)
         current = self.sig_adapter.load_ui_sigs(conn=conn)[sig.ui_name, sig.version]
         new_sig, _ = current.update(new=sig)
@@ -151,6 +166,12 @@ class SigSyncer(Transactable):
     def sync_new_version(
         self, sig: Signature, conn: Optional[Connection] = None
     ) -> Signature:
+        """
+        Pull the current state of the signatures from the remote, make sure that
+        they are compatible with the creation of a new version given by this
+        signature, then push the updated signatures to the remote and create the
+        new version locally.
+        """
         self.sync_from_remote(conn=conn)
         if not self.sig_adapter.exists_any_version(sig=sig, conn=conn):
             raise ValueError()
@@ -172,6 +193,11 @@ class SigSyncer(Transactable):
     def sync_rename_sig(
         self, sig: Signature, new_name: str, conn: Optional[Connection] = None
     ) -> Signature:
+        """
+        Pull the current state of the signatures from the remote, make sure that
+        they are compatible with the renaming of this signature, then push the
+        updated signatures to the remote and rename the signature locally.
+        """
         self.sync_from_remote(conn=conn)
         #! note: we validate before the renaming. Ideally we should have logic
         # to do this for the new signature directly
@@ -196,6 +222,11 @@ class SigSyncer(Transactable):
         new_input_name: str,
         conn: Optional[Connection] = None,
     ) -> Signature:
+        """
+        Pull the current state of the signatures from the remote, make sure that
+        they are compatible with the renaming of this input, then push the
+        updated signatures to the remote and rename the input locally.
+        """
         self.sync_from_remote(conn=conn)
         #! note: we validate before the renaming. Ideally we should have logic
         # to do this for the new signature directly

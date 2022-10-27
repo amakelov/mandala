@@ -21,23 +21,6 @@ class KVStore:
     def keys(self) -> List[str]:
         raise NotImplementedError()
 
-    ############################################################################
-    ### mmethods are useful syntactic sugar
-    ############################################################################
-    def mget(self, ks: List[str]) -> List[Any]:
-        return [self.get(k=k) for k in ks]
-
-    def mset(self, kvs: Dict[str, Any]):
-        for k, v in kvs.items():
-            self.set(k=k, v=v)
-
-    def mexists(self, ks: List[str]) -> List[bool]:
-        return [self.exists(k=k) for k in ks]
-
-    def mdelete(self, ks: List[str]):
-        for k in ks:
-            self.delete(k=k)
-
 
 class InMemoryStorage(KVStore):
     """

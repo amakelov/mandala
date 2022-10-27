@@ -63,6 +63,12 @@ class Context:
         updates = self.updates
         if not all(k in ("storage", "mode", "lazy") for k in updates.keys()):
             raise ValueError(updates.keys())
+        if "mode" in updates.keys() and updates["mode"] not in (
+            MODES.run,
+            MODES.query,
+            MODES.batch,
+        ):
+            raise ValueError(updates["mode"])
         ### backup state
         before_update = self._backup_state(keys=updates.keys())
         self._updates_stack.append(before_update)
@@ -81,7 +87,7 @@ class Context:
         Roll back the updates from the current level
         """
         if not self._updates_stack:
-            raise RuntimeError("No context to exit from")
+            raise InternalError("No context to exit from")
         ascent_updates = self._updates_stack.pop()
         for k, v in ascent_updates.items():
             self.__dict__[f"{k}"] = v
@@ -105,7 +111,7 @@ class Context:
                 calls = executor.execute(workflow=workflow, storage=self.storage)
                 self.storage.commit(calls=calls)
             else:
-                raise ValueError(self.mode)
+                raise InternalError(self.mode)
         except Exception as e:
             exc = e
         self._undo_updates()
@@ -143,9 +149,10 @@ class BatchContext(Context):
     }
 
 
-run = RunContext()
-query = QueryContext()
-batch = BatchContext()
+class FreeContexts:
+    run = RunContext()
+    query = QueryContext()
+    batch = BatchContext()
 
 
 class Storage(Transactable):
@@ -270,9 +277,6 @@ class Storage(Transactable):
         names.
         """
         # Bundle event log and referenced calls into tables.
-        # event_log_df = self.rel_storage.get_data(
-        #     self.rel_adapter.EVENT_LOG_TABLE, conn=conn
-        # )
         event_log_df = self.rel_adapter.get_event_log(conn=conn)
         tables_with_changes = {}
         table_names_with_changes = event_log_df["table"].unique()
@@ -288,21 +292,14 @@ class Storage(Transactable):
                 conn=conn,
             )
         # pass to internal names
-        # evaluated_tables = {
-        #     k: self.rel_adapter.evaluate_call_table(ta=v)
-        #     for k, v in tables_with_changes.items()
-        #     if k != Config.vref_table
-        # }
-        # logger.debug(f"Sending tables with changes: {evaluated_tables}")
         tables_with_changes = self.sig_adapter.rename_tables(
-            tables_with_changes, to="internal"
+            tables_with_changes, to="internal", conn=conn
         )
         output = {}
         for table_name, table in tables_with_changes.items():
             buffer = io.BytesIO()
             pq.write_table(table, buffer)
             output[table_name] = buffer.getvalue()
-        # self.rel_adapter.clear_event_log(conn=conn)
         return output
 
     @transaction()
@@ -393,13 +390,13 @@ class Storage(Transactable):
     ### creating contexts
     ############################################################################
     def run(self, **kwargs) -> Context:
-        return run(storage=self, **kwargs)
+        return FreeContexts.run(storage=self, **kwargs)
 
     def query(self, **kwargs) -> Context:
-        return query(storage=self, **kwargs)
+        return FreeContexts.query(storage=self, **kwargs)
 
     def batch(self, **kwargs) -> Context:
-        return batch(storage=self, **kwargs)
+        return FreeContexts.batch(storage=self, **kwargs)
 
     ############################################################################
     ### low-level primitives to make calls in contexts

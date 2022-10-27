@@ -232,7 +232,6 @@ class QueryGraph:
         Merge two func query nodes in the graph by joining their tables along
         the columns that correspond to the shared inputs/outputs
         """
-        print("Its happening")
         # get the data
         df1, df2 = self.tables[f1], self.tables[f2]
         # compute correspondence between columns and vqs

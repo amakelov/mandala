@@ -2,9 +2,9 @@ from ..common_imports import *
 from ..core.config import Config
 from ..core.model import FuncOp, ValueRef, Call, wrap
 from ..core.utils import Hashing
-from .main import Storage
 from ..core.weaver import ValQuery, FuncQuery
-from .main import GlobalContext, MODES
+
+from .main import Storage, GlobalContext, MODES
 from .utils import format_as_outputs, bind_inputs, wrap_inputs, wrap_outputs
 
 
@@ -28,6 +28,7 @@ class FuncInterface:
     def __call__(self, *args, **kwargs) -> Union[None, Any, Tuple[Any]]:
         context = GlobalContext.current
         if context is None:
+            # mandala is completely disabled when not in a context
             return self.func_op.func(*args, **kwargs)
         if self.is_invalidated:
             raise RuntimeError(
@@ -37,15 +38,13 @@ class FuncInterface:
         if not self.func_op.sig.has_internal_data:
             # synchronize if necessary
             synchronize(func=self, storage=context.storage)
-        if Config.check_signature_on_each_call:
-            # to prevent stale signatures from being able to make calls.
-            # not necessary to ensure correctness at this stage
-            is_synced, reason = storage.sig_adapter.is_synced(sig=self.func_op.sig)
-            if not is_synced:
-                raise SyncException(reason)
+        # if Config.check_signature_on_each_call:
+        #     # to prevent stale signatures from being able to make calls.
+        #     # not necessary to ensure correctness at this stage
+        #     is_synced, reason = storage.sig_adapter.is_synced(sig=self.func_op.sig)
+        #     if not is_synced:
+        #         raise SyncException(reason)
         inputs = bind_inputs(args, kwargs, mode=context.mode, func_op=self.func_op)
-        if context is None:
-            raise RuntimeError("No context to call from")
         mode = context.mode
         if mode == MODES.run:
             outputs, call = storage.call_run(func_op=self.func_op, inputs=inputs)
@@ -108,13 +107,7 @@ def synchronize(func: FuncInterface, storage: Storage):
     Synchronize a function in-place.
     """
     synchronize_op(func_op=func.func_op, storage=storage)
-    # # first, pull the current data from the remote!
-    # storage.sig_syncer.sync_from_remote()
-    # # this step also sends the signature to the remote
-    # new_sig = storage.sig_syncer.sync_from_local(sig=func.func_op.sig)
     func.is_synchronized = True
-    # # to send any default values that were created by adding inputs
-    # storage.sync_to_remote()
 
 
 def synchronize_op(func_op: FuncOp, storage: Storage):

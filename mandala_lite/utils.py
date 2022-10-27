@@ -1,17 +1,6 @@
 from .common_imports import *
 
 
-def invert_dict(d: Dict) -> Dict:
-    return {v: k for k, v in d.items()}
-
-
-def upsert_df(current: pd.DataFrame, new: pd.DataFrame) -> pd.DataFrame:
-    """
-    Upsert for dataframes with the same columns
-    """
-    return pd.concat([current, new[~new.index.isin(current.index)]])
-
-
 def serialize(obj: Any) -> bytes:
     """
     ! this may lead to different serializations for objects x, y such that x

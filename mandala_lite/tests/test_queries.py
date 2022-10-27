@@ -2,6 +2,15 @@ from mandala_lite.all import *
 from mandala_lite.tests.utils import *
 
 
+def test_empty():
+    storage = Storage()
+
+    with storage.query() as q:
+        df = q.get_table()
+
+    assert df.empty
+
+
 def test_basics():
     storage = Storage()
 

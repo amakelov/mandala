@@ -64,6 +64,9 @@ mandala_lite/demos/data/
 **/.pytest_cache/*
 # ignore files cached by jupyter
 **/.ipynb_checkpoints
+# ignore coverage things
+.coverage
+**/htmlcov/*
 
 ## PyCharm stuff
 .idea/**

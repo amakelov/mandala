@@ -118,6 +118,31 @@ def test_add_input_bug():
         f()
 
 
+def test_default_change():
+    """
+    Changing default values is not allowed for @ops
+    """
+    storage = Storage()
+
+    @op
+    def f(x: int = 23) -> int:
+        return x
+
+    with storage.run():
+        a = f()
+
+    @op
+    def f(x: int = 42) -> int:
+        return x
+
+    try:
+        with storage.run():
+            b = f()
+        assert False
+    except:
+        assert True
+
+
 def test_func_renaming():
 
     storage = Storage()
@@ -269,6 +294,9 @@ def test_versions():
     def inc(x: int) -> int:
         return x + 1
 
+    # check unsynchronized functions work for this
+    storage.sig_adapter.get_versions(sig=inc.func_op.sig)
+
     with storage.run():
         inc(23)
 
@@ -278,3 +306,147 @@ def test_versions():
     for table_name in call_table_names:
         df = storage.rel_storage.get_data(table=table_name)
         assert df.shape[0] == 1
+
+
+def test_renaming_failures_1():
+    """
+    Try to do a rename on a function that was invalidated
+    """
+    storage = Storage()
+
+    @op
+    def inc(x: int) -> int:
+        return x + 1
+
+    synchronize(func=inc, storage=storage)
+
+    rename_func(storage=storage, func=inc, new_name="inc_new")
+    try:
+        rename_func(storage=storage, func=inc, new_name="inc_other")
+        assert False
+    except:
+        assert True
+
+    @op
+    def add(x: int, y: int) -> int:
+        return x + y
+
+    synchronize(func=add, storage=storage)
+
+    rename_arg(storage=storage, func=add, name="x", new_name="z")
+    try:
+        rename_arg(storage=storage, func=add, name="y", new_name="w")
+        assert False
+    except:
+        assert True
+
+
+def test_renaming_failures_2():
+    """
+    Try renaming a function to a name that already exists for another function
+    """
+    storage = Storage()
+
+    @op
+    def inc(x: int) -> int:
+        return x + 1
+
+    @op
+    def add(x: int, y: int) -> int:
+        return x + y
+
+    for f in (inc, add):
+        synchronize(func=f, storage=storage)
+
+    try:
+        rename_func(storage=storage, func=inc, new_name="add")
+        assert False
+    except:
+        assert True
+
+
+def test_renaming_inside_context_1():
+    storage = Storage()
+
+    @op
+    def inc(x: int) -> int:
+        return x + 1
+
+    synchronize(inc, storage=storage)
+
+    try:
+        with storage.run():
+            rename_func(storage=storage, func=inc, new_name="inc_new")
+            inc(23)
+        assert False
+    except:
+        assert True
+
+    @op
+    def add(x: int, y: int) -> int:
+        return x + y
+
+    synchronize(add, storage=storage)
+
+    try:
+        with storage.run():
+            rename_arg(storage=storage, func=add, name="x", new_name="z")
+            add(23, 42)
+        assert False
+    except:
+        assert True
+
+
+def test_renaming_inside_context_2():
+    """
+    Like the previous one, but with uncommitted work
+    """
+    storage = Storage()
+
+    @op
+    def inc(x: int) -> int:
+        return x + 1
+
+    synchronize(inc, storage=storage)
+
+    try:
+        with storage.run():
+            inc(23)
+            rename_func(storage=storage, func=inc, new_name="inc_new")
+        assert False
+    except:
+        assert True
+
+    @op
+    def add(x: int, y: int) -> int:
+        return x + y
+
+    synchronize(add, storage=storage)
+
+    try:
+        with storage.run():
+            add(23, 42)
+            rename_arg(storage=storage, func=add, name="x", new_name="z")
+        assert False
+    except:
+        assert True
+
+
+def test_other_refactoring_failures():
+    storage = Storage()
+
+    @op
+    def inc(x: int) -> int:
+        return x + 1
+
+    synchronize(inc, storage=storage)
+
+    @op
+    def inc(y: int) -> int:
+        return y + 1
+
+    try:
+        synchronize(inc, storage)
+        assert False
+    except:
+        assert True

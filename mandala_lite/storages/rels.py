@@ -10,7 +10,7 @@ from ..common_imports import *
 from ..core.config import Config, Prov, dump_output_name
 from ..core.model import Call, unwrap, FuncOp, ValueRef
 from ..core.sig import Signature
-from ..utils import upsert_df, serialize, deserialize, _rename_cols
+from ..utils import serialize, deserialize, _rename_cols
 from .rel_impls.duckdb_impl import DuckDBRelStorage
 from .rel_impls.utils import Transactable, transaction
 
@@ -31,14 +31,14 @@ class SigAdapter(Transactable):
     ):
         self.rel_adapter = rel_adapter
         self.rel_storage = self.rel_adapter.rel_storage
-        # {(internal name, version): Signature}
 
     @transaction()
     def dump_state(
         self, state: Dict[Tuple[str, int], Signature], conn: Optional[Connection] = None
     ):
         """
-        Dump the current state of the signatures to the database
+        Dump the given state of the signatures to the database. Should always
+        call this after the signatures have been updated.
         """
         # delete existing, if any
         index_col = "index"
@@ -73,6 +73,46 @@ class SigAdapter(Transactable):
         else:
             return deserialize(df["signatures"][0])
 
+    def check_invariants(
+        self,
+        sigs: Optional[Dict[Tuple[str, int], Signature]] = None,
+        conn: Optional[Connection] = None,
+    ):
+        """
+        This checks that the invariants of the *set* of signatures for the storage
+        hold. This means that:
+            - all versions of a signature are consecutive integers starting from
+              0
+            - signatures have the same UI name iff they have the same internal
+            name
+
+        Invariants for individual signatures are not checked by this (they are
+        checked by the `Signature` class).
+        """
+        # check version numbering
+        if sigs is None:
+            sigs = self.load_state(conn=conn)
+        internal_names = {internal_name for internal_name, _ in sigs.keys()}
+        for internal_name in internal_names:
+            versions = [version for _, version in sigs.keys() if _ == internal_name]
+            assert sorted(versions) == list(range(len(versions)))
+        # check exactly 1 UI name per internal name
+        internal_to_ui_names = defaultdict(set)
+        for (internal_name, _), sig in sigs.items():
+            internal_to_ui_names[internal_name].add(sig.ui_name)
+        for internal_name, ui_names in internal_to_ui_names.items():
+            assert (
+                len(ui_names) == 1
+            ), f"Internal name {internal_name} has multiple UI names: {ui_names}"
+        # check exactly 1 internal name per UI name
+        ui_to_internal_names = defaultdict(set)
+        for (internal_name, _), sig in sigs.items():
+            ui_to_internal_names[sig.ui_name].add(internal_name)
+        for ui_name, internal_names in ui_to_internal_names.items():
+            assert (
+                len(internal_names) == 1
+            ), f"UI name {ui_name} has multiple internal names: {internal_names}"
+
     ############################################################################
     ### `Transactable` interface
     ############################################################################
@@ -90,10 +130,12 @@ class SigAdapter(Transactable):
         self, conn: Optional[Connection] = None
     ) -> Dict[Tuple[str, int], Signature]:
         """
-        Get the signatures indexed by UI names
+        Get the signatures indexed by (ui_name, version)
         """
         sigs = self.load_state(conn=conn)
-        return {(sig.ui_name, sig.version): sig for sig in sigs.values()}
+        res = {(sig.ui_name, sig.version): sig for sig in sigs.values()}
+        assert len(res) == len(sigs)
+        return res
 
     @transaction()
     def exists_versioned_ui(
@@ -108,6 +150,10 @@ class SigAdapter(Transactable):
     def exists_any_version(
         self, sig: Signature, conn: Optional[Connection] = None
     ) -> bool:
+        """
+        Check using internal name (or UI name, if it has no internal data) if
+        there exists any version for this signature.
+        """
         if sig.has_internal_data:
             return any(
                 sig.internal_name == k[0] for k in self.load_state(conn=conn).keys()
@@ -120,20 +166,23 @@ class SigAdapter(Transactable):
         self, sig: Signature, conn: Optional[Connection] = None
     ) -> Signature:
         """
-        Get the latest version of the signature, based on its internal name.
+        Get the latest version of the signature, based on internal name or UI
+        name if it has no internal data.
         """
         sigs = self.load_state(conn=conn)
         if sig.has_internal_data:
-            version = max([k[1] for k in sigs.keys() if k[0] == sig.internal_name])
+            versions = [k[1] for k in sigs.keys() if k[0] == sig.internal_name]
+            if len(versions) == 0:
+                raise ValueError(f"No versions for signature {sig}")
+            version = max(versions)
             return sigs[(sig.internal_name, version)]
         else:
-            version = max(
-                [
-                    k[1]
-                    for k in self.load_ui_sigs(conn=conn).keys()
-                    if k[0] == sig.ui_name
-                ]
-            )
+            versions = [
+                k[1] for k in self.load_ui_sigs(conn=conn).keys() if k[0] == sig.ui_name
+            ]
+            if len(versions) == 0:
+                raise ValueError(f"No versions for signature {sig}")
+            version = max(versions)
             return self.load_ui_sigs(conn=conn)[(sig.ui_name, version)]
 
     @transaction()
@@ -141,7 +190,8 @@ class SigAdapter(Transactable):
         self, sig: Signature, conn: Optional[Connection] = None
     ) -> List[int]:
         """
-        Get all versions of the signature, based on its internal name.
+        Get all versions of the signature, based on internal name or UI name if
+        it has no internal data.
         """
         sigs = self.load_state(conn=conn)
         if sig.has_internal_data:
@@ -155,7 +205,7 @@ class SigAdapter(Transactable):
         self, sig: Signature, conn: Optional[Connection] = None
     ) -> bool:
         """
-        Check if the signature exists based on its internal name
+        Check if the signature exists based on its *internal* name
         """
         return (sig.internal_name, sig.version) in self.load_state(conn=conn)
 
@@ -175,21 +225,30 @@ class SigAdapter(Transactable):
 
     @transaction()
     def ui_names(self, conn: Optional[Connection] = None) -> Set[str]:
+        # return the set of ui names
         return set(self.ui_to_internal(conn=conn).keys())
 
     @transaction()
     def internal_names(self, conn: Optional[Connection] = None) -> Set[str]:
+        # return the set of internal names
         return set(self.internal_to_ui(conn=conn).keys())
 
     @transaction()
-    def is_sig_table_name(self, name: str, conn: Optional[Connection] = None) -> bool:
+    def is_sig_table_name(
+        self, name: str, use_internal: bool, conn: Optional[Connection] = None
+    ) -> bool:
         """
         Check if the name is a valid name for a table corresponding to a
         signature.
         """
         parts = name.split("_", 1)
         return (
-            parts[0] in (self.internal_names(conn=conn) | self.ui_names(conn=conn))
+            parts[0]
+            in (
+                self.internal_names(conn=conn)
+                if use_internal
+                else self.ui_names(conn=conn)
+            )
             and parts[1].isdigit()
         )
 
@@ -199,12 +258,13 @@ class SigAdapter(Transactable):
     @transaction()
     def create_sig(self, sig: Signature, conn: Optional[Connection] = None):
         """
-        Create a new signature. `sig` must have internal data and not be present
-        in storage.
+        Create a new signature `sig`. `sig` must have internal data, and not be
+        present in storage at any version.
         """
         assert sig.has_internal_data
         sigs = self.load_state(conn=conn)
-        assert (sig.internal_name, sig.version) not in sigs.keys()
+        assert sig.internal_name not in self.internal_names(conn=conn)
+        # assert (sig.internal_name, sig.version) not in sigs.keys()
         sigs[(sig.internal_name, sig.version)] = sig
         # write signatures
         self.dump_state(state=sigs, conn=conn)
@@ -224,6 +284,12 @@ class SigAdapter(Transactable):
 
     @transaction()
     def create_new_version(self, sig: Signature, conn: Optional[Connection] = None):
+        """
+        Create a new version of an already existing function using the `sig`
+        object. `sig` must have internal data, and the internal name must
+        already be present in some version.
+        """
+        assert sig.has_internal_data
         latest_sig = self.get_latest_version(sig=sig, conn=conn)
         assert sig.version == latest_sig.version + 1
         # update signatures
@@ -286,8 +352,16 @@ class SigAdapter(Transactable):
         validate_only: bool = False,
     ) -> Dict[Tuple[str, int], Signature]:
         """
-        Update a signature's UI name from the given `Signature` object.
-        `sig` must have internal data, and must carry the new UI name.
+        Update a signature's UI name using the given `Signature` object to get
+        the new name. `sig` must have internal data, and must carry the new UI
+        name.
+
+        NOTE: the `sig` may have the same UI name as the current signature, in
+        which case this method does nothing but return the current state of the
+        signatures.
+
+        This method has the option of only generating the new state of the
+        signatures without performing the update.
         """
         assert sig.has_internal_data
         assert self.exists_internal(sig=sig, conn=conn)
@@ -295,6 +369,15 @@ class SigAdapter(Transactable):
         all_versions = self.get_versions(sig=sig, conn=conn)
         current_ui_name = sigs[(sig.internal_name, all_versions[0])].ui_name
         new_ui_name = sig.ui_name
+        if current_ui_name == new_ui_name:
+            # nothing to do
+            return sigs
+        # make sure there are no conflicts
+        internal_to_ui = self.internal_to_ui(conn=conn)
+        if new_ui_name in internal_to_ui.values():
+            raise ValueError(
+                f"UI name {new_ui_name} already exists for another signature."
+            )
         for version in all_versions:
             current = sigs[(sig.internal_name, version)]
             if current.ui_name != sig.ui_name:
@@ -350,31 +433,31 @@ class SigAdapter(Transactable):
         return new_sig
 
     ############################################################################
-    ### helpers
+    ###
     ############################################################################
-    @transaction()
-    def is_synced(
-        self, sig: Signature, conn: Optional[Connection] = None
-    ) -> Tuple[bool, str]:
-        """
-        Given a signature with internal data, check if it matches what's
-        in the databse. Returns a tuple of (is_synced, reason if false).
-        """
-        assert sig.has_internal_data
-        current_sigs = self.load_state(conn=conn)
-        if (sig.internal_name, sig.version) in current_sigs:
-            current = current_sigs[(sig.internal_name, sig.version)]
-            if sig != current:
-                return (
-                    False,
-                    f"Signatures are different.\nThis signature:\n    {sig}\nCurrent signature:\n    {current}",
-                )
-        else:
-            return (
-                False,
-                f"Signature with this internal name and version not found in database.",
-            )
-        return True, "Signature is equal to a signature in the database."
+    # @transaction()
+    # def is_synced(
+    #     self, sig: Signature, conn: Optional[Connection] = None
+    # ) -> Tuple[bool, str]:
+    #     """
+    #     Given a signature with internal data, check if it matches what's
+    #     in the databse. Returns a tuple of (is_synced, reason if false).
+    #     """
+    #     assert sig.has_internal_data
+    #     current_sigs = self.load_state(conn=conn)
+    #     if (sig.internal_name, sig.version) in current_sigs:
+    #         current = current_sigs[(sig.internal_name, sig.version)]
+    #         if sig != current:
+    #             return (
+    #                 False,
+    #                 f"Signatures are different.\nThis signature:\n    {sig}\nCurrent signature:\n    {current}",
+    #             )
+    #     else:
+    #         return (
+    #             False,
+    #             f"Signature with this internal name and version not found in database.",
+    #         )
+    #     return True, "Signature is equal to a signature in the database."
 
     @transaction()
     def rename_tables(
@@ -383,21 +466,26 @@ class SigAdapter(Transactable):
         to: str = "internal",
         conn: Optional[Connection] = None,
     ) -> Dict[str, TableType]:
+        """
+        Rename a dictionary of {versioned name: table} pairs and the tables'
+        columns to either internal or UI names.
+        """
         result = {}
+        assert to in ["internal", "ui"]
         for table_name, table in tables.items():
-            if self.is_sig_table_name(name=table_name, conn=conn):
+            if self.is_sig_table_name(
+                name=table_name, use_internal=(to != "internal"), conn=conn
+            ):
                 if to == "internal":
                     ui_name, version = Signature.parse_versioned_name(table_name)
                     sig = self.load_ui_sigs(conn=conn)[ui_name, version]
                     new_table_name = sig.versioned_internal_name
                     mapping = sig.ui_to_internal_input_map
-                elif to == "ui":
+                else:
                     internal_name, version = Signature.parse_versioned_name(table_name)
                     sig = self.load_state(conn=conn)[internal_name, version]
                     new_table_name = sig.versioned_ui_name
                     mapping = sig.internal_to_ui_input_map
-                else:
-                    raise ValueError()
                 result[new_table_name] = _rename_cols(table=table, mapping=mapping)
             else:
                 result[table_name] = table
@@ -473,8 +561,8 @@ class RelAdapter(Transactable):
     def evaluate_call_table(
         self, ta: TableType, conn: Optional[Connection] = None
     ) -> pd.DataFrame:
-        if isinstance(ta, pa.Table):
-            ta = pa.Table.to_pandas(ta)
+        # if isinstance(ta, pa.Table):
+        #     ta = pa.Table.to_pandas(ta)
         ta = ta.copy()
         for col in ta.columns:
             if col != Config.uid_col:
@@ -511,19 +599,13 @@ class RelAdapter(Transactable):
     ############################################################################
     ### event log stuff
     ############################################################################
-    # def log_change(self, table: str, key: str):
-    #     self.rel_storage.upsert(
-    #         self.EVENT_LOG_TABLE,
-    #         pa.Table.from_pylist([{Config.uid_col: key, "table": table}]),
-    #     )
-
     @transaction()
     def get_event_log(self, conn: Optional[Connection] = None) -> pd.DataFrame:
         return self.rel_storage.get_data(table=self.EVENT_LOG_TABLE, conn=conn)
 
-    @transaction()
-    def event_log_is_clean(self, conn: Optional[Connection] = None) -> bool:
-        return self.rel_storage.get_count(table=self.EVENT_LOG_TABLE, conn=conn) == 0
+    # @transaction()
+    # def event_log_is_clean(self, conn: Optional[Connection] = None) -> bool:
+    #     return self.rel_storage.get_count(table=self.EVENT_LOG_TABLE, conn=conn) == 0
 
     @transaction()
     def clear_event_log(self, conn: Optional[Connection] = None):
@@ -579,7 +661,7 @@ class RelAdapter(Transactable):
         """
         if not len(calls) == len(set([call.uid for call in calls])):
             # something fishy may be going on
-            raise ValueError("Calls must have unique UIDs")
+            raise InternalError("Calls must have unique UIDs")
         # split by operation *internal* name to group calls to the same op in
         # the same group, even if UI names are different.
         calls_by_op = defaultdict(list)
@@ -622,8 +704,8 @@ class RelAdapter(Transactable):
                     },
                 }
                 rows.append(row)
-            if true_versioned_ui_name is not None:
-                res[true_versioned_ui_name] = pa.Table.from_pylist(rows)
+            assert true_versioned_ui_name is not None
+            res[true_versioned_ui_name] = pa.Table.from_pylist(rows)
         return res
 
     @transaction()
@@ -682,15 +764,6 @@ class RelAdapter(Transactable):
         )
         sig = self.sig_adapter.load_ui_sigs(conn=conn)[ui_name, version]
         return Call.from_row(results, func_op=FuncOp._from_data(f=None, sig=sig))
-
-    @transaction()
-    def call_set(
-        self, call_uid: str, call: Call, conn: Optional[Connection] = None
-    ) -> None:
-        self.obj_sets(
-            {vref.uid: vref.obj for vref in list(call.inputs.values()) + call.outputs}
-        )
-        self.upsert_calls([call], conn=conn)
 
     ############################################################################
     ### object methods

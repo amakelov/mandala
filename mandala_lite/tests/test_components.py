@@ -25,6 +25,9 @@ def test_rel_storage():
 
 def test_main_storage():
     storage = Storage()
+    # check that things work on an empty storage
+    storage.sig_adapter.load_state()
+    storage.rel_adapter.get_all_call_data()
 
 
 def test_signatures():
@@ -116,3 +119,37 @@ def test_signatures():
         assert True
     new = sig.create_input(name="z", default=23)
     assert new.input_names == {"x", "y", "z"}
+
+
+def test_output_name_failure():
+    storage = Storage()
+
+    try:
+
+        @op
+        def f(output_0: int) -> int:
+            return output_0
+
+        assert False
+    except:
+        assert True
+
+
+def test_wrapping():
+    assert unwrap(23) == 23
+    assert unwrap(23.0) == 23.0
+    assert unwrap("23") == "23"
+    assert unwrap([1, 2, 3]) == [1, 2, 3]
+
+    vref = wrap(23)
+    assert wrap(vref) is vref
+    try:
+        wrap(vref, uid="aaaaaa")
+        assert False
+    except:
+        assert True
+
+
+def test_reprs():
+    x = wrap(23)
+    repr(x), str(x)

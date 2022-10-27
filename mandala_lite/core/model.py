@@ -28,15 +28,6 @@ class ValueRef:
         else:
             return f"ValueRef(in_memory=False, uid={self.uid})"
 
-    def detached(self) -> "ValueRef":
-        """
-        Return a *copy* of this `ValueRef` without the pointer to the underlying
-        object.
-
-        (Correspondingly, this is marked as not `in_memory`.)
-        """
-        return ValueRef(uid=self.uid, obj=None, in_memory=False)
-
     @staticmethod
     def is_delayed(vref: "ValueRef") -> bool:
         return isinstance(vref.obj, Delayed)
@@ -103,22 +94,6 @@ class Call:
         self.inputs = inputs
         self.outputs = outputs
         self.func_op = func_op
-
-    def detached(self) -> "Call":
-        """
-        Returns a "detached" *copy* of this call, meaning that the inputs and
-        outputs are replaced by detached *copies* of the original inputs and
-        outputs.
-
-        This is just a simple way to extract the metadata of the call without
-        coming up with a separate encoding.
-        """
-        return Call(
-            uid=self.uid,
-            inputs={k: v.detached() for k, v in self.inputs.items()},
-            outputs=[v.detached() for v in self.outputs],
-            func_op=self.func_op,
-        )
 
     @staticmethod
     def from_row(row: pa.Table, func_op: "FuncOp") -> "Call":

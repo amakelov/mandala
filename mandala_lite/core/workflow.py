@@ -2,7 +2,6 @@ from ..common_imports import *
 from .weaver import *
 from .model import ValueRef, FuncOp, Call
 from .utils import Hashing
-from ..utils import invert_dict
 
 
 class CallStruct:

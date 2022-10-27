@@ -61,7 +61,7 @@ def bind_inputs(args, kwargs, mode: str, func_op: FuncOp) -> Dict[str, Any]:
     bound_args.apply_defaults()
     inputs_dict = dict(bound_args.arguments)
     if mode == MODES.query:
-        # TODO: add a point constraint for defaults
+        #! TODO: add a point constraint for defaults
         for k in inputs_dict.keys():
             if not isinstance(inputs_dict[k], ValQuery):
                 inputs_dict[k] = Q()
@@ -77,7 +77,3 @@ def format_as_outputs(
         return outputs[0]
     else:
         return tuple(outputs)
-
-
-def execute_call():
-    pass
