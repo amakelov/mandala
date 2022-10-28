@@ -193,7 +193,7 @@ def test_weird():
         return m + 1
 
     for f in [a, b, c, d, e]:
-        synchronize(f, storage)
+        storage.synchronize(f)
 
     with storage.run():
         var_0 = 23

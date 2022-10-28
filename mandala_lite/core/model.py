@@ -169,7 +169,6 @@ class FuncOp:
         self.sig = Signature.from_py(
             sig=inspect.signature(func), name=ui_name, version=version
         )
-        self.is_synchronized = False
 
     def compute(self, inputs: Dict[str, Any]) -> List[Any]:
         """

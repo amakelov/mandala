@@ -14,17 +14,18 @@ class DuckDBRelStorage(RelStorage, Transactable):
     UID_DTYPE = "VARCHAR"  # TODO - change this
     TEMP_ARROW_TABLE = "__arrow__"
 
-    def __init__(self, address: str = ":memory:"):
-        self.address = address
-        self.in_memory = address == ":memory:"
+    def __init__(self, address: Optional[str] = None):
+        self.in_memory = address is None
         if self.in_memory:
-            self._conn = duckdb.connect(self.address)
+            self._conn = duckdb.connect(database=":memory:")
+        else:
+            self.path = address
 
     ############################################################################
     ### transaction interface
     ############################################################################
     def _get_connection(self) -> Connection:
-        return self._conn if self.in_memory else duckdb.connect(database=self.address)
+        return self._conn if self.in_memory else duckdb.connect(database=self.path)
 
     def _end_transaction(self, conn: Connection):
         if not self.in_memory:
@@ -100,15 +101,6 @@ class DuckDBRelStorage(RelStorage, Transactable):
         logger.debug(
             f'Created table "{name}" with columns {[elt[0] for elt in columns]}'
         )
-
-    # @transaction()
-    # def delete_relation(self, name: str, conn: Optional[Connection] = None):
-    #     """
-    #     Delete a (memoization) table
-    #     """
-    #     query = Query.drop_table(table=name)
-    #     conn.execute(str(query))
-    #     logger.debug(f'Deleted table "{name}"')
 
     @transaction()
     def create_column(

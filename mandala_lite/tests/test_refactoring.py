@@ -37,13 +37,13 @@ def test_add_input():
     def add_many(x: int) -> int:
         return x + 1
 
-    synchronize(func=add_many, storage=storage)
+    storage.synchronize(f=add_many)
 
     @op
     def add_many(x: int, y: int = 23, z: int = 42) -> int:
         return x + y + z
 
-    synchronize(func=add_many, storage=storage)
+    storage.synchronize(f=add_many)
 
     with storage.run():
         add_many(0)
@@ -75,7 +75,7 @@ def test_add_input():
     def no_default(x: int) -> int:
         return x + 1
 
-    synchronize(func=no_default, storage=storage)
+    storage.synchronize(f=no_default)
 
     try:
 
@@ -83,7 +83,7 @@ def test_add_input():
         def no_default(x: int, y: int) -> int:
             return x + y
 
-        synchronize(func=no_default, storage=storage)
+        storage.synchronize(f=no_default)
         assert False
     except:
         assert True
@@ -157,7 +157,7 @@ def test_func_renaming():
     with storage.run():
         x = inc(23)
 
-    rename_func(storage=storage, func=inc, new_name="inc_new")
+    storage.rename_func(func=inc, new_name="inc_new")
     assert inc.is_invalidated
 
     # define correct function
@@ -188,11 +188,11 @@ def test_func_renaming():
     def new_inc(x: int) -> int:
         return x + 1
 
-    synchronize(func=inc, storage=storage)
-    synchronize(func=new_inc, storage=storage)
+    storage.synchronize(f=inc)
+    storage.synchronize(f=new_inc)
 
     try:
-        rename_func(storage=storage, func=inc, new_name="inc_new")
+        storage.rename_func(func=inc, new_name="new_inc")
         assert False
     except:
         assert True
@@ -210,11 +210,11 @@ def test_func_renaming():
     def new_inc(x: int) -> int:
         return x + 1
 
-    synchronize(func=inc, storage=storage)
-    synchronize(func=new_inc, storage=storage)
+    storage.synchronize(f=inc)
+    storage.synchronize(f=new_inc)
 
-    rename_func(storage=storage, func=inc, new_name="temp")
-    rename_func(storage=storage, func=new_inc, new_name="inc")
+    storage.rename_func(func=inc, new_name="temp")
+    storage.rename_func(func=new_inc, new_name="inc")
 
     @op
     def temp(x: int) -> int:
@@ -224,10 +224,10 @@ def test_func_renaming():
     def inc(x: int) -> int:
         return x + 1
 
-    synchronize(func=temp, storage=storage)
-    synchronize(func=inc, storage=storage)
+    storage.synchronize(f=temp)
+    storage.synchronize(f=inc)
 
-    rename_func(storage=storage, func=temp, new_name="new_inc")
+    storage.rename_func(func=temp, new_name="new_inc")
 
 
 def test_arg_renaming():
@@ -243,7 +243,7 @@ def test_arg_renaming():
     with storage.run():
         x = inc(23)
 
-    rename_arg(storage=storage, func=inc, name="x", new_name="x_new")
+    storage.rename_arg(func=inc, name="x", new_name="x_new")
     assert inc.is_invalidated
 
     # define correct function
@@ -268,9 +268,9 @@ def test_arg_renaming():
     def add(x: int, y: int) -> int:
         return x + y
 
-    synchronize(func=add, storage=storage)
+    storage.synchronize(f=add)
     try:
-        rename_arg(storage=storage, func=add, name="x", new_name="y")
+        storage.rename_arg(func=add, name="x", new_name="y")
         assert False
     except:
         assert True
@@ -318,11 +318,11 @@ def test_renaming_failures_1():
     def inc(x: int) -> int:
         return x + 1
 
-    synchronize(func=inc, storage=storage)
+    storage.synchronize(f=inc)
 
-    rename_func(storage=storage, func=inc, new_name="inc_new")
+    storage.rename_func(func=inc, new_name="inc_new")
     try:
-        rename_func(storage=storage, func=inc, new_name="inc_other")
+        storage.rename_func(func=inc, new_name="inc_other")
         assert False
     except:
         assert True
@@ -331,11 +331,11 @@ def test_renaming_failures_1():
     def add(x: int, y: int) -> int:
         return x + y
 
-    synchronize(func=add, storage=storage)
+    storage.synchronize(f=add)
 
-    rename_arg(storage=storage, func=add, name="x", new_name="z")
+    storage.rename_arg(func=add, name="x", new_name="z")
     try:
-        rename_arg(storage=storage, func=add, name="y", new_name="w")
+        storage.rename_arg(func=add, name="y", new_name="w")
         assert False
     except:
         assert True
@@ -356,10 +356,10 @@ def test_renaming_failures_2():
         return x + y
 
     for f in (inc, add):
-        synchronize(func=f, storage=storage)
+        storage.synchronize(f=f)
 
     try:
-        rename_func(storage=storage, func=inc, new_name="add")
+        storage.rename_func(func=inc, new_name="add")
         assert False
     except:
         assert True
@@ -372,11 +372,11 @@ def test_renaming_inside_context_1():
     def inc(x: int) -> int:
         return x + 1
 
-    synchronize(inc, storage=storage)
+    storage.synchronize(f=inc)
 
     try:
         with storage.run():
-            rename_func(storage=storage, func=inc, new_name="inc_new")
+            storage.rename_func(func=inc, new_name="inc_new")
             inc(23)
         assert False
     except:
@@ -386,11 +386,11 @@ def test_renaming_inside_context_1():
     def add(x: int, y: int) -> int:
         return x + y
 
-    synchronize(add, storage=storage)
+    storage.synchronize(f=add)
 
     try:
         with storage.run():
-            rename_arg(storage=storage, func=add, name="x", new_name="z")
+            storage.rename_arg(func=add, name="x", new_name="z")
             add(23, 42)
         assert False
     except:
@@ -407,12 +407,12 @@ def test_renaming_inside_context_2():
     def inc(x: int) -> int:
         return x + 1
 
-    synchronize(inc, storage=storage)
+    storage.synchronize(f=inc)
 
     try:
         with storage.run():
             inc(23)
-            rename_func(storage=storage, func=inc, new_name="inc_new")
+            storage.rename_func(func=inc, new_name="inc_new")
         assert False
     except:
         assert True
@@ -421,12 +421,12 @@ def test_renaming_inside_context_2():
     def add(x: int, y: int) -> int:
         return x + y
 
-    synchronize(add, storage=storage)
+    storage.synchronize(f=add)
 
     try:
         with storage.run():
             add(23, 42)
-            rename_arg(storage=storage, func=add, name="x", new_name="z")
+            storage.rename_arg(func=add, name="x", new_name="z")
         assert False
     except:
         assert True
@@ -439,14 +439,14 @@ def test_other_refactoring_failures():
     def inc(x: int) -> int:
         return x + 1
 
-    synchronize(inc, storage=storage)
+    storage.synchronize(f=inc)
 
     @op
     def inc(y: int) -> int:
         return y + 1
 
     try:
-        synchronize(inc, storage)
+        storage.synchronize(f=inc)
         assert False
     except:
         assert True

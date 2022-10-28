@@ -67,8 +67,8 @@ def test_create_func():
     def f_2(x: int) -> int:
         return x + 1
 
-    synchronize(func=f_1, storage=storage_1)
-    synchronize(func=f_2, storage=storage_2)
+    storage_1.synchronize(f=f_1)
+    storage_2.synchronize(f=f_2)
     assert signatures_are_equal(storage_1=storage_1, storage_2=storage_2)
 
 
@@ -100,14 +100,14 @@ def test_add_input():
     def inc_2(x: int) -> int:
         return x + 1
 
-    synchronize(func=inc_1, storage=storage_1)
-    synchronize(func=inc_2, storage=storage_2)
+    storage_1.synchronize(f=inc_1)
+    storage_2.synchronize(f=inc_2)
 
     @op(ui_name="inc")
     def inc_1(x: int, how_many_times: int = 1) -> int:
         return x + how_many_times
 
-    synchronize(func=inc_1, storage=storage_1)
+    storage_1.synchronize(f=inc_1)
     assert not signatures_are_equal(storage_1=storage_1, storage_2=storage_2)
     with storage_2.run():
         inc_2(23)
@@ -150,10 +150,10 @@ def test_rename_func():
     def f_2(x: int) -> int:
         return x + 1
 
-    synchronize(func=f_1, storage=storage_1)
-    synchronize(func=f_2, storage=storage_2)
+    storage_1.synchronize(f=f_1)
+    storage_2.synchronize(f=f_2)
 
-    rename_func(storage=storage_1, func=f_1, new_name="g")
+    storage_1.rename_func(func=f_1, new_name="g")
 
     assert not signatures_are_equal(storage_1=storage_1, storage_2=storage_2)
     with storage_2.run():
@@ -181,10 +181,10 @@ def test_rename_input():
     def f_2(x: int) -> int:
         return x + 1
 
-    synchronize(func=f_1, storage=storage_1)
-    synchronize(func=f_2, storage=storage_2)
+    storage_1.synchronize(f=f_1)
+    storage_2.synchronize(f=f_2)
 
-    rename_arg(storage=storage_1, func=f_1, name="x", new_name="y")
+    storage_1.rename_arg(func=f_1, name="x", new_name="y")
 
     assert not signatures_are_equal(storage_1=storage_1, storage_2=storage_2)
     with storage_2.run():
@@ -240,22 +240,22 @@ def test_remote_lots_of_stuff():
     assert data_is_equal(storage_1=storage_1, storage_2=storage_2)
 
     ### now, rename a function in storage 1!
-    rename_func(storage=storage_1, func=inc, new_name="inc_new")
+    storage_1.rename_func(func=inc, new_name="inc_new")
 
     @op
     def inc_new(x: int) -> int:
         return x + 1
 
-    synchronize(func=inc_new, storage=storage_1)
+    storage_1.synchronize(f=inc_new)
 
     ### rename argument too
-    rename_arg(storage=storage_1, func=inc_new, name="x", new_name="x_new")
+    storage_1.rename_arg(func=inc_new, name="x", new_name="x_new")
 
     @op
     def inc_new(x_new: int) -> int:
         return x_new + 1
 
-    synchronize(func=inc_new, storage=storage_1)
+    storage_1.synchronize(f=inc_new)
 
     # do work with the renamed function in storage 1
     with storage_1.run():

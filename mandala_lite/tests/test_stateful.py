@@ -18,8 +18,7 @@ from mandala_lite.core.workflow import Workflow, CallStruct
 from mandala_lite.core.utils import Hashing, get_uid
 from mandala_lite.core.compiler import *
 from mandala_lite.storages.remote_storage import RemoteStorage
-from mandala_lite.ui.main import SimpleWorkflowExecutor
-from mandala_lite.ui.funcs import synchronize_op
+from mandala_lite.ui.main import SimpleWorkflowExecutor, FuncInterface
 
 
 class MockStorage:
@@ -422,7 +421,7 @@ class SingleClientSimulator(RuleBasedStateMachine):
             version=0,
             deterministic=True,
         )
-        synchronize_op(func_op=new_func_op, storage=client.storage)
+        client.storage.synchronize_op(func_op=new_func_op)
         client.func_ops.append(new_func_op)
         for mock_storage in [client.mock_storage, self.mock_storage]:
             mock_storage.create_op(func_op=new_func_op)
@@ -443,7 +442,7 @@ class SingleClientSimulator(RuleBasedStateMachine):
         new_sig = sig.create_input(name=new_name, default=default_value)
         # TODO: provide a new function with extra input as a user would
         new_func_op = FuncOp._from_data(f=f, sig=new_sig)
-        synchronize_op(func_op=new_func_op, storage=client.storage)
+        client.storage.synchronize_op(func_op=new_func_op)
         client.func_ops[idx] = new_func_op
         new_sig = new_func_op.sig
         for mock_storage in [client.mock_storage, self.mock_storage]:
@@ -475,9 +474,9 @@ class SingleClientSimulator(RuleBasedStateMachine):
                 # use the API the user would use to rename. This will rename all
                 # versions.
                 func_interface = FuncInterface(func_op=func_op_version)
-                synchronize(func=func_interface, storage=client.storage)
-                new_sig = rename_func(
-                    storage=client.storage, func=func_interface, new_name=new_name
+                client.storage.synchronize(f=func_interface)
+                new_sig = client.storage.rename_func(
+                    func=func_interface, new_name=new_name
                 )
                 rename_done = True
             else:
@@ -487,7 +486,7 @@ class SingleClientSimulator(RuleBasedStateMachine):
                 ]
             # now update the state of the simulator
             new_func_op_version = FuncOp._from_data(f=func_op_version.func, sig=new_sig)
-            synchronize_op(func_op=new_func_op_version, storage=client.storage)
+            client.storage.synchronize_op(func_op=new_func_op_version)
             client.func_ops[version_idx] = new_func_op_version
         client.num_func_renames += 1
 
@@ -502,16 +501,15 @@ class SingleClientSimulator(RuleBasedStateMachine):
         new_name = random_string()
         # use the API the user would use to rename
         func_interface = FuncInterface(func_op=func_op)
-        synchronize(func=func_interface, storage=client.storage)
-        new_sig = rename_arg(
-            storage=client.storage,
+        client.storage.synchronize(f=func_interface)
+        new_sig = client.storage.rename_arg(
             func=func_interface,
             name=input_to_rename,
             new_name=new_name,
         )
         # now update the state of the simulator
         new_func_op = FuncOp._from_data(f=func_op.func, sig=new_sig)
-        synchronize_op(func_op=new_func_op, storage=client.storage)
+        client.storage.synchronize_op(func_op=new_func_op)
         client.func_ops[func_idx] = new_func_op
         client.num_input_renames += 1
 
@@ -532,7 +530,7 @@ class SingleClientSimulator(RuleBasedStateMachine):
             version=new_version,
             deterministic=True,
         )
-        synchronize_op(func_op=new_func_op, storage=client.storage)
+        client.storage.synchronize_op(func_op=new_func_op)
         client.func_ops.append(new_func_op)
         for mock_storage in [client.mock_storage, self.mock_storage]:
             mock_storage.create_new_version(new_version=new_func_op)

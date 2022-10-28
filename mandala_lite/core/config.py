@@ -2,6 +2,7 @@ from ..common_imports import *
 
 
 class Config:
+    ### options modifying library behavior
     # whether ops automatically wrap their inputs as value references, or
     # require to be explicitly passed value references
     ### settings
@@ -18,6 +19,8 @@ class Config:
     # whether signatures are verified against the database each time a function
     # is called
     check_signature_on_each_call = False
+    # always create storage with a persistent database
+    _persistent_storage_testing = False
 
     ### constants
     # used for columns containing UIDs of value references or calls

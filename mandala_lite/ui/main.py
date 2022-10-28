@@ -14,13 +14,14 @@ from ..storages.remote_storage import RemoteStorage
 from ..common_imports import *
 from ..core.config import Config
 from ..core.model import Call, FuncOp, ValueRef, unwrap, Delayed
+from ..core.sig import Signature
 from ..core.workflow import Workflow, CallStruct
-from ..core.utils import Hashing
+from ..core.utils import Hashing, get_uid
 
 from ..core.weaver import ValQuery, FuncQuery
 from ..core.compiler import traverse_all, Compiler, QueryGraph
 
-from .utils import wrap_inputs, wrap_outputs
+from .utils import wrap_inputs, wrap_outputs, bind_inputs, format_as_outputs
 
 
 class MODES:
@@ -126,7 +127,7 @@ class Context:
         return self
 
     def get_table(self, *queries: ValQuery, engine: str = "sql") -> pd.DataFrame:
-        # ! EXTREMELY IMPORTANT
+        #! important
         # We must sync any dirty cache elements to the DuckDB store before performing a query.
         # If we don't, we'll query a store that might be missing calls and objs.
         self.storage.commit()
@@ -169,6 +170,7 @@ class Storage(Transactable):
 
     def __init__(
         self,
+        db_path: Optional[Union[str, Path]] = None,
         root: Optional[Union[Path, RemoteStorage]] = None,
         timestamp: Optional[datetime.datetime] = None,
     ):
@@ -177,7 +179,19 @@ class Storage(Transactable):
         self.obj_cache = InMemoryStorage()
         # all objects (inputs and outputs to operations, defaults) are saved here
         # stores the memoization tables
-        self.rel_storage = DuckDBRelStorage()
+        if db_path is None and Config._persistent_storage_testing:
+            # get a temp db path
+            # generate a random filename
+            db_name = f"db_{get_uid()}.db"
+            db_path = Path(
+                os.path.join(
+                    os.path.dirname(os.path.abspath(__file__)),
+                    f"../../temp_dbs/{db_name}",
+                )
+            ).resolve()
+        self.rel_storage = DuckDBRelStorage(
+            address=None if db_path is None else str(db_path)
+        )
         # manipulates the memoization tables
         self.rel_adapter = RelAdapter(rel_storage=self.rel_storage)
         self.sig_adapter = self.rel_adapter.sig_adapter
@@ -261,6 +275,58 @@ class Storage(Transactable):
         # Remove dirty bits from cache.
         self.obj_cache.dirty_entries.clear()
         self.call_cache.dirty_entries.clear()
+
+    ############################################################################
+    ### func synchronization
+    ############################################################################
+    def synchronize_op(self, func_op: FuncOp):
+        # first, pull the current data from the remote!
+        self.sig_syncer.sync_from_remote()
+        # this step also sends the signature to the remote
+        new_sig = self.sig_syncer.sync_from_local(sig=func_op.sig)
+        func_op.sig = new_sig
+        # to send any default values that were created by adding inputs
+        self.sync_to_remote()
+
+    def synchronize(self, f: Union["FuncInterface", Any]):
+        self.synchronize_op(func_op=f.func_op)
+        f.is_synchronized = True
+
+    ############################################################################
+    ### func refactoring
+    ############################################################################
+    def rename_func(self, func: "FuncInterface", new_name: str) -> Signature:
+        """
+        Rename a memoized function.
+
+        What happens here:
+            - check renaming preconditions
+            - check there is no name clash with the new name
+            - rename the memoization table
+            - update signature object
+            - invalidate the function (making it impossible to compute with it)
+        """
+        _check_rename_precondition(storage=self, func=func)
+        sig = self.sig_syncer.sync_rename_sig(sig=func.func_op.sig, new_name=new_name)
+        func.invalidate()
+        return sig
+
+    def rename_arg(self, func: "FuncInterface", name: str, new_name: str) -> Signature:
+        """
+        Rename memoized function argument.
+
+        What happens here:
+            - check renaming preconditions
+            - update signature object
+            - rename table
+            - invalidate the function (making it impossible to compute with it)
+        """
+        _check_rename_precondition(storage=self, func=func)
+        sig = self.sig_syncer.sync_rename_input(
+            sig=func.func_op.sig, input_name=name, new_input_name=new_name
+        )
+        func.invalidate()
+        return sig
 
     ############################################################################
     ### remote sync operations
@@ -374,9 +440,6 @@ class Storage(Transactable):
         self.sync_to_remote()
         self.sync_from_remote()
 
-    ############################################################################
-    ### signature sync, renaming, refactoring
-    ############################################################################
     @property
     def is_clean(self) -> bool:
         """
@@ -387,7 +450,7 @@ class Storage(Transactable):
         )  # and self.rel_adapter.event_log_is_clean()
 
     ############################################################################
-    ### creating contexts
+    ### spawning contexts
     ############################################################################
     def run(self, **kwargs) -> Context:
         return FreeContexts.run(storage=self, **kwargs)
@@ -399,7 +462,7 @@ class Storage(Transactable):
         return FreeContexts.batch(storage=self, **kwargs)
 
     ############################################################################
-    ### low-level primitives to make calls in contexts
+    ### make calls in contexts
     ############################################################################
     def execute_query(
         self, select_queries: List[ValQuery], engine: str = "sql"
@@ -447,16 +510,14 @@ class Storage(Transactable):
     def call_run(
         self, func_op: FuncOp, inputs: Dict[str, Union[Any, ValueRef]]
     ) -> Tuple[List[ValueRef], Call]:
-        # if op.is_invalidated:
-        #     raise RuntimeError(
-        #         "This function has been invalidated due to a change in the signature, and cannot be called"
-        #     )
         # wrap inputs
         wrapped_inputs = wrap_inputs(inputs)
         # get call UID using *internal names* to guarantee the same UID will be
         # assigned regardless of renamings
         hashable_input_uids = {}
         for k, v in wrapped_inputs.items():
+            # ignore the inputs that were added to the function and have their
+            # default values
             internal_k = func_op.sig.ui_to_internal_input_map[k]
             if internal_k in func_op.sig._new_input_defaults_uids:
                 if func_op.sig._new_input_defaults_uids[internal_k] == v.uid:
@@ -558,3 +619,70 @@ class SimpleWorkflowExecutor(WorkflowExecutor):
         # filter out repeated calls
         result = list({call.uid: call for call in result}.values())
         return result
+
+
+class FuncInterface:
+    """
+    Wrapper around a memoized function.
+
+    This is the object the `@op` decorator converts functions into.
+    """
+
+    def __init__(self, func_op: FuncOp):
+        self.func_op = func_op
+        self.__name__ = self.func_op.func.__name__
+        self.is_synchronized = False
+        self.is_invalidated = False
+
+    def invalidate(self):
+        self.is_invalidated = True
+        self.is_synchronized = False
+
+    def __call__(self, *args, **kwargs) -> Union[None, Any, Tuple[Any]]:
+        context = GlobalContext.current
+        if context is None:
+            # mandala is completely disabled when not in a context
+            return self.func_op.func(*args, **kwargs)
+        if self.is_invalidated:
+            raise RuntimeError(
+                "This function has been invalidated due to a change in the signature, and cannot be called"
+            )
+        storage = context.storage
+        if not self.func_op.sig.has_internal_data:
+            # synchronize if necessary
+            storage.synchronize(self)
+            # synchronize(func=self, storage=context.storage)
+        inputs = bind_inputs(args, kwargs, mode=context.mode, func_op=self.func_op)
+        mode = context.mode
+        if mode == MODES.run:
+            outputs, call = storage.call_run(func_op=self.func_op, inputs=inputs)
+            return format_as_outputs(outputs=outputs)
+        elif mode == MODES.query:
+            return format_as_outputs(
+                outputs=storage.call_query(func_op=self.func_op, inputs=inputs)
+            )
+        elif mode == MODES.batch:
+            wrapped_inputs = wrap_inputs(inputs)
+            outputs, call_struct = storage.call_batch(
+                func_op=self.func_op, inputs=wrapped_inputs
+            )
+            context._call_structs.append(call_struct)
+            return format_as_outputs(outputs=outputs)
+        else:
+            raise ValueError()
+
+    def get_table(self) -> pd.DataFrame:
+        storage = GlobalContext.current.storage
+        assert storage is not None
+        return storage.rel_storage.get_data(table=self.func_op.sig.versioned_ui_name)
+
+
+def _check_rename_precondition(storage: Storage, func: FuncInterface):
+    """
+    In order to rename function data, the function must be synced with the
+    storage, and the storage must be clean
+    """
+    if not func.is_synchronized:
+        raise RuntimeError("Cannot rename while function is not synchronized.")
+    if not storage.is_clean:
+        raise RuntimeError("Cannot rename while there is uncommited work.")
