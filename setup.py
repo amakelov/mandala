@@ -20,7 +20,15 @@ extras_require = {
         "ipython",
         "mongomock",
     ],
+    "integrations": [
+        "dask",
+    ],
+    "demos": [
+        "torch",
+        "sklearn",
+    ],
 }
+
 
 extras_require["complete"] = sorted({v for req in extras_require.values() for v in req})
 

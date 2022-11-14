@@ -53,6 +53,7 @@
 mandala_lite.egg-info/*
 
 mandala_lite/demos/data/
+scratchpad/
 
 # visualizations
 # Ignore files cached by Hypothesis
@@ -68,6 +69,7 @@ mandala_lite/demos/data/
 **/htmlcov/*
 # ignore persistent storages
 temp_dbs/*
+mandala_lite/tests/output/*
 
 ## PyCharm stuff
 .idea/**

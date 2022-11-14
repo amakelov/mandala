@@ -4,9 +4,10 @@ from collections import defaultdict
 import datetime
 from pypika import Query, Table
 import pyarrow.parquet as pq
+from dask import delayed
 
 from ..storages.rel_impls.utils import Transactable, transaction
-from ..storages.kv import InMemoryStorage
+from ..storages.kv import InMemoryStorage, MultiProcInMemoryStorage, KVStore
 from ..storages.rel_impls.duckdb_impl import DuckDBRelStorage
 from ..storages.rels import RelAdapter, RemoteEventLogEntry, deserialize, SigAdapter
 from ..storages.sigs import SigSyncer
@@ -38,7 +39,10 @@ class Context:
     OVERRIDES = {}
 
     def __init__(
-        self, storage: "Storage" = None, mode: str = MODES.run, lazy: bool = False
+        self,
+        storage: "Storage" = None,
+        mode: str = MODES.run,
+        lazy: bool = False,
     ):
         self.storage = storage
         self.mode = self.OVERRIDES.get("mode", mode)
@@ -173,10 +177,19 @@ class Storage(Transactable):
         db_path: Optional[Union[str, Path]] = None,
         root: Optional[Union[Path, RemoteStorage]] = None,
         timestamp: Optional[datetime.datetime] = None,
+        multiproc: bool = False,
+        call_cache: Optional[KVStore] = None,
+        obj_cache: Optional[KVStore] = None,
+        signatures: Optional[Dict[Tuple[str, int], Signature]] = None,
+        _read_only: bool = False,
     ):
         self.root = root
-        self.call_cache = InMemoryStorage()
-        self.obj_cache = InMemoryStorage()
+        if call_cache is None:
+            call_cache = MultiProcInMemoryStorage() if multiproc else InMemoryStorage()
+        self.call_cache = call_cache
+        if obj_cache is None:
+            obj_cache = MultiProcInMemoryStorage() if multiproc else InMemoryStorage()
+        self.obj_cache = obj_cache
         # all objects (inputs and outputs to operations, defaults) are saved here
         # stores the memoization tables
         if db_path is None and Config._persistent_storage_testing:
@@ -189,14 +202,17 @@ class Storage(Transactable):
                     f"../../temp_dbs/{db_name}",
                 )
             ).resolve()
+        self.db_path = db_path
         self.rel_storage = DuckDBRelStorage(
-            address=None if db_path is None else str(db_path)
+            address=None if db_path is None else str(db_path),
+            _read_only=_read_only,
         )
         # manipulates the memoization tables
         self.rel_adapter = RelAdapter(rel_storage=self.rel_storage)
         self.sig_adapter = self.rel_adapter.sig_adapter
         self.sig_syncer = SigSyncer(sig_adapter=self.sig_adapter, root=self.root)
-
+        if signatures is not None:
+            self.sig_adapter.dump_state(state=signatures)
         self.last_timestamp = (
             timestamp if timestamp is not None else datetime.datetime.fromtimestamp(0)
         )
@@ -554,7 +570,6 @@ class Storage(Transactable):
                 outputs=wrapped_outputs,
                 func_op=func_op,
             )
-            # save *detached* call in call storage
             self.call_set(call_uid, call)
             # set inputs and outputs in obj storage
             for v in itertools.chain(wrapped_outputs, wrapped_inputs.values()):
@@ -628,11 +643,12 @@ class FuncInterface:
     This is the object the `@op` decorator converts functions into.
     """
 
-    def __init__(self, func_op: FuncOp):
+    def __init__(self, func_op: FuncOp, executor: str = "python"):
         self.func_op = func_op
         self.__name__ = self.func_op.func.__name__
         self.is_synchronized = False
         self.is_invalidated = False
+        self.executor = executor
 
     def invalidate(self):
         self.is_invalidated = True
@@ -643,11 +659,11 @@ class FuncInterface:
         if context is None:
             # mandala is completely disabled when not in a context
             return self.func_op.func(*args, **kwargs)
+        storage = context.storage
         if self.is_invalidated:
             raise RuntimeError(
                 "This function has been invalidated due to a change in the signature, and cannot be called"
             )
-        storage = context.storage
         if not self.func_op.sig.has_internal_data:
             # synchronize if necessary
             storage.synchronize(self)
@@ -655,13 +671,37 @@ class FuncInterface:
         inputs = bind_inputs(args, kwargs, mode=context.mode, func_op=self.func_op)
         mode = context.mode
         if mode == MODES.run:
-            outputs, call = storage.call_run(func_op=self.func_op, inputs=inputs)
-            return format_as_outputs(outputs=outputs)
+            if self.executor == "python":
+                outputs, call = storage.call_run(func_op=self.func_op, inputs=inputs)
+                return format_as_outputs(outputs=outputs)
+            elif self.executor == "dask":
+                assert not storage.rel_storage.in_memory, "Dask executor only works with a persistent storage"
+                def daskop_f(*args, __data__, **kwargs):
+                    call_cache, obj_cache, db_path = __data__
+                    temp_storage = Storage(db_path=db_path, _read_only=True)
+                    temp_storage.call_cache = call_cache
+                    temp_storage.obj_cache = obj_cache
+                    inputs = bind_inputs(
+                        func_op=self.func_op, args=args, kwargs=kwargs, mode=MODES.run
+                    )
+                    outputs, _ = temp_storage.call_run(
+                        func_op=self.func_op, inputs=inputs
+                    )
+                    return format_as_outputs(outputs=outputs)
+
+                __data__ = (storage.call_cache, storage.obj_cache, storage.db_path)
+                nout = self.func_op.sig.n_outputs
+                return delayed(daskop_f, nout=nout)(
+                    *args, __data__=__data__, **kwargs
+                )
+            else:
+                raise NotImplementedError()
         elif mode == MODES.query:
             return format_as_outputs(
                 outputs=storage.call_query(func_op=self.func_op, inputs=inputs)
             )
         elif mode == MODES.batch:
+            assert self.executor == "python"
             wrapped_inputs = wrap_inputs(inputs)
             outputs, call_struct = storage.call_batch(
                 func_op=self.func_op, inputs=wrapped_inputs

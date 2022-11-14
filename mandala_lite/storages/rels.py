@@ -58,6 +58,12 @@ class SigAdapter(Transactable):
         )
 
     @transaction()
+    def has_state(self, conn: Optional[Connection] = None) -> bool:
+        query = f"SELECT * FROM {self.rel_adapter.SIGNATURES_TABLE} WHERE index = 0"
+        df = self.rel_storage.execute_df(query=query, conn=conn)
+        return len(df) != 0
+
+    @transaction()
     def load_state(
         self, conn: Optional[Connection] = None
     ) -> Dict[Tuple[str, int], Signature]:
@@ -516,15 +522,22 @@ class RelAdapter(Transactable):
         self.rel_storage = rel_storage
         self.sig_adapter = SigAdapter(rel_adapter=self)
         self.init()
-        self.sig_adapter.dump_state(state={})
+        # check if we are connecting to an existing instance
+        conn = self._get_connection()
+        if not self.sig_adapter.has_state(conn=conn):
+            self.sig_adapter.dump_state(state={}, conn=conn)
+        self._end_transaction(conn=conn)
 
     @transaction()
     def init(self, conn: Optional[Connection] = None):
+        if self.rel_storage._read_only:
+            return
         self.rel_storage.create_relation(
             name=self.VREF_TABLE,
             columns=[(Config.uid_col, None), (Config.vref_value_col, "blob")],
             primary_key=Config.uid_col,
             defaults={},
+            if_not_exists=True,
             conn=conn,
         )
         # Initialize the event log.
@@ -536,6 +549,7 @@ class RelAdapter(Transactable):
             columns=[(Config.uid_col, None), ("table", "varchar")],
             primary_key=Config.uid_col,
             defaults={},
+            if_not_exists=True,
             conn=conn,
         )
         # The signatures table is a binary dump of the signatures
@@ -547,6 +561,7 @@ class RelAdapter(Transactable):
             ],
             primary_key="index",
             defaults={},
+            if_not_exists=True,
             conn=conn,
         )
 

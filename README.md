@@ -28,7 +28,6 @@ pip install git+https://github.com/amakelov/mandala_lite
 ## Minimal example
 ```python
 from mandala_lite.imports import *
-from typing import Tuple
 
 # create a storage for results
 storage = Storage()

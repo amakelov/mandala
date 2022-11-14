@@ -93,7 +93,8 @@ class Call:
         self.uid = uid
         self.inputs = inputs
         self.outputs = outputs
-        self.func_op = func_op
+        self.func_op = FuncOp._from_data(sig=func_op.sig, f=func_op.func)
+        self.func_op.func = None
 
     @staticmethod
     def from_row(row: pa.Table, func_op: "FuncOp") -> "Call":

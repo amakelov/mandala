@@ -13,13 +13,19 @@ def Q() -> ValQuery:
 
 class FuncDecorator:
     # parametrized version of `@op` decorator
-    def __init__(self, version: int = 0, ui_name: Optional[str] = None):
+    def __init__(
+        self,
+        version: int = 0,
+        ui_name: Optional[str] = None,
+        executor: str = "python",
+    ):
         self.version = version
         self.ui_name = ui_name
+        self.executor = executor
 
     def __call__(self, func: Callable) -> "func":
         func_op = FuncOp(func=func, version=self.version, ui_name=self.ui_name)
-        return FuncInterface(func_op=func_op)
+        return FuncInterface(func_op=func_op, executor=self.executor)
 
 
 def op(*args, **kwargs) -> Callable:
@@ -31,4 +37,5 @@ def op(*args, **kwargs) -> Callable:
         # @op(...) case
         version = kwargs.get("version", 0)
         ui_name = kwargs.get("ui_name", None)
-        return FuncDecorator(version=version, ui_name=ui_name)
+        executor = kwargs.get("executor", "python")
+        return FuncDecorator(version=version, ui_name=ui_name, executor=executor)

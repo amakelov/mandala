@@ -14,10 +14,11 @@ class DuckDBRelStorage(RelStorage, Transactable):
     UID_DTYPE = "VARCHAR"  # TODO - change this
     TEMP_ARROW_TABLE = "__arrow__"
 
-    def __init__(self, address: Optional[str] = None):
+    def __init__(self, address: Optional[str] = None, _read_only: bool = False):
         self.in_memory = address is None
+        self._read_only = _read_only
         if self.in_memory:
-            self._conn = duckdb.connect(database=":memory:")
+            self._conn = duckdb.connect(database=":memory:", read_only=self._read_only)
         else:
             self.path = address
 
@@ -25,7 +26,11 @@ class DuckDBRelStorage(RelStorage, Transactable):
     ### transaction interface
     ############################################################################
     def _get_connection(self) -> Connection:
-        return self._conn if self.in_memory else duckdb.connect(database=self.path)
+        return (
+            self._conn
+            if self.in_memory
+            else duckdb.connect(database=self.path, read_only=self._read_only)
+        )
 
     def _end_transaction(self, conn: Connection):
         if not self.in_memory:
@@ -71,6 +76,7 @@ class DuckDBRelStorage(RelStorage, Transactable):
         columns: List[tuple[str, Optional[str]]],  # [(col name, type), ...]
         defaults: Dict[str, Any],  # {col name: default value, ...}
         primary_key: Optional[str] = None,
+        if_not_exists: bool = True,
         conn: Optional[Connection] = None,
     ):
         """
@@ -78,23 +84,21 @@ class DuckDBRelStorage(RelStorage, Transactable):
         Columns are given as tuples of (name, type).
         Columns without a dtype are assumed to be of type `self.UID_DTYPE`.
         """
-        query = (
-            Query.create_table(table=name)
-            .if_not_exists()
-            .columns(
-                *[
-                    Column(
-                        column_name=column_name,
-                        column_type=column_type
-                        if column_type is not None
-                        else self.UID_DTYPE,
-                        default=defaults.get(column_name, None),
-                        # nullable=False,
-                    )
-                    for column_name, column_type in columns
-                ],
-            )
+        query = Query.create_table(table=name).columns(
+            *[
+                Column(
+                    column_name=column_name,
+                    column_type=column_type
+                    if column_type is not None
+                    else self.UID_DTYPE,
+                    default=defaults.get(column_name, None),
+                    # nullable=False,
+                )
+                for column_name, column_type in columns
+            ],
         )
+        if if_not_exists:
+            query = query.if_not_exists()
         if primary_key is not None:
             query = query.primary_key(primary_key)
         conn.execute(str(query))
