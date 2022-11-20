@@ -147,6 +147,9 @@ class Call:
         return res
 
 
+FuncType = Callable
+
+
 class FuncOp:
     """
     Operation that models function execution.
@@ -162,7 +165,7 @@ class FuncOp:
         - `mandala_lite.core.sig.Signature`
     """
 
-    def __init__(self, func: Callable, version: int = 0, ui_name: Optional[str] = None):
+    def __init__(self, func: FuncType, version: int = 0, ui_name: Optional[str] = None):
         # `ui_name` is useful for simulating multi-user scenarios in tests
         self.func = func
         self.py_sig = inspect.signature(self.func)
@@ -180,6 +183,24 @@ class FuncOp:
         This expects the inputs to be named using *internal* input names.
         """
         result = self.func(**inputs)
+        return self._postprocess_outputs(result=result)
+
+    async def compute_async(self, inputs: Dict[str, Any]) -> List[Any]:
+        """
+        Computes the function on the given *unwrapped* inputs. Returns a list of
+        `self.sig.n_outputs` outputs (after checking they are the number
+        expected by the interface).
+
+        This expects the inputs to be named using *internal* input names.
+        """
+        result = (
+            await self.func(**inputs)
+            if inspect.iscoroutinefunction(self.func)
+            else self.func(**inputs)
+        )
+        return self._postprocess_outputs(result)
+
+    def _postprocess_outputs(self, result) -> List[Any]:
         if self.sig.n_outputs == 0:
             assert (
                 result is None

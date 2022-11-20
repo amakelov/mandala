@@ -344,3 +344,26 @@ class Signature:
             defaults=defaults,
             version=version,
         )
+
+
+# if Config.has_torch:
+#     import torch
+#
+#     def sig_from_jit_script(f: torch.jit.ScriptFunction, version: int) -> Signature:
+#         """
+#         Parse a torch.jit.ScriptFunction into a FuncOp.
+#         """
+#         # get the names of the inputs
+#         input_names = set([x.debugName().rsplit(".")[0] for x in f.graph.inputs()])
+#         # get the names of the outputs
+#         output_names = [x.debugName().rsplit(".")[0] for x in f.graph.outputs()]
+#         # get the default values for the inputs
+#         return Signature(
+#             ui_name=str(f.name),
+#             input_names=input_names,
+#             n_outputs=len(output_names),
+#             #! not implemented
+#             defaults={},
+#             version=version,
+#         )
+#

@@ -4,7 +4,7 @@ from collections import defaultdict
 import datetime
 from pypika import Query, Table
 import pyarrow.parquet as pq
-from dask import delayed
+import asyncio
 
 from ..storages.rel_impls.utils import Transactable, transaction
 from ..storages.kv import InMemoryStorage, MultiProcInMemoryStorage, KVStore
@@ -23,6 +23,9 @@ from ..core.weaver import ValQuery, FuncQuery
 from ..core.compiler import traverse_all, Compiler, QueryGraph
 
 from .utils import wrap_inputs, wrap_outputs, bind_inputs, format_as_outputs
+
+if Config.has_dask:
+    from dask import delayed
 
 
 class MODES:
@@ -523,9 +526,7 @@ class Storage(Transactable):
         result.rename(columns=dict(zip(result.columns, cols)), inplace=True)
         return result
 
-    def call_run(
-        self, func_op: FuncOp, inputs: Dict[str, Union[Any, ValueRef]]
-    ) -> Tuple[List[ValueRef], Call]:
+    def _preprocess_run(self, func_op: FuncOp, inputs: Dict[str, Union[Any, ValueRef]]):
         # wrap inputs
         wrapped_inputs = wrap_inputs(inputs)
         # get call UID using *internal names* to guarantee the same UID will be
@@ -545,15 +546,43 @@ class Storage(Transactable):
                 func_op.sig.versioned_internal_name,
             ]
         )
+        return wrapped_inputs, call_uid
+
+    def _process_call_found(self, call_uid):
+        # get call from call storage
+        call = self.call_get(call_uid)
+        # get outputs from obj storage
+        self.preload_objs([v.uid for v in call.outputs])
+        wrapped_outputs = [self.obj_get(v.uid) for v in call.outputs]
+        # return outputs and call
+        return wrapped_outputs, call
+
+    def _process_call_not_found(
+        self, func_outputs: List[Any], call_uid, wrapped_inputs, func_op
+    ):
+        # wrap outputs
+        wrapped_outputs = wrap_outputs(func_outputs, call_uid=call_uid)
+        # create call
+        call = Call(
+            uid=call_uid,
+            inputs=wrapped_inputs,
+            outputs=wrapped_outputs,
+            func_op=func_op,
+        )
+        self.call_set(call_uid, call)
+        # set inputs and outputs in obj storage
+        for v in itertools.chain(wrapped_outputs, wrapped_inputs.values()):
+            self.obj_set(v.uid, v)
+        # return outputs and call
+        return wrapped_outputs, call
+
+    def call_run(
+        self, func_op: FuncOp, inputs: Dict[str, Union[Any, ValueRef]]
+    ) -> Tuple[List[ValueRef], Call]:
+        wrapped_inputs, call_uid = self._preprocess_run(func_op, inputs)
         # check if call UID exists in call storage
         if self.call_exists(call_uid):
-            # get call from call storage
-            call = self.call_get(call_uid)
-            # get outputs from obj storage
-            self.preload_objs([v.uid for v in call.outputs])
-            wrapped_outputs = [self.obj_get(v.uid) for v in call.outputs]
-            # return outputs and call
-            return wrapped_outputs, call
+            return self._process_call_found(call_uid=call_uid)
         else:
             # compute op
             if Config.autounwrap_inputs:
@@ -561,21 +590,33 @@ class Storage(Transactable):
             else:
                 raw_inputs = wrapped_inputs
             outputs = func_op.compute(raw_inputs)
-            # wrap outputs
-            wrapped_outputs = wrap_outputs(outputs, call_uid=call_uid)
-            # create call
-            call = Call(
-                uid=call_uid,
-                inputs=wrapped_inputs,
-                outputs=wrapped_outputs,
+            return self._process_call_not_found(
+                func_outputs=outputs,
+                call_uid=call_uid,
+                wrapped_inputs=wrapped_inputs,
                 func_op=func_op,
             )
-            self.call_set(call_uid, call)
-            # set inputs and outputs in obj storage
-            for v in itertools.chain(wrapped_outputs, wrapped_inputs.values()):
-                self.obj_set(v.uid, v)
-            # return outputs and call
-            return wrapped_outputs, call
+
+    async def call_run_async(
+        self, func_op: FuncOp, inputs: Dict[str, Union[Any, ValueRef]]
+    ) -> Tuple[List[ValueRef], Call]:
+        wrapped_inputs, call_uid = self._preprocess_run(func_op, inputs)
+        # check if call UID exists in call storage
+        if self.call_exists(call_uid):
+            return self._process_call_found(call_uid=call_uid)
+        else:
+            # compute op
+            if Config.autounwrap_inputs:
+                raw_inputs = {k: v.obj for k, v in wrapped_inputs.items()}
+            else:
+                raw_inputs = wrapped_inputs
+            outputs = await func_op.compute_async(raw_inputs)
+            return self._process_call_not_found(
+                func_outputs=outputs,
+                call_uid=call_uid,
+                wrapped_inputs=wrapped_inputs,
+                func_op=func_op,
+            )
 
     def call_query(
         self, func_op: FuncOp, inputs: Dict[str, ValQuery]
@@ -645,7 +686,7 @@ class FuncInterface:
 
     def __init__(self, func_op: FuncOp, executor: str = "python"):
         self.func_op = func_op
-        self.__name__ = self.func_op.func.__name__
+        self.__name__ = self.func_op.sig.ui_name
         self.is_synchronized = False
         self.is_invalidated = False
         self.executor = executor
@@ -654,11 +695,10 @@ class FuncInterface:
         self.is_invalidated = True
         self.is_synchronized = False
 
-    def __call__(self, *args, **kwargs) -> Union[None, Any, Tuple[Any]]:
+    def _preprocess_call(
+        self, *args, **kwargs
+    ) -> Tuple[Dict[str, Any], str, Storage, Context]:
         context = GlobalContext.current
-        if context is None:
-            # mandala is completely disabled when not in a context
-            return self.func_op.func(*args, **kwargs)
         storage = context.storage
         if self.is_invalidated:
             raise RuntimeError(
@@ -670,12 +710,24 @@ class FuncInterface:
             # synchronize(func=self, storage=context.storage)
         inputs = bind_inputs(args, kwargs, mode=context.mode, func_op=self.func_op)
         mode = context.mode
+        return inputs, mode, storage, context
+
+    def __call__(self, *args, **kwargs) -> Union[None, Any, Tuple[Any]]:
+        context = GlobalContext.current
+        if context is None:
+            # mandala is completely disabled when not in a context
+            return self.func_op.func(*args, **kwargs)
+        inputs, mode, storage, context = self._preprocess_call(*args, **kwargs)
         if mode == MODES.run:
             if self.executor == "python":
                 outputs, call = storage.call_run(func_op=self.func_op, inputs=inputs)
                 return format_as_outputs(outputs=outputs)
+            # elif self.executor == 'asyncio' or inspect.iscoroutinefunction(self.func_op.func):
             elif self.executor == "dask":
-                assert not storage.rel_storage.in_memory, "Dask executor only works with a persistent storage"
+                assert (
+                    not storage.rel_storage.in_memory
+                ), "Dask executor only works with a persistent storage"
+
                 def daskop_f(*args, __data__, **kwargs):
                     call_cache, obj_cache, db_path = __data__
                     temp_storage = Storage(db_path=db_path, _read_only=True)
@@ -691,9 +743,7 @@ class FuncInterface:
 
                 __data__ = (storage.call_cache, storage.obj_cache, storage.db_path)
                 nout = self.func_op.sig.n_outputs
-                return delayed(daskop_f, nout=nout)(
-                    *args, __data__=__data__, **kwargs
-                )
+                return delayed(daskop_f, nout=nout)(*args, __data__=__data__, **kwargs)
             else:
                 raise NotImplementedError()
         elif mode == MODES.query:
@@ -715,6 +765,34 @@ class FuncInterface:
         storage = GlobalContext.current.storage
         assert storage is not None
         return storage.rel_storage.get_data(table=self.func_op.sig.versioned_ui_name)
+
+
+class AsyncioFuncInterface(FuncInterface):
+    async def __call__(self, *args, **kwargs) -> Union[None, Any, Tuple[Any]]:
+        context = GlobalContext.current
+        if context is None:
+            # mandala is completely disabled when not in a context
+            return self.func_op.func(*args, **kwargs)
+        inputs, mode, storage, context = self._preprocess_call(*args, **kwargs)
+        if mode == MODES.run:
+
+            async def async_f(*args, __data__, **kwargs):
+                call_cache, obj_cache, db_path = __data__
+                temp_storage = Storage(db_path=db_path, _read_only=True)
+                temp_storage.call_cache = call_cache
+                temp_storage.obj_cache = obj_cache
+                inputs = bind_inputs(
+                    func_op=self.func_op, args=args, kwargs=kwargs, mode=MODES.run
+                )
+                outputs, _ = await temp_storage.call_run_async(
+                    func_op=self.func_op, inputs=inputs
+                )
+                return format_as_outputs(outputs=outputs)
+
+            __data__ = (storage.call_cache, storage.obj_cache, storage.db_path)
+            return await async_f(*args, __data__=__data__, **kwargs)
+        else:
+            return super().__call__(*args, **kwargs)
 
 
 def _check_rename_precondition(storage: Storage, func: FuncInterface):

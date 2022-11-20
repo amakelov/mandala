@@ -1,4 +1,5 @@
 import hashlib
+from .config import Config
 from ..common_imports import *
 
 

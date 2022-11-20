@@ -1,5 +1,6 @@
 from ..common_imports import *
 from ..core.model import FuncOp, ValueRef, Call, wrap
+from ..core.sig import Signature
 from ..core.utils import Hashing
 from ..core.config import Config
 from ..core.weaver import ValQuery
@@ -60,6 +61,7 @@ def bind_inputs(args, kwargs, mode: str, func_op: FuncOp) -> Dict[str, Any]:
     bound_args = func_op.py_sig.bind(*args, **kwargs)
     bound_args.apply_defaults()
     inputs_dict = dict(bound_args.arguments)
+
     if mode == MODES.query:
         #! TODO: add a point constraint for defaults
         for k in inputs_dict.keys():

@@ -37,6 +37,13 @@ class Config:
     # todo: prevent creating inputs with this name
     output_name_prefix = "output_"
 
+    try:
+        import dask
+
+        has_dask = True
+    except ImportError:
+        has_dask = False
+
 
 def dump_output_name(index: int) -> str:
     return f"{Config.output_name_prefix}{index}"
