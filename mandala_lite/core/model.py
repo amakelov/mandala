@@ -4,6 +4,10 @@ from .config import Config
 from ..common_imports import *
 from .utils import Hashing
 from .sig import Signature
+from .integrations import sig_from_jit_script
+
+if Config.has_torch:
+    import torch
 
 
 class Delayed:
@@ -147,9 +151,6 @@ class Call:
         return res
 
 
-FuncType = Callable
-
-
 class FuncOp:
     """
     Operation that models function execution.
@@ -165,14 +166,17 @@ class FuncOp:
         - `mandala_lite.core.sig.Signature`
     """
 
-    def __init__(self, func: FuncType, version: int = 0, ui_name: Optional[str] = None):
+    def __init__(self, func: Callable, version: int = 0, ui_name: Optional[str] = None):
         # `ui_name` is useful for simulating multi-user scenarios in tests
         self.func = func
-        self.py_sig = inspect.signature(self.func)
-        ui_name = self.func.__name__ if ui_name is None else ui_name
-        self.sig = Signature.from_py(
-            sig=inspect.signature(func), name=ui_name, version=version
-        )
+        if Config.has_torch and isinstance(func, torch.jit.ScriptFunction):
+            sig, py_sig = sig_from_jit_script(self.func, version=version)
+            ui_name = sig.ui_name
+        else:
+            py_sig = inspect.signature(self.func)
+            ui_name = self.func.__name__ if ui_name is None else ui_name
+        self.py_sig = py_sig
+        self.sig = Signature.from_py(sig=self.py_sig, name=ui_name, version=version)
 
     def compute(self, inputs: Dict[str, Any]) -> List[Any]:
         """

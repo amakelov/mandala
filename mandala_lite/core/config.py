@@ -44,6 +44,13 @@ class Config:
     except ImportError:
         has_dask = False
 
+    try:
+        import torch
+
+        has_torch = True
+    except ImportError:
+        has_torch = False
+
 
 def dump_output_name(index: int) -> str:
     return f"{Config.output_name_prefix}{index}"

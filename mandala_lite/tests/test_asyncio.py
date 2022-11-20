@@ -21,7 +21,6 @@ async def test_computation():
         async def add(x: int, y: int) -> int:
             return x + y
 
-        # chain some functions
         with storage.run():
             x = 23
             y = await inc(x)
