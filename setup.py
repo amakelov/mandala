@@ -36,6 +36,7 @@ packages = [
     "mandala_lite",
     "mandala_lite.core",
     "mandala_lite.storages",
+    "mandala_lite.storages.rel_impls",
     "mandala_lite.ui",
     "mandala_lite.tests",
 ]

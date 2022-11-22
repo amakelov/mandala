@@ -4,10 +4,10 @@ from .config import Config
 from ..common_imports import *
 from .utils import Hashing
 from .sig import Signature
-from .integrations import sig_from_jit_script
 
 if Config.has_torch:
     import torch
+    from .integrations import sig_from_jit_script
 
 
 class Delayed:
