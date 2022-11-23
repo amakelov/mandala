@@ -79,3 +79,32 @@ class FuncQuery:
         for out in self.outputs:
             out.creator = None
             out.created_as = None
+
+
+def concat_lists(lists: List[list]) -> list:
+    return [x for lst in lists for x in lst]
+
+
+def traverse_all(val_queries: List[ValQuery]) -> Tuple[List[ValQuery], List[FuncQuery]]:
+    """
+    Extend the given `ValQuery` objects to all objects connected to them through
+    function inputs/outputs.
+    """
+    val_queries_ = [_ for _ in val_queries]
+    op_queries_: List[FuncQuery] = []
+    found_new = True
+    while found_new:
+        found_new = False
+        val_neighbors = concat_lists([v.neighbors() for v in val_queries_])
+        op_neighbors = concat_lists([o.neighbors() for o in op_queries_])
+        if any(k not in op_queries_ for k in val_neighbors):
+            found_new = True
+            for neigh in val_neighbors:
+                if neigh not in op_queries_:
+                    op_queries_.append(neigh)
+        if any(k not in val_queries_ for k in op_neighbors):
+            found_new = True
+            for neigh in op_neighbors:
+                if neigh not in val_queries_:
+                    val_queries_.append(neigh)
+    return val_queries_, op_queries_

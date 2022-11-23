@@ -1,38 +1,10 @@
 import pickle
 from ..common_imports import *
+from .model import FuncOp
 from .config import Config, dump_output_name
-from .weaver import ValQuery, FuncQuery
+from .weaver import ValQuery, FuncQuery, traverse_all
 from .utils import invert_dict
 from pypika import Query, Table, Field, Column, Criterion
-
-
-def concat_lists(lists: List[list]) -> list:
-    return [x for lst in lists for x in lst]
-
-
-def traverse_all(val_queries: List[ValQuery]) -> Tuple[List[ValQuery], List[FuncQuery]]:
-    """
-    Extend the given `ValQuery` objects to all objects connected to them through
-    function inputs/outputs.
-    """
-    val_queries_ = [_ for _ in val_queries]
-    op_queries_: List[FuncQuery] = []
-    found_new = True
-    while found_new:
-        found_new = False
-        val_neighbors = concat_lists([v.neighbors() for v in val_queries_])
-        op_neighbors = concat_lists([o.neighbors() for o in op_queries_])
-        if any(k not in op_queries_ for k in val_neighbors):
-            found_new = True
-            for neigh in val_neighbors:
-                if neigh not in op_queries_:
-                    op_queries_.append(neigh)
-        if any(k not in val_queries_ for k in op_neighbors):
-            found_new = True
-            for neigh in op_neighbors:
-                if neigh not in val_queries_:
-                    val_queries_.append(neigh)
-    return val_queries_, op_queries_
 
 
 class Compiler:
@@ -121,12 +93,15 @@ class QueryGraph:
         self,
         val_queries: List[ValQuery],
         func_queries: List[FuncQuery],
+        select_queries: List[ValQuery],
         tables: Dict[FuncQuery, pd.DataFrame],
     ):
         # list of participating ValQueries
         self.val_queries = val_queries
         # list of participating FuncQueries
         self.func_queries = func_queries
+        # queries to select
+        self.select_queries = select_queries
         # {func query: table of data}. Note that there may be multiple func
         # queries with the same table, but we keep separate references to each
         # in order to enable recursively joining nodes in the graph.
@@ -136,15 +111,49 @@ class QueryGraph:
                 v.drop(columns=[Config.uid_col], inplace=True)
 
     @staticmethod
+    def _copy_graph(
+        val_queries: List[ValQuery],
+        func_queries: List[FuncQuery],
+        select_queries: List[ValQuery],
+    ) -> Tuple[List[ValQuery], List[FuncQuery], List[ValQuery]]:
+        """
+        Copy a graph of `ValQuery` and `FuncQuery` objects, removing the pointers to
+        functions along the way.
+        """
+        assert all(select_query in val_queries for select_query in select_queries)
+        val_copies = {v: ValQuery(creator=None, created_as=None) for v in val_queries}
+        select_copies = [val_copies[v] for v in select_queries]
+        func_copies = []
+        for func_query in func_queries:
+            func_copy_inputs = {k: val_copies[v] for k, v in func_query.inputs.items()}
+            func_copy_outputs = [val_copies[v] for v in func_query.outputs]
+            func_copy_op = FuncOp._from_data(sig=func_query.func_op.sig)
+            func_copy = FuncQuery(inputs=func_copy_inputs, func_op=func_copy_op)
+            for k, v in func_copy.inputs.items():
+                v.add_consumer(consumer=func_copy, consumed_as=k)
+            func_copy.set_outputs(outputs=func_copy_outputs)
+            for i, v in enumerate(func_copy.outputs):
+                v.creator = func_copy
+                v.created_as = i
+            func_copies.append(func_copy)
+        return list(val_copies.values()), func_copies, select_copies
+
+    @staticmethod
     def from_mandala(
         val_queries: List[ValQuery],
         func_queries: List[FuncQuery],
+        select_queries: List[ValQuery],
         call_data: Dict[str, pd.DataFrame],
     ) -> "QueryGraph":
+        val_queries, func_queries, select_queries = QueryGraph._copy_graph(
+            val_queries, func_queries, select_queries=select_queries
+        )
         tables = {
             f: call_data[f.func_op.sig.versioned_internal_name] for f in func_queries
         }
-        return QueryGraph(val_queries, func_queries, tables)
+        return QueryGraph(
+            val_queries, func_queries, select_queries=select_queries, tables=tables
+        )
 
     def _get_col_to_vq_mappings(
         self, func_query: FuncQuery
@@ -282,7 +291,7 @@ class QueryGraph:
         col_to_vq2, vq_to_cols2 = self._get_col_to_vq_mappings(f2)
         return len(set(col_to_vq1.values()) & set(col_to_vq2.values()))
 
-    def solve(self, select_vqs: List[ValQuery]) -> pd.DataFrame:
+    def solve(self) -> pd.DataFrame:
         while len(self.func_queries) > 1:
             intersections = {}
             # compute pairwise intersections
@@ -300,5 +309,5 @@ class QueryGraph:
         f = self.func_queries[0]
         # figure out which columns to select
         col_to_vq, vq_to_cols = self._get_col_to_vq_mappings(f)
-        cols = [vq_to_cols[vq][0] for vq in select_vqs]
+        cols = [vq_to_cols[vq][0] for vq in self.select_queries]
         return df[cols]

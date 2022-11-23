@@ -19,8 +19,8 @@ from ..core.sig import Signature
 from ..core.workflow import Workflow, CallStruct
 from ..core.utils import Hashing, get_uid
 
-from ..core.weaver import ValQuery, FuncQuery
-from ..core.compiler import traverse_all, Compiler, QueryGraph
+from ..core.weaver import ValQuery, FuncQuery, traverse_all
+from ..core.compiler import Compiler, QueryGraph
 
 from .utils import wrap_inputs, wrap_outputs, bind_inputs, format_as_outputs
 
@@ -517,9 +517,12 @@ class Storage(Transactable):
             ui_call_data = self.rel_adapter.get_all_call_data()
             call_data = {ui_to_internal[k]: v for k, v in ui_call_data.items()}
             query_graph = QueryGraph.from_mandala(
-                val_queries=val_queries, func_queries=func_queries, call_data=call_data
+                val_queries=val_queries,
+                func_queries=func_queries,
+                select_queries=select_queries,
+                call_data=call_data,
             )
-            df = query_graph.solve(select_vqs=select_queries)
+            df = query_graph.solve()
             if filter_duplicates:
                 df = df.drop_duplicates(keep="first")
         else:

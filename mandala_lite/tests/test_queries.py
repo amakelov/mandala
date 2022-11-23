@@ -89,9 +89,13 @@ def test_filter_duplicates():
         w = add(z, y).named("w")
         df_1 = q.get_table(x, z, filter_duplicates=True)
         df_2 = q.get_table(x, z, filter_duplicates=False)
+        df_3 = q.get_table(x, z, filter_duplicates=True, engine="naive")
+        df_4 = q.get_table(x, z, filter_duplicates=False, engine="naive")
 
     assert len(df_1) == 5
     assert len(df_2) == 25
+    assert compare_dfs_as_relations(df_1, df_3)
+    assert compare_dfs_as_relations(df_2, df_4)
 
 
 def test_superops_basic():
