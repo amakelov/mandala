@@ -39,12 +39,14 @@ class Config:
 
     try:
         import dask
+
         has_dask = True
     except ImportError:
         has_dask = False
 
     try:
         import torch
+
         has_torch = True
     except ImportError:
         has_torch = False

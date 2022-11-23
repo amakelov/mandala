@@ -59,14 +59,17 @@ def bind_inputs(args, kwargs, mode: str, func_op: FuncOp) -> Dict[str, Any]:
     and returns a dict where they are indexed via internal names.
     """
     bound_args = func_op.py_sig.bind(*args, **kwargs)
-    bound_args.apply_defaults()
+    if mode == MODES.run:
+        bound_args.apply_defaults()
     inputs_dict = dict(bound_args.arguments)
 
     if mode == MODES.query:
         #! TODO: add a point constraint for defaults
         for k in inputs_dict.keys():
             if not isinstance(inputs_dict[k], ValQuery):
-                inputs_dict[k] = Q()
+                raise NotImplementedError(
+                    f'Passing concrete values in queries not supported yet. Got "{inputs_dict[k]}" for argument "{k}" when calling "{func_op.sig.ui_name}".'
+                )
     return inputs_dict
 
 

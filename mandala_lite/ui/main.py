@@ -621,8 +621,7 @@ class Storage(Transactable):
     def call_query(
         self, func_op: FuncOp, inputs: Dict[str, ValQuery]
     ) -> List[ValQuery]:
-        if not all(isinstance(inp, ValQuery) for inp in inputs.values()):
-            raise NotImplementedError()
+        assert all(isinstance(inp, ValQuery) for inp in inputs.values())
         func_query = FuncQuery(func_op=func_op, inputs=inputs)
         for k, v in inputs.items():
             v.add_consumer(consumer=func_query, consumed_as=k)

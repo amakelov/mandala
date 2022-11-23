@@ -49,6 +49,22 @@ def test_basics():
         assert compare_dfs_as_relations(df, df_naive)
 
 
+def test_exceptions():
+    storage = Storage()
+
+    @op
+    def inc(x: int) -> int:
+        return unwrap(x) + 1
+
+    try:
+        # passing raw values in queries should (currently) raise an error
+        with storage.query():
+            y = inc(23)
+        assert False
+    except Exception:
+        assert True
+
+
 def test_superops_basic():
     Config.autowrap_inputs = False
     Config.autounwrap_inputs = False
