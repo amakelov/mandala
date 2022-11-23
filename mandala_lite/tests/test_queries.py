@@ -65,6 +65,35 @@ def test_exceptions():
         assert True
 
 
+def test_filter_duplicates():
+    storage = Storage()
+
+    @op
+    def inc(x: int) -> int:
+        return x + 1
+
+    @op
+    def add(x: int, y: int) -> int:
+        return x + y
+
+    with storage.run():
+        for x in range(5):
+            for y in range(5):
+                z = inc(x)
+                w = add(z, y)
+
+    with storage.query() as q:
+        x = Q().named("x")
+        y = Q().named("y")
+        z = inc(x).named("z")
+        w = add(z, y).named("w")
+        df_1 = q.get_table(x, z, filter_duplicates=True)
+        df_2 = q.get_table(x, z, filter_duplicates=False)
+
+    assert len(df_1) == 5
+    assert len(df_2) == 25
+
+
 def test_superops_basic():
     Config.autowrap_inputs = False
     Config.autounwrap_inputs = False

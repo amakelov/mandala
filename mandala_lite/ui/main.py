@@ -133,12 +133,18 @@ class Context:
         self.updates = {"storage": storage, **updates}
         return self
 
-    def get_table(self, *queries: ValQuery, engine: str = "sql") -> pd.DataFrame:
+    def get_table(
+        self, *queries: ValQuery, engine: str = "sql", filter_duplicates: bool = True
+    ) -> pd.DataFrame:
         #! important
         # We must sync any dirty cache elements to the DuckDB store before performing a query.
         # If we don't, we'll query a store that might be missing calls and objs.
         self.storage.commit()
-        return self.storage.execute_query(select_queries=list(queries), engine=engine)
+        return self.storage.execute_query(
+            select_queries=list(queries),
+            engine=engine,
+            filter_duplicates=filter_duplicates,
+        )
 
 
 class RunContext(Context):
@@ -484,7 +490,10 @@ class Storage(Transactable):
     ### make calls in contexts
     ############################################################################
     def execute_query(
-        self, select_queries: List[ValQuery], engine: str = "sql"
+        self,
+        select_queries: List[ValQuery],
+        engine: str = "sql",
+        filter_duplicates: bool = True,
     ) -> pd.DataFrame:
         """
         Execute the given queries and return the result as a pandas DataFrame.
@@ -495,7 +504,9 @@ class Storage(Transactable):
         val_queries, func_queries = traverse_all(select_queries)
         if engine == "sql":
             compiler = Compiler(val_queries=val_queries, func_queries=func_queries)
-            query = compiler.compile(select_queries=select_queries)
+            query = compiler.compile(
+                select_queries=select_queries, filter_duplicates=filter_duplicates
+            )
             df = self.rel_storage.execute_df(query=str(query))
         elif engine == "naive":
             sigs = self.sig_adapter.load_state()
@@ -509,6 +520,8 @@ class Storage(Transactable):
                 val_queries=val_queries, func_queries=func_queries, call_data=call_data
             )
             df = query_graph.solve(select_vqs=select_queries)
+            if filter_duplicates:
+                df = df.drop_duplicates(keep="first")
         else:
             raise NotImplementedError()
         # now, evaluate the table

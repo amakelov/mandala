@@ -73,7 +73,7 @@ class Compiler:
             select_fields.append(val_alias[Config.uid_col])
         return constraints, select_fields
 
-    def compile(self, select_queries: List[ValQuery]):
+    def compile(self, select_queries: List[ValQuery], filter_duplicates: bool = False):
         """
         Compile the query induced by the data of this compiler instance to
         an SQL select query.
@@ -103,6 +103,8 @@ class Compiler:
         for table in from_tables:
             query = query.from_(table)
         query = query.select(*select_cols)
+        if filter_duplicates:
+            query = query.distinct()
         query = query.where(Criterion.all(all_constraints))
         return query
 
