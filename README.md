@@ -87,6 +87,8 @@ with storage.run():
 ```
 
 ## Tutorials 
-- See [this logistic regression
-notebook](https://github.com/amakelov/mandala_lite/blob/master/mandala_lite/demos/logistic.ipynb)
-for a more realistic example of a machine learning project managed by Mandala!
+- see the ["Hello world!"
+  tutorial](https://github.com/amakelov/mandala_lite/blob/master/mandala_lite/tutorials/00_hello.ipynb)
+  for a 2-minute introduction to the library's main features
+- See [this logistic regression notebook](https://github.com/amakelov/mandala_lite/blob/master/mandala_lite/tutorials/01_logistic.ipynb)
+for a more realistic example of a machine learning project managed by Mandala.
