@@ -67,6 +67,8 @@ def data_is_equal(
 ) -> Union[bool, Tuple[bool, str]]:
     data_1 = storage_1.rel_storage.get_all_data()
     data_2 = storage_2.rel_storage.get_all_data()
+    data_1.pop(storage_1.rel_adapter.DEPS_TABLE)
+    data_2.pop(storage_2.rel_adapter.DEPS_TABLE)
     # compare the keys
     if data_1.keys() != data_2.keys():
         result, reason = False, f"Tables differ: {data_1.keys()} vs {data_2.keys()}"

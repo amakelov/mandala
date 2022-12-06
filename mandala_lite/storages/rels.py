@@ -10,6 +10,7 @@ from ..common_imports import *
 from ..core.config import Config, Prov, dump_output_name
 from ..core.model import Call, unwrap, FuncOp, ValueRef
 from ..core.sig import Signature
+from ..core.deps import DependencyState
 from ..utils import serialize, deserialize, _rename_cols
 from .rel_impls.duckdb_impl import DuckDBRelStorage
 from .rel_impls.utils import Transactable, transaction
@@ -17,6 +18,72 @@ from .rel_impls.utils import Transactable, transaction
 
 # {internal table name -> serialized (internally named) table}
 RemoteEventLogEntry = dict[str, bytes]
+
+
+class DependencyAdapter(Transactable):
+    # todo: this is too similar to SignatureAdapter, refactor
+    # like SignatureAdapter, but for dependency state.
+    # encapsulates methods to load and write the dependency table
+    def __init__(self, rel_adapter: "RelAdapter"):
+        self.rel_adapter = rel_adapter
+        self.rel_storage = rel_adapter.rel_storage
+
+    ############################################################################
+    ### `Transactable` interface
+    ############################################################################
+    def _get_connection(self) -> Connection:
+        return self.rel_storage._get_connection()
+
+    def _end_transaction(self, conn: Connection):
+        return self.rel_storage._end_transaction(conn=conn)
+
+    ###
+    @transaction()
+    def dump_state(
+        self,
+        state: Dict[Tuple[str, int], DependencyState],
+        conn: Optional[Connection] = None,
+    ):
+        """
+        Dump the given state of the signatures to the database. Should always
+        call this after the signatures have been updated.
+        """
+        # delete existing, if any
+        index_col = "index"
+        query = f"DELETE FROM {self.rel_adapter.DEPS_TABLE} WHERE {index_col} = 0"
+        conn.execute(query)
+        # insert new
+        serialized = serialize(obj=state)
+        df = pd.DataFrame(
+            {
+                index_col: [0],
+                "deps": [serialized],
+            }
+        )
+        ta = pa.Table.from_pandas(df)
+        self.rel_storage.insert(relation=self.rel_adapter.DEPS_TABLE, ta=ta, conn=conn)
+
+    @transaction()
+    def has_state(self, conn: Optional[Connection] = None) -> bool:
+        query = f"SELECT * FROM {self.rel_adapter.DEPS_TABLE} WHERE index = 0"
+        df = self.rel_storage.execute_df(query=query, conn=conn)
+        return len(df) != 0
+
+    @transaction()
+    def load_state(
+        self, conn: Optional[Connection] = None
+    ) -> Dict[Tuple[str, int], DependencyState]:
+        """
+        Load the state of the signatures from the database. All interactions
+        with the state of the signatures are done transactionally through this
+        method.
+        """
+        query = f"SELECT * FROM {self.rel_adapter.DEPS_TABLE} WHERE index = 0"
+        df = self.rel_storage.execute_df(query=query, conn=conn)
+        if len(df) == 0:
+            return {}
+        else:
+            return deserialize(df["deps"][0])
 
 
 class SigAdapter(Transactable):
@@ -31,6 +98,7 @@ class SigAdapter(Transactable):
     ):
         self.rel_adapter = rel_adapter
         self.rel_storage = self.rel_adapter.rel_storage
+        self.deps_adapter = DependencyAdapter(rel_adapter=rel_adapter)
 
     @transaction()
     def dump_state(
@@ -286,6 +354,11 @@ class SigAdapter(Transactable):
             defaults=sig.new_ui_input_default_uids,
             conn=conn,
         )
+        deps = self.deps_adapter.load_state(conn=conn)
+        deps[(sig.internal_name, sig.version)] = DependencyState(
+            root=self.rel_adapter.deps_root
+        )
+        self.deps_adapter.dump_state(state=deps, conn=conn)
         logger.debug(f"Created signature:\n{sig}")
 
     @transaction()
@@ -314,6 +387,11 @@ class SigAdapter(Transactable):
             defaults=sig.new_ui_input_default_uids,
             conn=conn,
         )
+        deps = self.deps_adapter.load_state(conn=conn)
+        deps[(sig.internal_name, sig.version)] = DependencyState(
+            root=self.rel_adapter.deps_root
+        )
+        self.deps_adapter.dump_state(state=deps, conn=conn)
         logger.debug(f"Created new version:\n{sig}")
 
     @transaction()
@@ -511,15 +589,18 @@ class RelAdapter(Transactable):
     EVENT_LOG_TABLE = Config.event_log_table
     VREF_TABLE = Config.vref_table
     SIGNATURES_TABLE = Config.schema_table
+    DEPS_TABLE = Config.deps_table
     # tables to be excluded from certain operations
     SPECIAL_TABLES = (
         EVENT_LOG_TABLE,
         DuckDBRelStorage.TEMP_ARROW_TABLE,
         SIGNATURES_TABLE,
+        DEPS_TABLE,
     )
 
-    def __init__(self, rel_storage: DuckDBRelStorage):
+    def __init__(self, rel_storage: DuckDBRelStorage, deps_root: Optional[Path] = None):
         self.rel_storage = rel_storage
+        self.deps_root = deps_root
         self.sig_adapter = SigAdapter(rel_adapter=self)
         self.init()
         # check if we are connecting to an existing instance
@@ -558,6 +639,17 @@ class RelAdapter(Transactable):
             columns=[
                 ("index", "int"),
                 ("signatures", "blob"),
+            ],
+            primary_key="index",
+            defaults={},
+            if_not_exists=True,
+            conn=conn,
+        )
+        self.rel_storage.create_relation(
+            name=self.DEPS_TABLE,
+            columns=[
+                ("index", "int"),
+                ("deps", "blob"),
             ],
             primary_key="index",
             defaults={},

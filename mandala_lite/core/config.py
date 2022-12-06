@@ -33,6 +33,8 @@ class Config:
     # todo: currently unused?
     # schema_event_log_table = "__schema_event_log__"
     schema_table = "__schema__"
+    # table for keeping track of function dependencies
+    deps_table = "__deps__"
     # all output names begin with this string
     # todo: prevent creating inputs with this name
     output_name_prefix = "output_"

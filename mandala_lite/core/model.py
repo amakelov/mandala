@@ -4,6 +4,7 @@ from .config import Config
 from ..common_imports import *
 from .utils import Hashing
 from .sig import Signature
+from ..core.deps import DependencyTracer, DependencyState
 
 if Config.has_torch:
     import torch
@@ -178,7 +179,9 @@ class FuncOp:
         self.py_sig = py_sig
         self.sig = Signature.from_py(sig=self.py_sig, name=ui_name, version=version)
 
-    def compute(self, inputs: Dict[str, Any]) -> List[Any]:
+    def compute(
+        self, inputs: Dict[str, Any], deps_root: Optional[Path] = None
+    ) -> Tuple[List[Any], DependencyState]:
         """
         Computes the function on the given *unwrapped* inputs. Returns a list of
         `self.sig.n_outputs` outputs (after checking they are the number
@@ -186,10 +189,20 @@ class FuncOp:
 
         This expects the inputs to be named using *internal* input names.
         """
-        result = self.func(**inputs)
-        return self._postprocess_outputs(result=result)
+        if sys.gettrace() is None:
+            ds = DependencyState(root=deps_root)
+            tracer = DependencyTracer(ds=ds)
+            with tracer:
+                result = self.func(**inputs)
+        else:
+            # todo: handle superops somehow
+            result = self.func(**inputs)
+            ds = DependencyState(root=deps_root)
+        return self._postprocess_outputs(result=result), ds
 
-    async def compute_async(self, inputs: Dict[str, Any]) -> List[Any]:
+    async def compute_async(
+        self, inputs: Dict[str, Any]
+    ) -> Tuple[List[Any], DependencyState]:
         """
         Computes the function on the given *unwrapped* inputs. Returns a list of
         `self.sig.n_outputs` outputs (after checking they are the number
@@ -202,7 +215,9 @@ class FuncOp:
             if inspect.iscoroutinefunction(self.func)
             else self.func(**inputs)
         )
-        return self._postprocess_outputs(result)
+        # TODO
+        ds = DependencyState()
+        return self._postprocess_outputs(result), ds
 
     def _postprocess_outputs(self, result) -> List[Any]:
         if self.sig.n_outputs == 0:

@@ -18,6 +18,7 @@ from ..core.model import Call, FuncOp, ValueRef, unwrap, Delayed
 from ..core.sig import Signature
 from ..core.workflow import Workflow, CallStruct
 from ..core.utils import Hashing, get_uid
+from ..core.deps import DependencyState
 
 from ..core.weaver import ValQuery, FuncQuery, traverse_all
 from ..core.compiler import Compiler, QueryGraph
@@ -191,6 +192,7 @@ class Storage(Transactable):
         obj_cache: Optional[KVStore] = None,
         signatures: Optional[Dict[Tuple[str, int], Signature]] = None,
         _read_only: bool = False,
+        deps_root: Optional[Path] = None,
     ):
         self.root = root
         if call_cache is None:
@@ -216,8 +218,11 @@ class Storage(Transactable):
             address=None if db_path is None else str(db_path),
             _read_only=_read_only,
         )
+        self.deps_root = deps_root
         # manipulates the memoization tables
-        self.rel_adapter = RelAdapter(rel_storage=self.rel_storage)
+        self.rel_adapter = RelAdapter(
+            rel_storage=self.rel_storage, deps_root=self.deps_root
+        )
         self.sig_adapter = self.rel_adapter.sig_adapter
         self.sig_syncer = SigSyncer(sig_adapter=self.sig_adapter, root=self.root)
         if signatures is not None:
@@ -592,12 +597,52 @@ class Storage(Transactable):
         # return outputs and call
         return wrapped_outputs, call
 
+    @transaction()
+    def update_deps(
+        self,
+        func_op: FuncOp,
+        new_deps: DependencyState,
+        conn: Optional[Connection] = None,
+    ):
+        sig = func_op.sig
+        all_current_deps = self.sig_adapter.deps_adapter.load_state(conn=conn)
+        updated_deps = all_current_deps[sig.internal_name, sig.version]
+        updated_deps = updated_deps.update(new_deps)
+        all_current_deps[sig.internal_name, sig.version] = updated_deps
+        self.sig_adapter.deps_adapter.dump_state(all_current_deps, conn=conn)
+
+    @transaction()
+    def check_deps(
+        self,
+        func_op: FuncOp,
+        auto_accept: bool = True,
+        conn: Optional[Connection] = None,
+    ):
+        sig = func_op.sig
+        deps = self.sig_adapter.deps_adapter.load_state(conn=conn)[
+            sig.internal_name, sig.version
+        ]
+        new = DependencyState.recover(old=deps)
+        if new is None:
+            # todo: decide what to do
+            raise RuntimeError("DependencyState.recover returned None")
+        else:
+            source_diff, globals_diff = deps.diff(new=new)
+            if not source_diff.is_empty or not globals_diff.is_empty:
+                if auto_accept:
+                    self.update_deps(func_op=func_op, new_deps=new, conn=conn)
+                else:
+                    # todo: decide what to do
+                    raise RuntimeError("Dependencies have changed")
+
     def call_run(
         self, func_op: FuncOp, inputs: Dict[str, Union[Any, ValueRef]]
     ) -> Tuple[List[ValueRef], Call]:
         wrapped_inputs, call_uid = self._preprocess_run(func_op, inputs)
         # check if call UID exists in call storage
         if self.call_exists(call_uid):
+            if self.deps_root is not None:
+                self.check_deps(func_op=func_op, auto_accept=False)
             return self._process_call_found(call_uid=call_uid)
         else:
             # compute op
@@ -605,7 +650,10 @@ class Storage(Transactable):
                 raw_inputs = {k: v.obj for k, v in wrapped_inputs.items()}
             else:
                 raw_inputs = wrapped_inputs
-            outputs = func_op.compute(raw_inputs)
+            outputs, dependency_state = func_op.compute(
+                raw_inputs, deps_root=self.deps_root
+            )
+            self.update_deps(func_op=func_op, new_deps=dependency_state)
             return self._process_call_not_found(
                 func_outputs=outputs,
                 call_uid=call_uid,
@@ -626,7 +674,7 @@ class Storage(Transactable):
                 raw_inputs = {k: v.obj for k, v in wrapped_inputs.items()}
             else:
                 raw_inputs = wrapped_inputs
-            outputs = await func_op.compute_async(raw_inputs)
+            outputs, dependency_state = await func_op.compute_async(raw_inputs)
             return self._process_call_not_found(
                 func_outputs=outputs,
                 call_uid=call_uid,
