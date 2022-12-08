@@ -45,6 +45,29 @@ def test_wrapping():
         assert True
 
 
+def test_unwrapping():
+    # tuples
+    assert unwrap((1, 2, 3)) == (1, 2, 3)
+    vrefs = (wrap(23), wrap(24), wrap(25))
+    assert unwrap(vrefs, through_collections=True) == (23, 24, 25)
+    assert unwrap(vrefs, through_collections=False) == vrefs
+    # sets
+    assert unwrap({1, 2, 3}) == {1, 2, 3}
+    vrefs = {wrap(23), wrap(24), wrap(25)}
+    assert unwrap(vrefs, through_collections=True) == {23, 24, 25}
+    assert unwrap(vrefs, through_collections=False) == vrefs
+    # lists
+    assert unwrap([1, 2, 3]) == [1, 2, 3]
+    vrefs = [wrap(23), wrap(24), wrap(25)]
+    assert unwrap(vrefs, through_collections=True) == [23, 24, 25]
+    assert unwrap(vrefs, through_collections=False) == vrefs
+    # dicts
+    assert unwrap({"a": 1, "b": 2, "c": 3}) == {"a": 1, "b": 2, "c": 3}
+    vrefs = {"a": wrap(23), "b": wrap(24), "c": wrap(25)}
+    assert unwrap(vrefs, through_collections=True) == {"a": 23, "b": 24, "c": 25}
+    assert unwrap(vrefs, through_collections=False) == vrefs
+
+
 def test_reprs():
     x = wrap(23)
     repr(x), str(x)

@@ -63,15 +63,26 @@ def wrap(obj: Any, uid: Optional[str] = None) -> ValueRef:
 T = TypeVar("T")
 
 
-def unwrap(obj: Union[T, ValueRef]) -> T:
+def unwrap(obj: Union[T, ValueRef], through_collections: bool = True) -> T:
     """
     If an object is a `ValueRef`, returns the wrapped object; otherwise, return
     the object itself.
+
+    If `through_collections` is True, recursively unwraps objects in lists,
+    tuples, sets, and dict values.
     """
-    if not isinstance(obj, ValueRef):
-        return obj
-    else:
+    if isinstance(obj, ValueRef):
         return obj.obj
+    elif isinstance(obj, tuple) and through_collections:
+        return tuple(unwrap(v) for v in obj)
+    elif isinstance(obj, set) and through_collections:
+        return {unwrap(v) for v in obj}
+    elif isinstance(obj, list) and through_collections:
+        return [unwrap(v) for v in obj]
+    elif isinstance(obj, dict) and through_collections:
+        return {k: unwrap(v) for k, v in obj.items()}
+    else:
+        return obj
 
 
 class Call:
