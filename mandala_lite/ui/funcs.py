@@ -18,17 +18,23 @@ class FuncDecorator:
         version: int = 0,
         ui_name: Optional[str] = None,
         executor: str = "python",
+        on_change: Optional[str] = None,
     ):
         self.version = version
         self.ui_name = ui_name
         self.executor = executor
+        self.on_change = on_change
 
     def __call__(self, func: Callable) -> "func":
         func_op = FuncOp(func=func, version=self.version, ui_name=self.ui_name)
         if inspect.iscoroutinefunction(func):
-            return AsyncioFuncInterface(func_op=func_op, executor=self.executor)
+            return AsyncioFuncInterface(
+                func_op=func_op, executor=self.executor, on_change=self.on_change
+            )
         else:
-            return FuncInterface(func_op=func_op, executor=self.executor)
+            return FuncInterface(
+                func_op=func_op, executor=self.executor, on_change=self.on_change
+            )
 
 
 def op(*args, **kwargs) -> Callable:
@@ -45,4 +51,7 @@ def op(*args, **kwargs) -> Callable:
         version = kwargs.get("version", 0)
         ui_name = kwargs.get("ui_name", None)
         executor = kwargs.get("executor", "python")
-        return FuncDecorator(version=version, ui_name=ui_name, executor=executor)
+        on_change = kwargs.get("on_change", None)
+        return FuncDecorator(
+            version=version, ui_name=ui_name, executor=executor, on_change=on_change
+        )

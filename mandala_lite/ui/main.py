@@ -33,6 +33,7 @@ class MODES:
     run = "run"
     query = "query"
     batch = "batch"
+    define = "define"
 
 
 class GlobalContext:
@@ -119,6 +120,8 @@ class Context:
                 workflow = Workflow.from_call_structs(self._call_structs)
                 calls = executor.execute(workflow=workflow, storage=self.storage)
                 self.storage.commit(calls=calls)
+            elif self.mode == MODES.define:
+                pass
             else:
                 raise InternalError(self.mode)
         except Exception as e:
@@ -164,10 +167,17 @@ class BatchContext(Context):
     }
 
 
+class DefineContext(Context):
+    OVERRIDES = {
+        "mode": MODES.define,
+    }
+
+
 class FreeContexts:
     run = RunContext()
     query = QueryContext()
     batch = BatchContext()
+    define = DefineContext()
 
 
 class Storage(Transactable):
@@ -309,17 +319,21 @@ class Storage(Transactable):
     ############################################################################
     ### func synchronization
     ############################################################################
-    def synchronize_op(self, func_op: FuncOp):
+    @transaction()
+    def synchronize_op(self, func_op: FuncOp, conn: Optional[Connection] = None):
         # first, pull the current data from the remote!
-        self.sig_syncer.sync_from_remote()
+        self.sig_syncer.sync_from_remote(conn=conn)
         # this step also sends the signature to the remote
-        new_sig = self.sig_syncer.sync_from_local(sig=func_op.sig)
+        new_sig = self.sig_syncer.sync_from_local(sig=func_op.sig, conn=conn)
         func_op.sig = new_sig
         # to send any default values that were created by adding inputs
         self.sync_to_remote()
 
-    def synchronize(self, f: Union["FuncInterface", Any]):
-        self.synchronize_op(func_op=f.func_op)
+    @transaction()
+    def synchronize(
+        self, f: Union["FuncInterface", Any], conn: Optional[Connection] = None
+    ):
+        self.synchronize_op(func_op=f.func_op, conn=conn)
         f.is_synchronized = True
 
     ############################################################################
@@ -483,13 +497,20 @@ class Storage(Transactable):
     ### spawning contexts
     ############################################################################
     def run(self, **kwargs) -> Context:
+        # spawn context to execute or retrace calls
         return FreeContexts.run(storage=self, **kwargs)
 
     def query(self, **kwargs) -> Context:
+        # spawn a context to define a query
         return FreeContexts.query(storage=self, **kwargs)
 
     def batch(self, **kwargs) -> Context:
+        # spawn a context to execute calls in batch
         return FreeContexts.batch(storage=self, **kwargs)
+
+    def define(self, **kwargs) -> Context:
+        # spawn a context to define ops. Needed for dependency tracking.
+        return FreeContexts.define(storage=self, **kwargs)
 
     ############################################################################
     ### make calls in contexts
@@ -612,28 +633,43 @@ class Storage(Transactable):
         self.sig_adapter.deps_adapter.dump_state(all_current_deps, conn=conn)
 
     @transaction()
-    def check_deps(
+    def _process_deps(
         self,
-        func_op: FuncOp,
-        auto_accept: bool = True,
+        func_interface: "FuncInterface",
+        on_change: Optional[str] = None,
         conn: Optional[Connection] = None,
     ):
+        """
+        Modify a func interface in-place depending on how we respond to
+        dependency changes (if any)
+        """
+        if on_change is None:
+            # nothing to do
+            return
+        func_op = func_interface.func_op
         sig = func_op.sig
-        deps = self.sig_adapter.deps_adapter.load_state(conn=conn)[
-            sig.internal_name, sig.version
-        ]
-        new = DependencyState.recover(old=deps)
-        if new is None:
-            # todo: decide what to do
-            raise RuntimeError("DependencyState.recover returned None")
-        else:
-            source_diff, globals_diff = deps.diff(new=new)
-            if not source_diff.is_empty or not globals_diff.is_empty:
-                if auto_accept:
-                    self.update_deps(func_op=func_op, new_deps=new, conn=conn)
-                else:
-                    # todo: decide what to do
-                    raise RuntimeError("Dependencies have changed")
+        old_deps = self.sig_adapter.deps_adapter.load_state(conn=conn).get(
+            (sig.internal_name, sig.version), DependencyState()
+        )
+        new_deps, diff = DependencyState.recover(old=old_deps)
+        source_diff, globals_diff = diff.sources, diff.globals_
+        if not source_diff.is_empty or not globals_diff.is_empty:
+            # there are changes in the dependencies
+            if on_change == "ignore":
+                # accept the changes without creating a new version
+                self.update_deps(func_op=func_op, new_deps=new_deps, conn=conn)
+            elif on_change == "new_version":
+                # automatically create a new version
+                new_sig = sig.bump_version()
+                new_func_op = FuncOp._from_data(sig=new_sig, f=func_op.func)
+                func_interface.func_op = new_func_op
+                self.synchronize(f=func_interface, conn=conn)
+                return
+            elif on_change == "ask":
+                # ask the user what to do
+                raise NotImplementedError()
+            else:
+                raise ValueError(f"Unknown versioning method: {on_change}")
 
     def call_run(
         self, func_op: FuncOp, inputs: Dict[str, Union[Any, ValueRef]]
@@ -641,8 +677,6 @@ class Storage(Transactable):
         wrapped_inputs, call_uid = self._preprocess_run(func_op, inputs)
         # check if call UID exists in call storage
         if self.call_exists(call_uid):
-            if self.deps_root is not None:
-                self.check_deps(func_op=func_op, auto_accept=False)
             return self._process_call_found(call_uid=call_uid)
         else:
             # compute op
@@ -747,12 +781,27 @@ class FuncInterface:
     This is the object the `@op` decorator converts functions into.
     """
 
-    def __init__(self, func_op: FuncOp, executor: str = "python"):
+    def __init__(
+        self, func_op: FuncOp, executor: str = "python", on_change: Optional[str] = None
+    ):
         self.func_op = func_op
         self.__name__ = self.func_op.sig.ui_name
         self.is_synchronized = False
         self.is_invalidated = False
         self.executor = executor
+        self.on_change = on_change
+        if on_change is not None:
+            assert (
+                GlobalContext.current is not None
+                and GlobalContext.current.mode == MODES.define
+            )
+        if GlobalContext.current is not None:
+            context = GlobalContext.current
+            if context.mode == MODES.define:
+                storage = context.storage
+                storage.synchronize(self)
+                if storage.deps_root is not None:
+                    storage._process_deps(func_interface=self, on_change=self.on_change)
 
     def invalidate(self):
         self.is_invalidated = True

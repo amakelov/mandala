@@ -3,6 +3,7 @@ from ..core.utils import Hashing
 import sys
 import inspect
 import importlib
+import textwrap
 from pickle import PicklingError
 
 NestedDictType = Dict[str, Dict[str, Any]]
@@ -61,6 +62,12 @@ def _nested_dict_diff(x: NestedDictType, y: NestedDictType) -> NestedDictDiff:
     return NestedDictDiff(new=x_only, removed=y_only, changed=different_vals)
 
 
+class DepsDiff:
+    def __init__(self, sources: NestedDictDiff, globals_: NestedDictDiff):
+        self.sources = sources
+        self.globals_ = globals_
+
+
 class DependencyState:
     def __init__(
         self,
@@ -78,15 +85,42 @@ class DependencyState:
             {} if globals_ is None else globals_
         )
 
-    def diff(self, new: "DependencyState") -> Tuple[NestedDictDiff, NestedDictDiff]:
+    def __repr__(self) -> str:
+        all_modules = set(self.sources.keys()).union(self.globals_.keys())
+        lines = []
+        for module in all_modules:
+            # add the module name to the lines, with some decoration around
+            lines.append(f"Module {module}:")
+            # add the global variable names, one per line (if any), indented 4
+            # spaces
+            if module in self.globals_:
+                for global_name in self.globals_[module]:
+                    lines.append(f"    {global_name}")
+            # same for function sources
+            if module in self.sources:
+                for func_name, source in self.sources[module].items():
+                    lines.append(f"    {func_name}")
+                    if source is None:
+                        to_show = "<source not available>"
+                    else:
+                        to_show = source
+                    lines += [f"        {line}" for line in to_show.splitlines()]
+            # add a blank line between modules
+            lines.append("")
+        return "\n".join(lines)
+
+    def num_sources(self) -> int:
+        return sum(len(v) for v in self.sources.values())
+
+    def diff(self, new: "DependencyState") -> DepsDiff:
         """
         Return two NestedDictDiffs:
             - one for the sources
             - one for the globals
         """
-        return (
-            _nested_dict_diff(self.sources, new.sources),
-            _nested_dict_diff(self.globals_, new.globals_),
+        return DepsDiff(
+            sources=_nested_dict_diff(self.sources, new.sources),
+            globals_=_nested_dict_diff(self.globals_, new.globals_),
         )
 
     def update(self, new: "DependencyState") -> "DependencyState":
@@ -94,23 +128,49 @@ class DependencyState:
         return new
 
     @staticmethod
-    def recover(old: "DependencyState") -> Optional["DependencyState"]:
+    def remove_function_signature(source: str) -> str:
         """
-        Given an old dependency state, attempt to recover the current state for
-        comparison.
+        Given the source code of a function, remove the part that contains the
+        function signature.
+
+        Has the extra effect of removing comments and docstrings.
+        """
+        # using dedent is necessary here to handle decorators
+        tree = ast.parse(textwrap.dedent(source))
+        assert isinstance(tree, ast.Module)
+        body = tree.body
+        assert len(body) == 1
+        assert isinstance(body[0], ast.FunctionDef)
+        func_body = body[0].body
+        return ast.unparse(func_body)
+
+    @staticmethod
+    def recover(old: "DependencyState") -> Tuple["DependencyState", DepsDiff]:
+        """
+        Given an old dependency state, recover what's possible, and return a new
+        dependency state and a diff from the old to the new.
+
+        Note that the diff will not contain any "new" items by construction.
         """
         calls, globals_ = {}, {}
         for module_name, func_sources in old.sources.items():
-            module = importlib.import_module(module_name)
+            try:
+                module = importlib.import_module(module_name)
+            except ModuleNotFoundError:
+                continue
             calls[module_name] = {}
             for qualified_func_name, _ in func_sources.items():
                 parts = qualified_func_name.split(".")
                 current = module
+                found = True
                 for part in parts:
                     if not hasattr(current, part):
-                        print(f"Could not find {part} in {current}")
-                        return None
-                    current = getattr(current, part)
+                        found = False
+                        break
+                    else:
+                        current = getattr(current, part)
+                if not found:
+                    continue
                 if inspect.isfunction(current):
                     source = inspect.getsource(current)
                 elif type(current).__name__ == "FuncInterface":
@@ -118,16 +178,20 @@ class DependencyState:
                     source = inspect.getsource(current.func_op.func)
                 calls[module_name][qualified_func_name] = source
         for module_name, globals in old.globals_.items():
-            module = importlib.import_module(module_name)
+            try:
+                module = importlib.import_module(module_name)
+            except ModuleNotFoundError:
+                continue
             globals_[module_name] = {}
             for global_name, _ in globals.items():
                 if not hasattr(module, global_name):
-                    print(f"Could not find {global_name} in {module}")
-                    return None
+                    continue
                 globals_[module_name][global_name] = Hashing.get_content_hash(
                     getattr(module, global_name)
                 )
-        return DependencyState(root=old.root, sources=calls, globals_=globals_)
+        recovered = DependencyState(root=old.root, sources=calls, globals_=globals_)
+        diff = old.diff(new=recovered)
+        return recovered, diff
 
 
 class DependencyTracer:
@@ -198,7 +262,7 @@ class DependencyTracer:
 
             if func_name == "<lambda>":
                 logging.warning("Cannot handle lambdas")
-                return tracer  # continue tracing in the lambda
+                return tracer  #! continue tracing in the lambda
             # ? if func_name == '<module>':
             # ?     self.calls.append(f'{code.co_filename}.{func_name}')
 
@@ -214,14 +278,12 @@ class DependencyTracer:
             ):  # names used by the function; not all of them are global variables
                 if name in frame.f_globals:
                     global_val = frame.f_globals[name]
-                    if inspect.ismodule(global_val):
-                        # ignore modules
-                        continue
-                    if isinstance(global_val, type):
-                        # ignore classes
-                        continue
-                    if inspect.isfunction(global_val):
-                        # ignore functions
+                    if (
+                        inspect.ismodule(global_val)
+                        or isinstance(global_val, type)
+                        or inspect.isfunction(global_val)
+                    ):
+                        # ignore modules, classes and functions
                         continue
                     try:
                         content_hash = Hashing.get_content_hash(global_val)
@@ -239,6 +301,11 @@ class DependencyTracer:
                         if content_hash != self.ds.globals_[def_module_name][name]:
                             logging.warning(
                                 f"Global variable {name} has changed its value"
+                            )
+                    if name in self.ds.globals_[def_module_name]:
+                        if content_hash != self.ds.globals_[def_module_name][name]:
+                            logging.warning(
+                                f"Global variable {name} has changed its value. This may cause dependency tracking to fail."
                             )
                     self.ds.globals_[def_module_name][name] = content_hash
 
@@ -262,6 +329,18 @@ class DependencyTracer:
                 func_qualname = func_name
             if def_module_name not in self.ds.sources:
                 self.ds.sources[def_module_name] = {}
+            if func_qualname in self.ds.sources[def_module_name]:
+                if func_source != self.ds.sources[def_module_name][func_qualname]:
+                    logging.warning(
+                        f"Function {func_qualname} has changed its source code! This may cause dependency tracking to fail."
+                    )
+            if self.ds.num_sources() == 0:
+                #! a hack
+                # this is the first function we're tracing, i.e. an op.
+                if func_source is not None:
+                    func_source = DependencyState.remove_function_signature(
+                        source=func_source
+                    )
             self.ds.sources[def_module_name][func_qualname] = func_source
             return tracer
 

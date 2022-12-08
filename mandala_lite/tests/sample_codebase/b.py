@@ -17,6 +17,7 @@ def good_global_var_func(x):
 
 # a function that calls class methods
 def method_caller(x, y, z):
+    # and a comment
     simple = SimpleClass(x)
     another = AnotherClass(y)
     return simple.method_inc(y) + simple.method_add(y, z)

@@ -300,6 +300,11 @@ class Signature:
             )
         return res
 
+    def bump_version(self) -> "Signature":
+        res = copy.deepcopy(self)
+        res.version += 1
+        return res
+
     @staticmethod
     def from_py(
         name: str,
