@@ -74,13 +74,16 @@ def unwrap(obj: Union[T, ValueRef], through_collections: bool = True) -> T:
     if isinstance(obj, ValueRef):
         return obj.obj
     elif isinstance(obj, tuple) and through_collections:
-        return tuple(unwrap(v) for v in obj)
+        return tuple(unwrap(v, through_collections=through_collections) for v in obj)
     elif isinstance(obj, set) and through_collections:
-        return {unwrap(v) for v in obj}
+        return {unwrap(v, through_collections=through_collections) for v in obj}
     elif isinstance(obj, list) and through_collections:
-        return [unwrap(v) for v in obj]
+        return [unwrap(v, through_collections=through_collections) for v in obj]
     elif isinstance(obj, dict) and through_collections:
-        return {k: unwrap(v) for k, v in obj.items()}
+        return {
+            k: unwrap(v, through_collections=through_collections)
+            for k, v in obj.items()
+        }
     else:
         return obj
 
