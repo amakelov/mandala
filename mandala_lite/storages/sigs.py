@@ -242,14 +242,23 @@ class SigSyncer(Transactable):
 
     @transaction()
     def sync_from_local(
-        self, sig: Signature, conn: Optional[Connection] = None
+        self,
+        sig: Signature,
+        conn: Optional[Connection] = None,
+        use_latest_version: bool = False,
     ) -> Signature:
         """
         Create a new signature, create a new version, or update an existing one,
         and immediately send changes to the server.
         """
         if self.sig_adapter.exists_versioned_ui(sig=sig, conn=conn):
-            res = self.sync_update(sig=sig, conn=conn)
+            if use_latest_version:
+                latest_sig = self.sig_adapter.get_latest_version(sig=sig, conn=conn)
+                new_sig = copy.deepcopy(sig)
+                new_sig.version = latest_sig.version
+                res = self.sync_update(sig=new_sig, conn=conn)
+            else:
+                res = self.sync_update(sig=sig, conn=conn)
         elif self.sig_adapter.exists_any_version(sig=sig, conn=conn):
             res = self.sync_new_version(sig=sig, conn=conn)
         else:

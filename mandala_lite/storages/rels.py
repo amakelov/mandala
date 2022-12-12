@@ -330,6 +330,15 @@ class SigAdapter(Transactable):
     ### elementary transitions for local state
     ############################################################################
     @transaction()
+    def _init_deps(self, sig: Signature, conn: Optional[Connection] = None):
+        deps = self.deps_adapter.load_state(conn=conn)
+        deps_root = self.rel_adapter.deps_root
+        deps[(sig.internal_name, sig.version)] = DependencyState(
+            roots=[deps_root] if deps_root is not None else []
+        )
+        self.deps_adapter.dump_state(state=deps, conn=conn)
+
+    @transaction()
     def create_sig(self, sig: Signature, conn: Optional[Connection] = None):
         """
         Create a new signature `sig`. `sig` must have internal data, and not be
@@ -354,11 +363,7 @@ class SigAdapter(Transactable):
             defaults=sig.new_ui_input_default_uids,
             conn=conn,
         )
-        deps = self.deps_adapter.load_state(conn=conn)
-        deps[(sig.internal_name, sig.version)] = DependencyState(
-            root=self.rel_adapter.deps_root
-        )
-        self.deps_adapter.dump_state(state=deps, conn=conn)
+        self._init_deps(sig=sig, conn=conn)
         logger.debug(f"Created signature:\n{sig}")
 
     @transaction()
@@ -387,11 +392,7 @@ class SigAdapter(Transactable):
             defaults=sig.new_ui_input_default_uids,
             conn=conn,
         )
-        deps = self.deps_adapter.load_state(conn=conn)
-        deps[(sig.internal_name, sig.version)] = DependencyState(
-            root=self.rel_adapter.deps_root
-        )
-        self.deps_adapter.dump_state(state=deps, conn=conn)
+        self._init_deps(sig=sig, conn=conn)
         logger.debug(f"Created new version:\n{sig}")
 
     @transaction()

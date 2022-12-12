@@ -1,7 +1,7 @@
 from ..common_imports import *
 from ..core.model import FuncOp
 from ..core.weaver import ValQuery
-from .main import FuncInterface, AsyncioFuncInterface
+from .main import FuncInterface, AsyncioFuncInterface, OnChange
 
 
 def Q() -> ValQuery:
@@ -19,28 +19,42 @@ class FuncDecorator:
         ui_name: Optional[str] = None,
         executor: str = "python",
         on_change: Optional[str] = None,
+        autoversion: bool = False,
     ):
         self.version = version
         self.ui_name = ui_name
         self.executor = executor
         self.on_change = on_change
+        # to avoid confusion,
+        # autoversion is always True when dependency changes trigger a new version
+        self.autoversion = (
+            True if self.on_change == OnChange.new_version else autoversion
+        )
 
     def __call__(self, func: Callable) -> "func":
         func_op = FuncOp(func=func, version=self.version, ui_name=self.ui_name)
         if inspect.iscoroutinefunction(func):
-            return AsyncioFuncInterface(
-                func_op=func_op, executor=self.executor, on_change=self.on_change
-            )
+            InterfaceCls = AsyncioFuncInterface
         else:
-            return FuncInterface(
-                func_op=func_op, executor=self.executor, on_change=self.on_change
-            )
+            InterfaceCls = FuncInterface
+        return InterfaceCls(
+            func_op=func_op,
+            executor=self.executor,
+            on_change=self.on_change,
+            autoversion=self.autoversion,
+        )
 
 
-def op(*args, **kwargs) -> Callable:
-    if len(args) == 1 and len(kwargs) == 0 and callable(args[0]):
-        # @op case
-        func = args[0]
+def op(
+    version_or_func: Union[Callable, Optional[int]] = None,
+    ui_name: Optional[str] = None,
+    on_change: Optional[str] = None,
+    executor: str = "python",
+    autoversion: bool = False,
+) -> Callable:
+    if callable(version_or_func):
+        # a hack to handle the @op case
+        func = version_or_func
         func_op = FuncOp(func=func)
         if inspect.iscoroutinefunction(func):
             return AsyncioFuncInterface(func_op=func_op)
@@ -48,10 +62,15 @@ def op(*args, **kwargs) -> Callable:
             return FuncInterface(func_op=func_op)
     else:
         # @op(...) case
-        version = kwargs.get("version", 0)
-        ui_name = kwargs.get("ui_name", None)
-        executor = kwargs.get("executor", "python")
-        on_change = kwargs.get("on_change", None)
+        if autoversion and version_or_func is not None:
+            raise ValueError(
+                "Setting the version explicitly to a function decorated with `autoversion=True` is not allowed."
+            )
+        version_or_func = 0 if version_or_func is None else version_or_func
         return FuncDecorator(
-            version=version, ui_name=ui_name, executor=executor, on_change=on_change
+            version=version_or_func,
+            ui_name=ui_name,
+            executor=executor,
+            on_change=on_change,
+            autoversion=autoversion,
         )

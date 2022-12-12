@@ -1,6 +1,12 @@
 from ..common_imports import *
 
 
+def get_mandala_path() -> Path:
+    import mandala_lite
+
+    return Path(os.path.dirname(mandala_lite.__file__))
+
+
 class Config:
     ### options modifying library behavior
     # whether ops automatically wrap their inputs as value references, or
@@ -52,6 +58,10 @@ class Config:
         has_torch = True
     except ImportError:
         has_torch = False
+
+    mandala_path = get_mandala_path()
+    module_name = "mandala_lite"
+    tests_module_name = "mandala_lite.tests"
 
 
 def dump_output_name(index: int) -> str:

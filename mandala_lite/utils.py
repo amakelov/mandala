@@ -36,3 +36,17 @@ def _rename_cols(table: TableType, mapping: Dict[str, str]) -> TableType:
         return _rename_cols_arrow(table=table, mapping=mapping)
     else:
         raise NotImplementedError(f"rename_cols not implemented for {type(table)}")
+
+
+def ask_user(question: str, valid_options: List[str]) -> str:
+    """
+    Ask the user a question and return their response.
+    """
+    prompt = f"{question} "
+    while True:
+        print(prompt)
+        response = input().strip().lower()
+        if response in valid_options:
+            return response
+        else:
+            print(f"Invalid response: {response}")

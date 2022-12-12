@@ -1,5 +1,3 @@
-import pyarrow as pa
-
 from .config import Config
 from ..common_imports import *
 from .utils import Hashing
@@ -194,8 +192,11 @@ class FuncOp:
         self.sig = Signature.from_py(sig=self.py_sig, name=ui_name, version=version)
 
     def compute(
-        self, inputs: Dict[str, Any], deps_root: Optional[Path] = None
-    ) -> Tuple[List[Any], DependencyState]:
+        self,
+        inputs: Dict[str, Any],
+        deps_root: Optional[Path] = None,
+        ignore_dependency_tracking_errors: bool = False,
+    ) -> Tuple[List[Any], Optional[DependencyState]]:
         """
         Computes the function on the given *unwrapped* inputs. Returns a list of
         `self.sig.n_outputs` outputs (after checking they are the number
@@ -203,20 +204,28 @@ class FuncOp:
 
         This expects the inputs to be named using *internal* input names.
         """
-        if sys.gettrace() is None:
-            ds = DependencyState(root=deps_root)
-            tracer = DependencyTracer(ds=ds)
+        if sys.gettrace() is None and deps_root is not None:
+            ds = DependencyState(roots=[deps_root, Config.mandala_path])
+            tracer = DependencyTracer(
+                ds=ds, ignore_errors=ignore_dependency_tracking_errors
+            )
             with tracer:
                 result = self.func(**inputs)
         else:
-            # todo: handle superops somehow
+            if deps_root is not None:
+                raise NotImplementedError(
+                    f"Detected an @op call from another @op, tracking dependencies through this is not implemented yet"
+                )
             result = self.func(**inputs)
-            ds = DependencyState(root=deps_root)
+            ds = None
         return self._postprocess_outputs(result=result), ds
 
     async def compute_async(
-        self, inputs: Dict[str, Any]
-    ) -> Tuple[List[Any], DependencyState]:
+        self,
+        inputs: Dict[str, Any],
+        deps_root: Optional[Path] = None,
+        ignore_dependency_tracking_errors: bool = False,
+    ) -> Tuple[List[Any], Optional[DependencyState]]:
         """
         Computes the function on the given *unwrapped* inputs. Returns a list of
         `self.sig.n_outputs` outputs (after checking they are the number
@@ -224,13 +233,14 @@ class FuncOp:
 
         This expects the inputs to be named using *internal* input names.
         """
+        if deps_root is not None:
+            raise NotImplementedError()
         result = (
             await self.func(**inputs)
             if inspect.iscoroutinefunction(self.func)
             else self.func(**inputs)
         )
-        # TODO
-        ds = DependencyState()
+        ds = None
         return self._postprocess_outputs(result), ds
 
     def _postprocess_outputs(self, result) -> List[Any]:

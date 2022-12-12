@@ -280,7 +280,7 @@ def test_remote_lots_of_stuff():
     assert data_is_equal(storage_1=storage_1, storage_2=storage_2)
 
     # do some versioning stuff
-    @op(version=1)
+    @op(version_or_func=1)
     def add(x: int, y: int, z: int) -> int:
         return x + y + z
 

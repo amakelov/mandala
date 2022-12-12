@@ -4,7 +4,7 @@ from collections import defaultdict
 import datetime
 from pypika import Query, Table
 import pyarrow.parquet as pq
-import asyncio
+from textwrap import indent
 
 from ..storages.rel_impls.utils import Transactable, transaction
 from ..storages.kv import InMemoryStorage, MultiProcInMemoryStorage, KVStore
@@ -24,6 +24,7 @@ from ..core.weaver import ValQuery, FuncQuery, traverse_all
 from ..core.compiler import Compiler, QueryGraph
 
 from .utils import wrap_inputs, wrap_outputs, bind_inputs, format_as_outputs
+from ..utils import ask_user
 
 if Config.has_dask:
     from dask import delayed
@@ -34,6 +35,12 @@ class MODES:
     query = "query"
     batch = "batch"
     define = "define"
+
+
+class OnChange:
+    ignore = "ignore"
+    new_version = "new_version"
+    ask = "ask"
 
 
 class GlobalContext:
@@ -202,7 +209,11 @@ class Storage(Transactable):
         obj_cache: Optional[KVStore] = None,
         signatures: Optional[Dict[Tuple[str, int], Signature]] = None,
         _read_only: bool = False,
+        ### dependency tracking config
         deps_root: Optional[Path] = None,
+        ignore_dependency_errors: bool = False,
+        ignore_dependency_tracking_errors: bool = False,
+        ignore_dependency_recovery_errors: bool = False,
     ):
         self.root = root
         if call_cache is None:
@@ -228,7 +239,16 @@ class Storage(Transactable):
             address=None if db_path is None else str(db_path),
             _read_only=_read_only,
         )
-        self.deps_root = deps_root
+        if deps_root is not None:
+            self.deps_root = Path(deps_root).absolute().resolve()
+        else:
+            self.deps_root = None
+        if ignore_dependency_errors:
+            self.ignore_dependency_recovery_errors = True
+            self.ignore_dependency_tracking_errors = True
+        else:
+            self.ignore_dependency_tracking_errors = ignore_dependency_tracking_errors
+            self.ignore_dependency_recovery_errors = ignore_dependency_recovery_errors
         # manipulates the memoization tables
         self.rel_adapter = RelAdapter(
             rel_storage=self.rel_storage, deps_root=self.deps_root
@@ -250,6 +270,8 @@ class Storage(Transactable):
     def _end_transaction(self, conn: Connection):
         return self.rel_storage._end_transaction(conn=conn)
 
+    ############################################################################
+    ### read and write calls/objects
     ############################################################################
     def call_exists(self, call_uid: str) -> bool:
         return self.call_cache.exists(call_uid) or self.rel_adapter.call_exists(
@@ -320,11 +342,18 @@ class Storage(Transactable):
     ### func synchronization
     ############################################################################
     @transaction()
-    def synchronize_op(self, func_op: FuncOp, conn: Optional[Connection] = None):
+    def synchronize_op(
+        self,
+        func_op: FuncOp,
+        use_latest_version: bool = False,
+        conn: Optional[Connection] = None,
+    ):
         # first, pull the current data from the remote!
         self.sig_syncer.sync_from_remote(conn=conn)
         # this step also sends the signature to the remote
-        new_sig = self.sig_syncer.sync_from_local(sig=func_op.sig, conn=conn)
+        new_sig = self.sig_syncer.sync_from_local(
+            sig=func_op.sig, use_latest_version=use_latest_version, conn=conn
+        )
         func_op.sig = new_sig
         # to send any default values that were created by adding inputs
         self.sync_to_remote()
@@ -333,7 +362,9 @@ class Storage(Transactable):
     def synchronize(
         self, f: Union["FuncInterface", Any], conn: Optional[Connection] = None
     ):
-        self.synchronize_op(func_op=f.func_op, conn=conn)
+        self.synchronize_op(
+            func_op=f.func_op, use_latest_version=f.autoversion, conn=conn
+        )
         f.is_synchronized = True
 
     ############################################################################
@@ -513,6 +544,91 @@ class Storage(Transactable):
         return FreeContexts.define(storage=self, **kwargs)
 
     ############################################################################
+    ### managing dependencies
+    ############################################################################
+    @transaction()
+    def get_deps(
+        self, func_interface: "FuncInterface", conn: Optional[Connection] = None
+    ):
+        sig = func_interface.sig
+        all_deps = self.sig_adapter.deps_adapter.load_state(conn=conn)
+        return all_deps[sig.internal_name, sig.version]
+
+    @transaction()
+    def _update_deps(
+        self,
+        func_op: FuncOp,
+        new_deps: DependencyState,
+        conn: Optional[Connection] = None,
+    ):
+        sig = func_op.sig
+        all_current_deps = self.sig_adapter.deps_adapter.load_state(conn=conn)
+        updated_deps = all_current_deps[sig.internal_name, sig.version]
+        updated_deps = updated_deps.merge(new_deps)
+        all_current_deps[sig.internal_name, sig.version] = updated_deps
+        self.sig_adapter.deps_adapter.dump_state(all_current_deps, conn=conn)
+
+    @transaction()
+    def _process_deps_change(
+        self,
+        func_interface: "FuncInterface",
+        on_change: Optional[str] = None,
+        conn: Optional[Connection] = None,
+    ):
+        """
+        Modify a func interface in-place depending on how we respond to
+        dependency changes (if any)
+        """
+        if on_change is None:
+            # nothing to do
+            return
+        func_op = func_interface.func_op
+        sig = func_op.sig
+        old_deps = self.sig_adapter.deps_adapter.load_state(conn=conn).get(
+            (sig.internal_name, sig.version), DependencyState(roots=[])
+        )
+        new_deps, diff = DependencyState.recover(
+            old=old_deps, ignore_errors=self.ignore_dependency_recovery_errors
+        )
+        if not diff.is_empty:
+            # there are changes in the dependencies
+            if on_change == OnChange.ignore:
+                # accept the changes without creating a new version.
+                # todo: warn if the recovered dependencies are over a different
+                # address space
+                action = "overwrite"
+            elif on_change == OnChange.new_version:
+                # automatically create a new version
+                action = "new version"
+            elif on_change == OnChange.ask:
+                # ask the user what to do
+                print(f"Detected changes in the dependencies of {func_op.sig.ui_name}:")
+                print(indent(repr(diff), 4 * " "))
+                actions = {
+                    "overwrite": "Overwrite the dependencies by the recovered state without creating a new version.",
+                    "new version": "Create a new version for this function that starts out with NO dependencies and no memoized calls.",
+                    "cancel": "Cancel this function definition. No changes will be made to the dependencies or the version.",
+                }
+                question = "What would you like to do?\n" + "\n".join(
+                    f"'{k}': {v}" for k, v in actions.items()
+                )
+                action = ask_user(question=question, valid_options=list(actions.keys()))
+            else:
+                raise ValueError(f"Unknown versioning method: {on_change}")
+
+            if action == "overwrite":
+                self._update_deps(func_op=func_op, new_deps=new_deps, conn=conn)
+            elif action == "new version":
+                new_sig = sig.bump_version()
+                new_func_op = FuncOp._from_data(sig=new_sig, f=func_op.func)
+                func_interface.func_op = new_func_op
+                self.synchronize(f=func_interface, conn=conn)
+            elif action == "abort":
+                raise ValueError(f"Aborting definition of {func_op.sig.ui_name}")
+            else:
+                raise RuntimeError()
+
+    ############################################################################
     ### make calls in contexts
     ############################################################################
     def execute_query(
@@ -618,65 +734,17 @@ class Storage(Transactable):
         # return outputs and call
         return wrapped_outputs, call
 
-    @transaction()
-    def update_deps(
-        self,
-        func_op: FuncOp,
-        new_deps: DependencyState,
-        conn: Optional[Connection] = None,
-    ):
-        sig = func_op.sig
-        all_current_deps = self.sig_adapter.deps_adapter.load_state(conn=conn)
-        updated_deps = all_current_deps[sig.internal_name, sig.version]
-        updated_deps = updated_deps.update(new_deps)
-        all_current_deps[sig.internal_name, sig.version] = updated_deps
-        self.sig_adapter.deps_adapter.dump_state(all_current_deps, conn=conn)
-
-    @transaction()
-    def _process_deps(
-        self,
-        func_interface: "FuncInterface",
-        on_change: Optional[str] = None,
-        conn: Optional[Connection] = None,
-    ):
-        """
-        Modify a func interface in-place depending on how we respond to
-        dependency changes (if any)
-        """
-        if on_change is None:
-            # nothing to do
-            return
-        func_op = func_interface.func_op
-        sig = func_op.sig
-        old_deps = self.sig_adapter.deps_adapter.load_state(conn=conn).get(
-            (sig.internal_name, sig.version), DependencyState()
-        )
-        new_deps, diff = DependencyState.recover(old=old_deps)
-        source_diff, globals_diff = diff.sources, diff.globals_
-        if not source_diff.is_empty or not globals_diff.is_empty:
-            # there are changes in the dependencies
-            if on_change == "ignore":
-                # accept the changes without creating a new version
-                self.update_deps(func_op=func_op, new_deps=new_deps, conn=conn)
-            elif on_change == "new_version":
-                # automatically create a new version
-                new_sig = sig.bump_version()
-                new_func_op = FuncOp._from_data(sig=new_sig, f=func_op.func)
-                func_interface.func_op = new_func_op
-                self.synchronize(f=func_interface, conn=conn)
-                return
-            elif on_change == "ask":
-                # ask the user what to do
-                raise NotImplementedError()
-            else:
-                raise ValueError(f"Unknown versioning method: {on_change}")
-
     def call_run(
         self, func_op: FuncOp, inputs: Dict[str, Union[Any, ValueRef]]
     ) -> Tuple[List[ValueRef], Call]:
+        # todo: should this be all transactional?
         wrapped_inputs, call_uid = self._preprocess_run(func_op, inputs)
         # check if call UID exists in call storage
         if self.call_exists(call_uid):
+            if sys.gettrace() is not None and self.deps_root is not None:
+                raise NotImplementedError(
+                    f"Detected an @op call from another @op, tracking dependencies through this is not implemented yet"
+                )
             return self._process_call_found(call_uid=call_uid)
         else:
             # compute op
@@ -684,16 +752,21 @@ class Storage(Transactable):
                 raw_inputs = {k: v.obj for k, v in wrapped_inputs.items()}
             else:
                 raw_inputs = wrapped_inputs
-            outputs, dependency_state = func_op.compute(
-                raw_inputs, deps_root=self.deps_root
+            outputs, dependency_state_option = func_op.compute(
+                raw_inputs,
+                deps_root=self.deps_root,
+                ignore_dependency_tracking_errors=self.ignore_dependency_tracking_errors,
             )
-            self.update_deps(func_op=func_op, new_deps=dependency_state)
-            return self._process_call_not_found(
+            wrapped_outputs, call = self._process_call_not_found(
                 func_outputs=outputs,
                 call_uid=call_uid,
                 wrapped_inputs=wrapped_inputs,
                 func_op=func_op,
             )
+            # update dependencies only after the call has been stored
+            if dependency_state_option is not None:
+                self._update_deps(func_op=func_op, new_deps=dependency_state_option)
+            return wrapped_outputs, call
 
     async def call_run_async(
         self, func_op: FuncOp, inputs: Dict[str, Union[Any, ValueRef]]
@@ -782,7 +855,11 @@ class FuncInterface:
     """
 
     def __init__(
-        self, func_op: FuncOp, executor: str = "python", on_change: Optional[str] = None
+        self,
+        func_op: FuncOp,
+        executor: str = "python",
+        on_change: Optional[str] = None,
+        autoversion: bool = False,
     ):
         self.func_op = func_op
         self.__name__ = self.func_op.sig.ui_name
@@ -790,6 +867,7 @@ class FuncInterface:
         self.is_invalidated = False
         self.executor = executor
         self.on_change = on_change
+        self.autoversion = autoversion
         if on_change is not None:
             assert (
                 GlobalContext.current is not None
@@ -801,7 +879,21 @@ class FuncInterface:
                 storage = context.storage
                 storage.synchronize(self)
                 if storage.deps_root is not None:
-                    storage._process_deps(func_interface=self, on_change=self.on_change)
+                    storage._process_deps_change(
+                        func_interface=self, on_change=self.on_change
+                    )
+
+    @property
+    def sig(self) -> Signature:
+        return self.func_op.sig
+
+    def __repr__(self) -> str:
+        sig = self.func_op.sig
+        if self.is_invalidated:
+            # clearly distinguish stale functions
+            return f"FuncInterface(func_name={sig.ui_name}, is_invalidated=True)"
+        else:
+            return f"FuncInterface(func_name={sig.ui_name}, version={sig.version}, on_change={self.on_change}, autoversion={self.autoversion})"
 
     def invalidate(self):
         self.is_invalidated = True
