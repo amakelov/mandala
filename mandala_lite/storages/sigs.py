@@ -245,22 +245,39 @@ class SigSyncer(Transactable):
         self,
         sig: Signature,
         conn: Optional[Connection] = None,
-        use_latest_version: bool = False,
     ) -> Signature:
         """
         Create a new signature, create a new version, or update an existing one,
         and immediately send changes to the server.
         """
-        if self.sig_adapter.exists_versioned_ui(sig=sig, conn=conn):
-            if use_latest_version:
-                latest_sig = self.sig_adapter.get_latest_version(sig=sig, conn=conn)
-                new_sig = copy.deepcopy(sig)
-                new_sig.version = latest_sig.version
-                res = self.sync_update(sig=new_sig, conn=conn)
+        if sig.version is None:
+            if self.sig_adapter.exists_any_version(sig=sig, conn=conn):
+                action = "use_latest"
             else:
-                res = self.sync_update(sig=sig, conn=conn)
-        elif self.sig_adapter.exists_any_version(sig=sig, conn=conn):
-            res = self.sync_new_version(sig=sig, conn=conn)
+                action = "create"
         else:
+            if self.sig_adapter.exists_versioned_ui(sig=sig, conn=conn):
+                action = "update_current"
+            elif self.sig_adapter.exists_any_version(sig=sig, conn=conn):
+                action = "new_version"
+            else:
+                action = "create"
+        if action == "use_latest":
+            latest_sig = self.sig_adapter.get_latest_version(sig=sig, conn=conn)
+            new_sig = copy.deepcopy(sig)
+            new_sig.version = latest_sig.version
+            res = self.sync_update(sig=new_sig, conn=conn)
+        elif action == "update_current":
+            # current_version = self.sig_adapter.get_version(sig=sig, version=sig.version, conn=conn)
+            # new_sig = copy.deepcopy(current_sig)
+            # new_sig.version = latest_sig.version
+            res = self.sync_update(sig=sig, conn=conn)
+        elif action == "new_version":
+            res = self.sync_new_version(sig=sig, conn=conn)
+        elif action == "create":
+            sig = copy.deepcopy(sig)
+            sig.version = 0
             res = self.sync_create(sig=sig, conn=conn)
+        else:
+            raise ValueError(f"Unknown action {action}")
         return res

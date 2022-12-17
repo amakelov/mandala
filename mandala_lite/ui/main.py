@@ -20,7 +20,12 @@ from ..core.workflow import Workflow, CallStruct
 from ..core.utils import Hashing, get_uid
 from ..core.deps import DependencyState
 
-from ..core.weaver import ValQuery, FuncQuery, traverse_all
+from ..core.weaver import (
+    ValQuery,
+    FuncQuery,
+    traverse_all,
+    visualize_computational_graph,
+)
 from ..core.compiler import Compiler, QueryGraph
 
 from .utils import wrap_inputs, wrap_outputs, bind_inputs, format_as_outputs
@@ -38,7 +43,7 @@ class MODES:
 
 
 class OnChange:
-    ignore = "ignore"
+    overwrite = "overwrite"
     new_version = "new_version"
     ask = "ask"
 
@@ -62,6 +67,7 @@ class Context:
         self.updates = {}
         self._updates_stack = []
         self._call_structs = []
+        self._defined_funcs: List["FuncInterface"] = []
 
     def _backup_state(self, keys: Iterable[str]) -> Dict[str, Any]:
         res = {}
@@ -128,7 +134,14 @@ class Context:
                 calls = executor.execute(workflow=workflow, storage=self.storage)
                 self.storage.commit(calls=calls)
             elif self.mode == MODES.define:
-                pass
+                storage = self.storage
+                for f in self._defined_funcs:
+                    storage.synchronize(f)
+                    if storage.deps_root is not None:
+                        storage._process_deps_change(
+                            func_interface=f, on_change=f.on_change
+                        )
+                self._defined_funcs = []
             else:
                 raise InternalError(self.mode)
         except Exception as e:
@@ -145,7 +158,11 @@ class Context:
         return self
 
     def get_table(
-        self, *queries: ValQuery, engine: str = "sql", filter_duplicates: bool = True
+        self,
+        *queries: ValQuery,
+        engine: str = "sql",
+        filter_duplicates: bool = True,
+        visualize_steps_at: Optional[Path] = None,
     ) -> pd.DataFrame:
         #! important
         # We must sync any dirty cache elements to the DuckDB store before performing a query.
@@ -155,6 +172,7 @@ class Context:
             select_queries=list(queries),
             engine=engine,
             filter_duplicates=filter_duplicates,
+            visualize_steps_at=visualize_steps_at,
         )
 
 
@@ -212,8 +230,6 @@ class Storage(Transactable):
         ### dependency tracking config
         deps_root: Optional[Path] = None,
         ignore_dependency_errors: bool = False,
-        ignore_dependency_tracking_errors: bool = False,
-        ignore_dependency_recovery_errors: bool = False,
     ):
         self.root = root
         if call_cache is None:
@@ -239,16 +255,14 @@ class Storage(Transactable):
             address=None if db_path is None else str(db_path),
             _read_only=_read_only,
         )
+
+        # if deps_root is not None, dependencies will be tracked
         if deps_root is not None:
             self.deps_root = Path(deps_root).absolute().resolve()
         else:
             self.deps_root = None
-        if ignore_dependency_errors:
-            self.ignore_dependency_recovery_errors = True
-            self.ignore_dependency_tracking_errors = True
-        else:
-            self.ignore_dependency_tracking_errors = ignore_dependency_tracking_errors
-            self.ignore_dependency_recovery_errors = ignore_dependency_recovery_errors
+        self.ignore_dependency_errors = ignore_dependency_errors
+
         # manipulates the memoization tables
         self.rel_adapter = RelAdapter(
             rel_storage=self.rel_storage, deps_root=self.deps_root
@@ -345,15 +359,12 @@ class Storage(Transactable):
     def synchronize_op(
         self,
         func_op: FuncOp,
-        use_latest_version: bool = False,
         conn: Optional[Connection] = None,
     ):
         # first, pull the current data from the remote!
         self.sig_syncer.sync_from_remote(conn=conn)
         # this step also sends the signature to the remote
-        new_sig = self.sig_syncer.sync_from_local(
-            sig=func_op.sig, use_latest_version=use_latest_version, conn=conn
-        )
+        new_sig = self.sig_syncer.sync_from_local(sig=func_op.sig, conn=conn)
         func_op.sig = new_sig
         # to send any default values that were created by adding inputs
         self.sync_to_remote()
@@ -362,9 +373,7 @@ class Storage(Transactable):
     def synchronize(
         self, f: Union["FuncInterface", Any], conn: Optional[Connection] = None
     ):
-        self.synchronize_op(
-            func_op=f.func_op, use_latest_version=f.autoversion, conn=conn
-        )
+        self.synchronize_op(func_op=f.func_op, conn=conn)
         f.is_synchronized = True
 
     ############################################################################
@@ -555,6 +564,14 @@ class Storage(Transactable):
         return all_deps[sig.internal_name, sig.version]
 
     @transaction()
+    def get_table(
+        self, func_interface: "FuncInterface", conn: Optional[Connection] = None
+    ) -> pd.DataFrame:
+        with self.run():
+            df = func_interface.get_table()
+        return df
+
+    @transaction()
     def _update_deps(
         self,
         func_op: FuncOp,
@@ -588,59 +605,90 @@ class Storage(Transactable):
             (sig.internal_name, sig.version), DependencyState(roots=[])
         )
         new_deps, diff = DependencyState.recover(
-            old=old_deps, ignore_errors=self.ignore_dependency_recovery_errors
+            old=old_deps, ignore_errors=self.ignore_dependency_errors
         )
         if not diff.is_empty:
             # there are changes in the dependencies
-            if on_change == OnChange.ignore:
+            if on_change == OnChange.overwrite:
                 # accept the changes without creating a new version.
                 # todo: warn if the recovered dependencies are over a different
                 # address space
-                action = "overwrite"
+                action = "o"
             elif on_change == OnChange.new_version:
                 # automatically create a new version
-                action = "new version"
+                action = "n"
             elif on_change == OnChange.ask:
                 # ask the user what to do
                 print(f"Detected changes in the dependencies of {func_op.sig.ui_name}:")
                 print(indent(repr(diff), 4 * " "))
                 actions = {
-                    "overwrite": "Overwrite the dependencies by the recovered state without creating a new version.",
-                    "new version": "Create a new version for this function that starts out with NO dependencies and no memoized calls.",
-                    "cancel": "Cancel this function definition. No changes will be made to the dependencies or the version.",
+                    "1. o (overwrite)": "OVERWRITE the dependencies by their new state without creating a new version.",
+                    "2. n (new version)": "Create a NEW VERSION for this function that starts out with NO dependencies and no memoized calls.",
+                    "3. c (cancel)": "CANCEL this function definition. No changes will be made to the stored dependencies or the version.",
                 }
                 question = "What would you like to do?\n" + "\n".join(
-                    f"'{k}': {v}" for k, v in actions.items()
+                    f"{k}: {v}" for k, v in actions.items()
                 )
-                action = ask_user(question=question, valid_options=list(actions.keys()))
+                action = ask_user(question=question, valid_options=["o", "n", "c"])
             else:
                 raise ValueError(f"Unknown versioning method: {on_change}")
 
-            if action == "overwrite":
+            if action == "o":
                 self._update_deps(func_op=func_op, new_deps=new_deps, conn=conn)
-            elif action == "new version":
+            elif action == "n":
                 new_sig = sig.bump_version()
                 new_func_op = FuncOp._from_data(sig=new_sig, f=func_op.func)
                 func_interface.func_op = new_func_op
                 self.synchronize(f=func_interface, conn=conn)
-            elif action == "abort":
-                raise ValueError(f"Aborting definition of {func_op.sig.ui_name}")
+            elif action == "c":
+                raise ValueError(f"Cancelling definition of {func_op.sig.ui_name}")
             else:
                 raise RuntimeError()
+            if action == "o":
+                print(
+                    f"Overwrote the dependencies of {func_op.sig.ui_name} with the new state."
+                )
+                return
+            if action == "n":
+                print(
+                    f"Created a new version of {func_op.sig.ui_name} with no dependencies and no memoized calls."
+                )
+                return
 
     ############################################################################
     ### make calls in contexts
     ############################################################################
+    def _load_memoization_tables(
+        self, evaluate: bool = False
+    ) -> Dict[str, pd.DataFrame]:
+        """
+        Get a dict of {versioned internal name: memoization table} for all
+        functions. Note that memoization tables are labeled by UI arg names.
+        """
+        sigs = self.sig_adapter.load_state()
+        ui_to_internal = {
+            sig.versioned_ui_name: sig.versioned_internal_name for sig in sigs.values()
+        }
+        ui_call_data = self.rel_adapter.get_all_call_data()
+        call_data = {ui_to_internal[k]: v for k, v in ui_call_data.items()}
+        if evaluate:
+            call_data = {
+                k: self.rel_adapter.evaluate_call_table(v) for k, v in call_data.items()
+            }
+        return call_data
+
     def execute_query(
         self,
         select_queries: List[ValQuery],
         engine: str = "sql",
         filter_duplicates: bool = True,
+        visualize_steps_at: Optional[Path] = None,
     ) -> pd.DataFrame:
         """
         Execute the given queries and return the result as a pandas DataFrame.
         """
-
+        if visualize_steps_at is not None:
+            assert engine == "naive"
         if not select_queries:
             return pd.DataFrame()
         val_queries, func_queries = traverse_all(select_queries)
@@ -651,18 +699,21 @@ class Storage(Transactable):
             )
             df = self.rel_storage.execute_df(query=str(query))
         elif engine == "naive":
-            sigs = self.sig_adapter.load_state()
-            ui_to_internal = {
-                sig.versioned_ui_name: sig.versioned_internal_name
-                for sig in sigs.values()
+            val_copies, func_copies, select_copies = QueryGraph._copy_graph(
+                val_queries, func_queries, select_queries=select_queries
+            )
+            memoization_tables = self._load_memoization_tables()
+            tables = {
+                f: memoization_tables[f.func_op.sig.versioned_internal_name]
+                for f in func_copies
             }
-            ui_call_data = self.rel_adapter.get_all_call_data()
-            call_data = {ui_to_internal[k]: v for k, v in ui_call_data.items()}
-            query_graph = QueryGraph.from_mandala(
-                val_queries=val_queries,
-                func_queries=func_queries,
-                select_queries=select_queries,
-                call_data=call_data,
+            query_graph = QueryGraph(
+                val_queries=val_copies,
+                func_queries=func_copies,
+                select_queries=select_copies,
+                tables=tables,
+                _table_evaluator=self.rel_adapter.evaluate_call_table,
+                _visualize_steps_at=visualize_steps_at,
             )
             df = query_graph.solve()
             if filter_duplicates:
@@ -683,6 +734,20 @@ class Storage(Transactable):
         ]
         result.rename(columns=dict(zip(result.columns, cols)), inplace=True)
         return result
+
+    def visualize_query(self, select_queries: List[ValQuery]) -> None:
+        val_queries, func_queries = traverse_all(select_queries)
+        memoization_tables = self._load_memoization_tables(evaluate=True)
+        tables_by_fq = {
+            fq: memoization_tables[fq.func_op.sig.versioned_internal_name]
+            for fq in func_queries
+        }
+        visualize_computational_graph(
+            val_queries=val_queries,
+            func_queries=func_queries,
+            layout="bipartite",
+            memoization_tables=tables_by_fq,
+        )
 
     def _preprocess_run(self, func_op: FuncOp, inputs: Dict[str, Union[Any, ValueRef]]):
         # wrap inputs
@@ -755,7 +820,7 @@ class Storage(Transactable):
             outputs, dependency_state_option = func_op.compute(
                 raw_inputs,
                 deps_root=self.deps_root,
-                ignore_dependency_tracking_errors=self.ignore_dependency_tracking_errors,
+                ignore_dependency_tracking_errors=self.ignore_dependency_errors,
             )
             wrapped_outputs, call = self._process_call_not_found(
                 func_outputs=outputs,
@@ -873,15 +938,11 @@ class FuncInterface:
                 GlobalContext.current is not None
                 and GlobalContext.current.mode == MODES.define
             )
-        if GlobalContext.current is not None:
-            context = GlobalContext.current
-            if context.mode == MODES.define:
-                storage = context.storage
-                storage.synchronize(self)
-                if storage.deps_root is not None:
-                    storage._process_deps_change(
-                        func_interface=self, on_change=self.on_change
-                    )
+        if (
+            GlobalContext.current is not None
+            and GlobalContext.current.mode == MODES.define
+        ):
+            GlobalContext.current._defined_funcs.append(self)
 
     @property
     def sig(self) -> Signature:

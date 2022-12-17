@@ -12,6 +12,9 @@ install_requires = [
 ]
 
 extras_require = {
+    "performance": [
+        "cityhash >= 0.2.2",  # for faster content hashing
+    ],
     "base": [],
     "test": [
         "pytest >= 6.0.0",

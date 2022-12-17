@@ -46,7 +46,6 @@ if Config.has_torch:
             return_annotation = f.schema.returns[0].type
         else:
             return_annotation = tuple([r.type for r in f.schema.returns])
-        sess.d = locals()
         py_sig = inspect.Signature(
             parameters=list(parameters.values()),
             return_annotation=return_annotation,

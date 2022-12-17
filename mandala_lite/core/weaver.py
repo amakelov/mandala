@@ -1,5 +1,16 @@
 from ..common_imports import *
 from .model import FuncOp
+from ..ui.viz import (
+    Node,
+    Edge,
+    Group,
+    SOLARIZED_LIGHT,
+    to_dot_string,
+    write_output,
+    HTMLBuilder,
+    Cell,
+)
+from typing import Literal
 
 
 class ValQuery:
@@ -108,3 +119,110 @@ def traverse_all(val_queries: List[ValQuery]) -> Tuple[List[ValQuery], List[Func
                 if neigh not in val_queries_:
                     val_queries_.append(neigh)
     return val_queries_, op_queries_
+
+
+def visualize_computational_graph(
+    val_queries: List[ValQuery],
+    func_queries: List[FuncQuery],
+    layout: Literal["computational", "bipartite"] = "computational",
+    memoization_tables: Optional[Dict[FuncQuery, pd.DataFrame]] = None,
+    output_path: Optional[Path] = None,
+):
+    if memoization_tables is not None:
+        assert layout == "bipartite"
+    nodes = {}  # val/op query -> Node obj
+    edges = []
+    for val_query in val_queries:
+        html_label = HTMLBuilder()
+        html_label.add_row(cells=[Cell(text=str(val_query.column_name), port=None)])
+        node = Node(
+            internal_name=str(id(val_query)),
+            # label=str(val_query.column_name),
+            label=html_label.to_html_like_label(),
+            color=SOLARIZED_LIGHT["blue"],
+            shape="plain",
+        )
+        nodes[val_query] = node
+    for func_query in func_queries:
+        html_label = HTMLBuilder()
+        title_cell = Cell(
+            text=func_query.func_op.sig.ui_name,
+            port=None,
+            bgcolor=SOLARIZED_LIGHT["blue"],
+        )
+        input_cells = []
+        output_cells = []
+        for input_name in func_query.inputs.keys():
+            input_cells.append(Cell(text=input_name, port=input_name))
+            # html_label.add_row(elts=[Cell(text=input_name, port=input_name)])
+        for output_idx in range(len(func_query.outputs)):
+            output_cells.append(
+                Cell(text=f"output_{output_idx}", port=f"output_{output_idx}")
+            )
+        if layout == "bipartite":
+            html_label.add_row(cells=[title_cell])
+            if len(input_cells + output_cells) > 0:
+                html_label.add_row(cells=input_cells + output_cells)
+            if memoization_tables is not None:
+                column_names = [cell.text for cell in input_cells + output_cells]
+                port_names = [cell.port for cell in input_cells + output_cells]
+                # remove ports from the table column cells
+                for cell in input_cells + output_cells:
+                    cell.port = None
+                df = memoization_tables[func_query][column_names]
+                rows = list(df.head().itertuples(index=False))
+                for tup in rows:
+                    html_label.add_row(cells=[Cell(text=str(x)) for x in tup])
+                # add port names to the cells in the *last* row
+                for cell, port_name in zip(html_label.rows[-1], port_names):
+                    cell.port = port_name
+        elif layout == "computational":
+            if len(input_cells) > 0:
+                html_label.add_row(input_cells)
+            html_label.add_row([title_cell])
+            if len(output_cells) > 0:
+                html_label.add_row(output_cells)
+        else:
+            raise ValueError(f"Unknown layout: {layout}")
+        node = Node(
+            internal_name=str(id(func_query)),
+            # label=str(func_query.func_op.sig.ui_name),
+            label=html_label.to_html_like_label(),
+            color=SOLARIZED_LIGHT["red"],
+            shape="plain",
+        )
+        nodes[func_query] = node
+        for input_name, val_query in func_query.inputs.items():
+            if layout == "bipartite":
+                edges.append(
+                    Edge(
+                        target_node=nodes[val_query],
+                        source_node=nodes[func_query],
+                        source_port=input_name,
+                        arrowtail="none",
+                        arrowhead="none",
+                    )
+                )
+            elif layout == "computational":
+                edges.append(
+                    Edge(
+                        source_node=nodes[val_query],
+                        target_node=nodes[func_query],
+                        target_port=input_name,
+                    )
+                )
+            else:
+                raise ValueError(f"Unknown layout: {layout}")
+        for output_idx, val_query in enumerate(func_query.outputs):
+            edges.append(
+                Edge(
+                    source_node=nodes[func_query],
+                    target_node=nodes[val_query],
+                    source_port=f"output_{output_idx}",
+                    arrowtail="none" if layout == "bipartite" else None,
+                    arrowhead="none" if layout == "bipartite" else None,
+                )
+            )
+    dot_string = to_dot_string(nodes=list(nodes.values()), edges=edges, groups=[])
+    output_path = Path("graph.svg") if output_path is None else output_path
+    write_output(output_path=output_path, dot_string=dot_string, output_ext="svg")

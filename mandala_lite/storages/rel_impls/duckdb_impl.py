@@ -7,7 +7,6 @@ from .bases import RelStorage
 from .utils import Transactable, transaction
 from ...core.utils import get_uid
 from ...common_imports import *
-from ...core.config import Config
 
 
 class DuckDBRelStorage(RelStorage, Transactable):

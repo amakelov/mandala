@@ -1,4 +1,5 @@
 from ..common_imports import *
+from typing import Literal
 
 
 def get_mandala_path() -> Path:
@@ -27,6 +28,8 @@ class Config:
     check_signature_on_each_call = False
     # always create storage with a persistent database
     _persistent_storage_testing = False
+    # hashing method
+    content_hasher: Literal["cityhash", "blake2b"] = "blake2b"
 
     ### constants
     # used for columns containing UIDs of value references or calls
@@ -45,6 +48,7 @@ class Config:
     # todo: prevent creating inputs with this name
     output_name_prefix = "output_"
 
+    ### checking for optional dependencies
     try:
         import dask
 
@@ -59,6 +63,21 @@ class Config:
     except ImportError:
         has_torch = False
 
+    try:
+        import cityhash
+
+        has_cityhash = True
+    except ImportError:
+        has_cityhash = False
+
+    try:
+        import PIL
+
+        has_pil = True
+    except ImportError:
+        has_pil = False
+
+    ### some module names needed by internals
     mandala_path = get_mandala_path()
     module_name = "mandala_lite"
     tests_module_name = "mandala_lite.tests"
@@ -76,3 +95,7 @@ class Prov:
     vref_name = "vref_name"
     vref_uid = "vref_uid"
     is_input = "is_input"
+
+
+if Config.has_torch:
+    import torch

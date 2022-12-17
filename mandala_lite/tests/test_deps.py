@@ -233,12 +233,12 @@ def test_changes():
         ) -> int:  # calls a func with dependencies of its own
             return func_2(x)
 
-        @op(on_change=OnChange.ignore)
+        @op(on_change=OnChange.overwrite)
         def f_make_obj(x: int) -> int:  # creates a class instance, calls a method
             obj = DepsCls(x)
             return obj.method_1(x)
 
-        @op(on_change=OnChange.ignore)
+        @op(on_change=OnChange.overwrite)
         def f_make_child_obj(x: int) -> int:  # use a child class
             obj = DepsClsChild(x)
             return obj.method_1(x)

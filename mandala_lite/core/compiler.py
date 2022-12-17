@@ -1,8 +1,9 @@
 import pickle
 from ..common_imports import *
 from .model import FuncOp
+from .sig import Signature
 from .config import Config, dump_output_name
-from .weaver import ValQuery, FuncQuery, traverse_all
+from .weaver import ValQuery, FuncQuery, traverse_all, visualize_computational_graph
 from .utils import invert_dict
 from pypika import Query, Table, Field, Column, Criterion
 
@@ -95,6 +96,8 @@ class QueryGraph:
         func_queries: List[FuncQuery],
         select_queries: List[ValQuery],
         tables: Dict[FuncQuery, pd.DataFrame],
+        _table_evaluator: Optional[Callable[[pd.DataFrame], pd.DataFrame]] = None,
+        _visualize_steps_at: Optional[Path] = None,
     ):
         # list of participating ValQueries
         self.val_queries = val_queries
@@ -109,6 +112,13 @@ class QueryGraph:
         for k, v in self.tables.items():
             if Config.uid_col in v.columns:
                 v.drop(columns=[Config.uid_col], inplace=True)
+
+        # for visualization
+        self._visualize_intermediate_states = _visualize_steps_at is not None
+        self._table_evaluator = _table_evaluator
+        self._visualize_steps_at = _visualize_steps_at
+        if self._visualize_intermediate_states:
+            assert self._table_evaluator is not None
 
     @staticmethod
     def _copy_graph(
@@ -137,23 +147,6 @@ class QueryGraph:
                 v.created_as = i
             func_copies.append(func_copy)
         return list(val_copies.values()), func_copies, select_copies
-
-    @staticmethod
-    def from_mandala(
-        val_queries: List[ValQuery],
-        func_queries: List[FuncQuery],
-        select_queries: List[ValQuery],
-        call_data: Dict[str, pd.DataFrame],
-    ) -> "QueryGraph":
-        val_queries, func_queries, select_queries = QueryGraph._copy_graph(
-            val_queries, func_queries, select_queries=select_queries
-        )
-        tables = {
-            f: call_data[f.func_op.sig.versioned_internal_name] for f in func_queries
-        }
-        return QueryGraph(
-            val_queries, func_queries, select_queries=select_queries, tables=tables
-        )
 
     def _get_col_to_vq_mappings(
         self, func_query: FuncQuery
@@ -274,7 +267,15 @@ class QueryGraph:
             else:
                 raise ValueError()
         # insert new func query
-        f = FuncQuery(inputs=inputs, func_op=None)
+        sig = Signature(
+            ui_name="internal_node",
+            input_names=set(inputs.keys()),
+            n_outputs=0,
+            version=0,
+            defaults={},
+        )
+        func_op = FuncOp._from_data(sig=sig, f=None)
+        f = FuncQuery(inputs=inputs, func_op=func_op)
         for k, v in inputs.items():
             v.add_consumer(consumer=f, consumed_as=k)
         self.tables[f] = df
@@ -291,8 +292,25 @@ class QueryGraph:
         col_to_vq2, vq_to_cols2 = self._get_col_to_vq_mappings(f2)
         return len(set(col_to_vq1.values()) & set(col_to_vq2.values()))
 
+    def _visualize_state(self, step_num: int):
+        assert self._visualize_intermediate_states
+        val_queries, func_queries = traverse_all(val_queries=self.select_queries)
+        memoization_tables = {
+            k: self._table_evaluator(v) for k, v in self.tables.items()
+        }
+        visualize_computational_graph(
+            val_queries=val_queries,
+            func_queries=func_queries,
+            output_path=self._visualize_steps_at / f"{step_num}.svg",
+            layout="bipartite",
+            memoization_tables=memoization_tables,
+        )
+
     def solve(self) -> pd.DataFrame:
+        step_num = 0
         while len(self.func_queries) > 1:
+            if self._visualize_intermediate_states:
+                self._visualize_state(step_num=step_num)
             intersections = {}
             # compute pairwise intersections
             for f1 in self.func_queries:
@@ -304,6 +322,9 @@ class QueryGraph:
             f1, f2 = max(intersections, key=lambda x: intersections.get(x, 0))
             # merge the pair
             self.merge(f1, f2)
+            step_num += 1
+        if self._visualize_intermediate_states:
+            self._visualize_state(step_num=step_num)
         assert len(self.tables) == 1
         df = self.tables[self.func_queries[0]]
         f = self.func_queries[0]

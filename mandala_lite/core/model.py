@@ -179,7 +179,12 @@ class FuncOp:
         - `mandala_lite.core.sig.Signature`
     """
 
-    def __init__(self, func: Callable, version: int = 0, ui_name: Optional[str] = None):
+    def __init__(
+        self,
+        func: Callable,
+        version: Optional[int] = None,
+        ui_name: Optional[str] = None,
+    ):
         # `ui_name` is useful for simulating multi-user scenarios in tests
         self.func = func
         if Config.has_torch and isinstance(func, torch.jit.ScriptFunction):

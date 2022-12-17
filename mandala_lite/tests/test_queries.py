@@ -1,5 +1,8 @@
 from mandala_lite.all import *
 from mandala_lite.tests.utils import *
+from mandala_lite.core.weaver import visualize_computational_graph, traverse_all
+
+OUTPUT_ROOT = Path(__file__).parent / "output/"
 
 
 def test_empty():
@@ -9,6 +12,41 @@ def test_empty():
         df = q.get_table()
 
     assert df.empty
+
+
+def test_visualization():
+    storage = Storage()
+
+    @op
+    def f(x: int, y: int) -> Tuple[int, int, int]:
+        return x, y, x + y
+
+    @op
+    def g() -> int:
+        return 42
+
+    @op
+    def h(z: int, w: int):
+        pass
+
+    for func in [f, g, h]:
+        storage.synchronize(func)
+
+    with storage.query():
+        a = g().named("a")
+        b = Q().named("b")
+        c, d, e = f(x=a, y=b)
+        c.named("c"), d.named("d"), e.named("e")
+        h(z=c, w=d)
+        h(z=a, w=b)
+        x, y, z = f(x=d, y=e)
+        x.named("x"), y.named("y"), z.named("z")
+        vqs, fqs = traverse_all([a, b, c, d, e])
+        visualize_computational_graph(
+            val_queries=vqs,
+            func_queries=fqs,
+            output_path=OUTPUT_ROOT / "test_visualization.svg",
+        )
 
 
 def test_basics():
@@ -35,17 +73,23 @@ def test_basics():
     with storage.query() as q:
         i = Q().named("i")
         j = inc(i).named("j")
-        final = add(i, j)
+        final = add(i, j).named("final")
         df = q.get_table(i, j, final)
         assert set(df["i"]) == {i for i in range(20, 25)}
         assert all(df["j"] == df["i"] + 1)
     check_invariants(storage)
+    vqs, fqs = traverse_all([i, j, final])
+    visualize_computational_graph(
+        val_queries=vqs, func_queries=fqs, output_path=OUTPUT_ROOT / "test_basics.svg"
+    )
 
     with storage.query() as q:
         i = Q().named("i")
         j = inc(i).named("j")
-        final = add(i, j)
-        df_naive = q.get_table(i, j, final, engine="naive")
+        final = add(i, j).named("final")
+        df_naive = q.get_table(
+            i, j, final, engine="naive", visualize_steps_at=OUTPUT_ROOT
+        )
         assert compare_dfs_as_relations(df, df_naive)
 
 
@@ -89,8 +133,16 @@ def test_filter_duplicates():
         w = add(z, y).named("w")
         df_1 = q.get_table(x, z, filter_duplicates=True)
         df_2 = q.get_table(x, z, filter_duplicates=False)
-        df_3 = q.get_table(x, z, filter_duplicates=True, engine="naive")
-        df_4 = q.get_table(x, z, filter_duplicates=False, engine="naive")
+        df_3 = q.get_table(
+            x, z, filter_duplicates=True, engine="naive", visualize_steps_at=OUTPUT_ROOT
+        )
+        df_4 = q.get_table(
+            x,
+            z,
+            filter_duplicates=False,
+            engine="naive",
+            visualize_steps_at=OUTPUT_ROOT,
+        )
 
     assert len(df_1) == 5
     assert len(df_2) == 25
@@ -135,7 +187,9 @@ def test_superops_basic():
         n = add(x, y).named("n")
         z = Q().named("z")
         a = inc_n_times(x=z, n=n).named("a")
-        df_naive = q.get_table(x, y, n, a, z, engine="naive")
+        df_naive = q.get_table(
+            x, y, n, a, z, engine="naive", visualize_steps_at=OUTPUT_ROOT
+        )
         assert compare_dfs_as_relations(df, df_naive)
 
 
@@ -184,7 +238,9 @@ def test_superops_multilevel():
     with storage.query() as q:
         xs, ys = Q().named("xs"), Q().named("ys")
         result = add_many(xs=xs, ys=ys).named("result")
-        df_naive = q.get_table(xs, ys, result, engine="naive")
+        df_naive = q.get_table(
+            xs, ys, result, engine="naive", visualize_steps_at=OUTPUT_ROOT
+        )
         assert compare_dfs_as_relations(df, df_naive)
 
     # two levels of nesting
@@ -211,7 +267,9 @@ def test_superops_multilevel():
         xs, ys, zs = Q().named("xs"), Q().named("ys"), Q().named("zs")
         intermediate = add_many(xs, ys).named("intermediate")
         final = add_many(intermediate, zs).named("final")
-        df_naive = q.get_table(xs, ys, intermediate, final, engine="naive")
+        df_naive = q.get_table(
+            xs, ys, intermediate, final, engine="naive", visualize_steps_at=OUTPUT_ROOT
+        )
         assert compare_dfs_as_relations(df, df_naive)
 
 
@@ -281,6 +339,14 @@ def test_weird():
         b(k=var_4, l=var_1)
         var_6 = e(m=var_2)
         df_naive = q.get_table(
-            var_0, var_1, var_2, var_3, var_4, var_5, var_6, engine="naive"
+            var_0,
+            var_1,
+            var_2,
+            var_3,
+            var_4,
+            var_5,
+            var_6,
+            engine="naive",
+            visualize_steps_at=OUTPUT_ROOT,
         )
         assert compare_dfs_as_relations(df, df_naive)
