@@ -1,5 +1,5 @@
 from .common_imports import *
-from .core.model import ValueRef, Call, FuncOp, unwrap, wrap
+from .core.model import ValueRef, ListRef, Call, FuncOp, unwrap, wrap
 from .core.sig import Signature
 from .core.config import Config
 from .core.deps import DependencyState

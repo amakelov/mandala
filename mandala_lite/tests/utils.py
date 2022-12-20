@@ -4,7 +4,7 @@ from ..common_imports import *
 from mandala_lite.all import *
 from mandala_lite.ui.main import MODES
 from mandala_lite.core.config import Config
-from mandala_lite.core.model import ValueRef
+from mandala_lite.core.model import Ref
 from mandala_lite.storages.remote_impls.mongo_impl import MongoRemoteStorage
 from mandala_lite.storages.remote_impls.mongo_mock import MongoMockRemoteStorage
 
@@ -22,7 +22,7 @@ def signatures_are_equal(storage_1: Storage, storage_2: Storage) -> bool:
 
 
 def _sanitize_value(value: Any) -> Any:
-    if isinstance(value, ValueRef):
+    if isinstance(value, Ref):
         return (_sanitize_value(value.obj), value.in_memory, value.uid)
     try:
         hash(value)

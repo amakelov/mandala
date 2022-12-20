@@ -1,5 +1,5 @@
 from ..common_imports import *
-from ..core.model import FuncOp, ValueRef, Call, wrap
+from ..core.model import FuncOp, Ref, Call, wrap
 from ..core.sig import Signature
 from ..core.utils import Hashing
 from ..core.config import Config
@@ -12,16 +12,16 @@ class MODES:
     batch = "batch"
 
 
-def wrap_inputs(inputs: Dict[str, Any]) -> Dict[str, ValueRef]:
+def wrap_inputs(inputs: Dict[str, Any]) -> Dict[str, Ref]:
     # check if we allow implicit wrapping
     if Config.autowrap_inputs:
         return {k: wrap(v) for k, v in inputs.items()}
     else:
-        assert all(isinstance(v, ValueRef) for v in inputs.values())
+        assert all(isinstance(v, Ref) for v in inputs.values())
         return inputs
 
 
-def wrap_outputs(outputs: List[Any], call_uid: str) -> List[ValueRef]:
+def wrap_outputs(outputs: List[Any], call_uid: str) -> List[Ref]:
     """
     Wrap the outputs of a call as value references.
 
@@ -37,7 +37,7 @@ def wrap_outputs(outputs: List[Any], call_uid: str) -> List[ValueRef]:
     else:
         raise ValueError()
     wrapped_outputs = [
-        wrap(obj=x, uid=uid_generator(i, x)) if not isinstance(x, ValueRef) else x
+        wrap(obj=x, uid=uid_generator(i, x)) if not isinstance(x, Ref) else x
         for i, x in enumerate(outputs)
     ]
     return wrapped_outputs
@@ -74,7 +74,7 @@ def bind_inputs(args, kwargs, mode: str, func_op: FuncOp) -> Dict[str, Any]:
 
 
 def format_as_outputs(
-    outputs: Union[List[ValueRef], List[ValQuery]]
+    outputs: Union[List[Ref], List[ValQuery]]
 ) -> Union[None, Any, Tuple[Any]]:
     if len(outputs) == 0:
         return None

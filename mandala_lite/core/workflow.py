@@ -1,13 +1,11 @@
 from ..common_imports import *
 from .weaver import *
-from .model import ValueRef, FuncOp, Call
+from .model import Ref, FuncOp, Call
 from .utils import Hashing
 
 
 class CallStruct:
-    def __init__(
-        self, func_op: FuncOp, inputs: Dict[str, ValueRef], outputs: List[ValueRef]
-    ):
+    def __init__(self, func_op: FuncOp, inputs: Dict[str, Ref], outputs: List[Ref]):
         self.func_op = func_op
         self.inputs = inputs
         self.outputs = outputs
@@ -36,7 +34,7 @@ class Workflow:
         # self.causal_hash_to_op_node: Dict[str, FuncQuery] = {}
         self.op_node_to_causal_hash: Dict[FuncQuery, str] = {}
         ### encoding the data
-        self.value_to_var: Dict[ValueRef, ValQuery] = {}
+        self.value_to_var: Dict[Ref, ValQuery] = {}
         self.op_node_to_call_structs: Dict[FuncQuery, List[CallStruct]] = {}
 
     def check_invariants(self):
@@ -74,7 +72,7 @@ class Workflow:
     # def op_to_causal_hash(self) -> Dict[FuncQuery, str]:
     #     return invert_dict(self.causal_hash_to_op_node)
 
-    def var_to_values(self) -> Dict[ValQuery, List[ValueRef]]:
+    def var_to_values(self) -> Dict[ValQuery, List[Ref]]:
         res = defaultdict(list)
         for value, var in self.value_to_var.items():
             res[var].append(value)
@@ -99,7 +97,7 @@ class Workflow:
         self,
         func_op: FuncOp,
         node_inputs: Optional[Dict[str, ValQuery]] = None,
-        val_inputs: Optional[Dict[str, ValueRef]] = None,
+        val_inputs: Optional[Dict[str, Ref]] = None,
     ) -> str:
         assert (node_inputs is None) != (val_inputs is None)
         if val_inputs is not None:
@@ -141,7 +139,7 @@ class Workflow:
         self.op_node_to_call_structs[res] = []
         return res, outputs
 
-    def add_value(self, value: ValueRef, var: ValQuery):
+    def add_value(self, value: Ref, var: ValQuery):
         assert var in self.var_nodes
         self.value_to_var[value] = var
 
@@ -227,9 +225,7 @@ class Workflow:
 
     @property
     def has_delayed(self) -> bool:
-        return any(
-            [ValueRef.is_delayed(vref=value) for value in self.value_to_var.keys()]
-        )
+        return any([value.is_delayed() for value in self.value_to_var.keys()])
 
     def print_shape(self):
         var_names = {var: f"var_{i}" for i, var in enumerate(self.var_nodes)}

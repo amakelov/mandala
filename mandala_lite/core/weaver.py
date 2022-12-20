@@ -1,9 +1,8 @@
 from ..common_imports import *
-from .model import FuncOp
+from .model import FuncOp, Builtins
 from ..ui.viz import (
     Node,
     Edge,
-    Group,
     SOLARIZED_LIGHT,
     to_dot_string,
     write_output,
@@ -80,7 +79,26 @@ class FuncQuery:
             )
         ]
 
+    @staticmethod
+    def link(inputs: Dict[str, ValQuery], func_op: FuncOp) -> "FuncQuery":
+        """
+        Link a func query into the graph
+        """
+        result = FuncQuery(inputs=inputs, func_op=func_op)
+        result.set_outputs(
+            outputs=[
+                ValQuery(creator=result, created_as=i)
+                for i in range(func_op.sig.n_outputs)
+            ]
+        )
+        for k, v in inputs.items():
+            v.add_consumer(consumer=result, consumed_as=k)
+        return result
+
     def unlink(self):
+        """
+        Remove this `FuncQuery` from the graph.
+        """
         for inp in self.inputs.values():
             idxs = [i for i, x in enumerate(inp.consumers) if x is self]
             inp.consumers = [x for i, x in enumerate(inp.consumers) if i not in idxs]
@@ -119,6 +137,28 @@ def traverse_all(val_queries: List[ValQuery]) -> Tuple[List[ValQuery], List[Func
                 if neigh not in val_queries_:
                     val_queries_.append(neigh)
     return val_queries_, op_queries_
+
+
+class BuiltinQueries:
+    @staticmethod
+    def ListQuery(elt: ValQuery, idx: Optional[ValQuery] = None) -> ValQuery:
+        result = ValQuery(creator=None, created_as=None)
+        if idx is not None:
+            inputs = {"elt": elt, "idx": idx, "lst": result}
+        else:
+            inputs = {"elt": elt, "lst": result}
+        FuncQuery.link(inputs=inputs, func_op=Builtins.list_op)
+        return result
+
+    @staticmethod
+    def GetItemQuery(lst: ValQuery, idx: Optional[ValQuery] = None) -> ValQuery:
+        result = ValQuery(creator=None, created_as=None)
+        if idx is not None:
+            inputs = {"lst": lst, "idx": idx, "elt": result}
+        else:
+            inputs = {"lst": lst, "elt": result}
+        FuncQuery.link(inputs=inputs, func_op=Builtins.list_op)
+        return result
 
 
 def visualize_computational_graph(

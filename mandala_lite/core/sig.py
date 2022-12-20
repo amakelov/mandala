@@ -3,6 +3,9 @@ from .config import Config
 from .utils import get_uid, Hashing, is_subdict
 from ..utils import serialize, deserialize
 
+if Config.has_torch:
+    import torch
+
 
 class Signature:
     """
@@ -35,6 +38,7 @@ class Signature:
         n_outputs: int,
         defaults: Dict[str, Any],  # ui name -> default value
         version: int,
+        _is_builtin: bool = False,
     ):
         self.ui_name = ui_name
         self.input_names = input_names
@@ -48,6 +52,15 @@ class Signature:
         # this stores the UIDs of default values for inputs that have been
         # added to the function since its creation
         self._new_input_defaults_uids = {}
+
+        self._is_builtin = _is_builtin
+        if self.is_builtin:
+            self._internal_name = ui_name
+            self._ui_to_internal_input_map = {name: name for name in input_names}
+
+    @property
+    def is_builtin(self) -> bool:
+        return self._is_builtin
 
     def check_invariants(self):
         assert set(self.defaults.keys()) <= self.input_names
@@ -63,7 +76,8 @@ class Signature:
             f"n_outputs={self.n_outputs}, defaults={self.defaults}, "
             f"version={self.version}, internal_name={self._internal_name}, "
             f"ui_to_internal_input_map={self._ui_to_internal_input_map}, "
-            f"new_input_defaults_uids={self._new_input_defaults_uids})"
+            f"new_input_defaults_uids={self._new_input_defaults_uids}, "
+            f"is_builtin={self.is_builtin})"
         )
 
     @property
@@ -154,11 +168,14 @@ class Signature:
         internal name for different versions of the same function.
         """
         res = copy.deepcopy(self)
-        if internal_name is None:
-            internal_name = get_uid()
-        res._internal_name, res._ui_to_internal_input_map = internal_name, {
-            k: get_uid() for k in self.input_names
-        }
+        if not self.is_builtin:
+            if internal_name is None:
+                internal_name = get_uid()
+            ui_to_internal_map = {k: get_uid() for k in self.input_names}
+            res._internal_name, res._ui_to_internal_input_map = (
+                internal_name,
+                ui_to_internal_map,
+            )
         return res
 
     def is_compatible(self, new: "Signature") -> Tuple[bool, Optional[str]]:
@@ -310,6 +327,7 @@ class Signature:
         name: str,
         version: int,
         sig: inspect.Signature,
+        _is_builtin: bool = False,
     ) -> "Signature":
         """
         Create a `Signature` from a Python function's signature and the other
@@ -348,4 +366,70 @@ class Signature:
             n_outputs=n_outputs,
             defaults=defaults,
             version=version,
+            _is_builtin=_is_builtin,
         )
+
+
+def _postprocess_outputs(sig: Signature, result) -> List[Any]:
+    if sig.n_outputs == 0:
+        assert (
+            result is None
+        ), f"Operation with signature {sig} has zero outputs, but its function returned {result}"
+        return []
+    elif sig.n_outputs == 1:
+        return [result]
+    else:
+        assert isinstance(
+            result, tuple
+        ), f"Operation with signature {sig} has multiple outputs, but its function returned a non-tuple: {result}"
+        assert (
+            len(result) == sig.n_outputs
+        ), f"Operation with signature {sig} has {sig.n_outputs} outputs, but its function returned a tuple of length {len(result)}"
+        return list(result)
+
+
+def get_arg_annotations(func: Callable, support: List[str]) -> Dict[str, Any]:
+    if Config.has_torch and isinstance(func, torch.jit.ScriptFunction):
+        return {a.name: a.type for a in func.schema.arguments}
+    # Use the inspect module to get the function's signature
+    sig = inspect.signature(func)
+    # Create an empty dictionary to store the argument annotations
+    arg_annotations = {}
+    # Iterate over the function's parameters
+    for param in sig.parameters.values():
+        # Add the parameter name and its type annotation to the dictionary
+        arg_annotations[param.name] = param.annotation
+    for k in support:
+        if k not in arg_annotations:
+            arg_annotations[k] = Any
+    # Return the dictionary of argument annotations
+    return arg_annotations
+
+
+def is_typing_tuple(obj: Any) -> bool:
+    """
+    Check if an object is a typing.Tuple[...] thing
+    """
+    try:
+        return obj.__origin__ is tuple
+    except AttributeError:
+        return False
+
+
+def get_return_annotations(func: Callable, support_size: int) -> List[Any]:
+    if Config.has_torch and isinstance(func, torch.jit.ScriptFunction):
+        return_annotation = func.schema.returns[0].type
+    else:
+        sig = inspect.signature(func)
+        return_annotation = sig.return_annotation
+    if is_typing_tuple(return_annotation):
+        # we must unpack the typing tuple in this weird way
+        res: List[Any] = list(return_annotation.__args__)
+    elif return_annotation is inspect._empty:
+        if support_size > 0:
+            res = [Any for _ in range(support_size)]
+        else:
+            res = []
+    else:
+        res = [return_annotation]
+    return res

@@ -17,6 +17,8 @@ from mandala_lite.tests.stateful_utils import *
 from mandala_lite.core.workflow import Workflow, CallStruct
 from mandala_lite.core.utils import Hashing, get_uid
 from mandala_lite.core.compiler import *
+from mandala_lite.core.model import Builtins, Type, ListType
+from mandala_lite.core.sig import get_return_annotations
 from mandala_lite.storages.remote_storage import RemoteStorage
 from mandala_lite.ui.main import SimpleWorkflowExecutor, FuncInterface
 
@@ -39,6 +41,12 @@ class MockStorage:
         self.values: Dict[str, Any] = {}
         # versioned internal op name -> (internal input name -> default uid)
         self.default_uids: Dict[str, Dict[str, str]] = {}
+        for builtin_op in Builtins.OPS:
+            name = builtin_op.sig.versioned_internal_name
+            self.calls[name] = pd.DataFrame(
+                columns=list(builtin_op.sig.input_names) + [Config.uid_col]
+            )
+            self.default_uids[name] = {}
         self.check_invariants()
 
     def __eq__(self, other: Any):
@@ -582,23 +590,25 @@ class SingleClientSimulator(RuleBasedStateMachine):
     def add_call_to_workflow(self):
         candidates = Preconditions.add_call_to_workflow(self)[1]
         client, workflow, op_node = random.choice(candidates)
-        # workflow = random.choice(
-        #     [w for w in self._workflows if len(w.callable_op_nodes) > 0]
-        # )
-        # # pick random op in workflow
-        # op_node = random.choice(workflow.callable_op_nodes)
         input_vars = op_node.inputs
         # pick random values
         var_to_values = workflow.var_to_values()
         input_values = {
             name: random.choice(var_to_values[var]) for name, var in input_vars.items()
         }
+        func_op = op_node.func_op
+        output_types = [
+            Type.from_annotation(a)
+            for a in get_return_annotations(
+                func=func_op.func, support_size=func_op.sig.n_outputs
+            )
+        ]
+        outputs = [
+            Ref.make_delayed(RefCls=ListRef if isinstance(tp, ListType) else ValueRef)
+            for tp in output_types
+        ]
         call_struct = CallStruct(
-            func_op=op_node.func_op,
-            inputs=input_values,
-            outputs=[
-                ValueRef.make_delayed() for _ in range(op_node.func_op.sig.n_outputs)
-            ],
+            func_op=op_node.func_op, inputs=input_values, outputs=outputs
         )
         workflow.add_call_struct(call_struct=call_struct)
 

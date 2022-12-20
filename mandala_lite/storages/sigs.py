@@ -152,15 +152,18 @@ class SigSyncer(Transactable):
         """
         self.sync_from_remote(conn=conn)
         current = self.sig_adapter.load_ui_sigs(conn=conn)[sig.ui_name, sig.version]
-        new_sig, _ = current.update(new=sig)
-        self.validate_transaction(
-            new_sig=new_sig, all_sigs=self.sig_adapter.load_state(conn=conn)
-        )
-        all_sigs = self.sig_adapter.load_state(conn=conn)
-        all_sigs[(current.internal_name, current.version)] = new_sig
-        self.push_signatures(sigs=all_sigs)
-        self.sig_adapter.update_sig(sig=new_sig, conn=conn)
-        return new_sig
+        if current != sig:
+            new_sig, _ = current.update(new=sig)
+            self.validate_transaction(
+                new_sig=new_sig, all_sigs=self.sig_adapter.load_state(conn=conn)
+            )
+            all_sigs = self.sig_adapter.load_state(conn=conn)
+            all_sigs[(current.internal_name, current.version)] = new_sig
+            self.push_signatures(sigs=all_sigs)
+            self.sig_adapter.update_sig(sig=new_sig, conn=conn)
+            return new_sig
+        else:
+            return current
 
     @transaction()
     def sync_new_version(

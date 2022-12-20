@@ -26,9 +26,5 @@ def test_unit():
     with storage.run():
         inc(23)
 
-    assert len(storage.sig_adapter.load_state()) == 2
-    call_table_names = storage.rel_adapter.get_call_tables()
-    assert len(call_table_names) == 2
-    for table_name in call_table_names:
-        df = storage.rel_storage.get_data(table=table_name)
-        assert df.shape[0] == 1
+    sigs = [v for k, v in storage.sig_adapter.load_state().items() if not v.is_builtin]
+    assert len(sigs) == 2

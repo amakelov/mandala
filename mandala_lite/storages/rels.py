@@ -8,7 +8,7 @@ from duckdb import DuckDBPyConnection as Connection
 
 from ..common_imports import *
 from ..core.config import Config, Prov, dump_output_name
-from ..core.model import Call, unwrap, FuncOp, ValueRef
+from ..core.model import Call, unwrap, FuncOp, Ref, ValueRef, ListRef
 from ..core.sig import Signature
 from ..core.deps import DependencyState
 from ..utils import serialize, deserialize, _rename_cols
@@ -517,33 +517,6 @@ class SigAdapter(Transactable):
             )
         return new_sig
 
-    ############################################################################
-    ###
-    ############################################################################
-    # @transaction()
-    # def is_synced(
-    #     self, sig: Signature, conn: Optional[Connection] = None
-    # ) -> Tuple[bool, str]:
-    #     """
-    #     Given a signature with internal data, check if it matches what's
-    #     in the databse. Returns a tuple of (is_synced, reason if false).
-    #     """
-    #     assert sig.has_internal_data
-    #     current_sigs = self.load_state(conn=conn)
-    #     if (sig.internal_name, sig.version) in current_sigs:
-    #         current = current_sigs[(sig.internal_name, sig.version)]
-    #         if sig != current:
-    #             return (
-    #                 False,
-    #                 f"Signatures are different.\nThis signature:\n    {sig}\nCurrent signature:\n    {current}",
-    #             )
-    #     else:
-    #         return (
-    #             False,
-    #             f"Signature with this internal name and version not found in database.",
-    #         )
-    #     return True, "Signature is equal to a signature in the database."
-
     @transaction()
     def rename_tables(
         self,
@@ -711,10 +684,6 @@ class RelAdapter(Transactable):
     def get_event_log(self, conn: Optional[Connection] = None) -> pd.DataFrame:
         return self.rel_storage.get_data(table=self.EVENT_LOG_TABLE, conn=conn)
 
-    # @transaction()
-    # def event_log_is_clean(self, conn: Optional[Connection] = None) -> bool:
-    #     return self.rel_storage.get_count(table=self.EVENT_LOG_TABLE, conn=conn) == 0
-
     @transaction()
     def clear_event_log(self, conn: Optional[Connection] = None):
         event_log_table = Table(self.EVENT_LOG_TABLE)
@@ -743,7 +712,7 @@ class RelAdapter(Transactable):
             - the current ui name for this signature
             - a mapping of stale input names to their current values
         """
-        current_sigs = self.sig_adapter.load_state()
+        current_sigs = self.sig_adapter.load_state(conn=conn)
         current_sig = current_sigs[sig.internal_name, sig.version]
         true_versioned_ui_name = current_sig.versioned_ui_name
         stale_to_true_input_mapping = {
@@ -877,62 +846,83 @@ class RelAdapter(Transactable):
     ### object methods
     ############################################################################
     @transaction()
-    def obj_gets(
-        self, uids: list[str], conn: Optional[Connection] = None
-    ) -> pd.DataFrame:
+    def obj_exists(
+        self, uids: List[str], conn: Optional[Connection] = None
+    ) -> List[bool]:
         if len(uids) == 0:
-            return pd.DataFrame()
-
+            return []
         table = Table(Config.vref_table)
         query = (
             Query.from_(table)
             .where(table[Config.uid_col].isin(uids))
-            .select(table[Config.uid_col], table.value)
+            .select(table[Config.uid_col])
         )
-        output = self.rel_storage.execute_arrow(query, conn=conn).to_pandas()
-        output["value"] = output["value"].map(lambda x: deserialize(bytes(x)))
-        return output
+        existing_uids = set(
+            self.rel_storage.execute_df(query=query, conn=conn)[Config.uid_col]
+        )
+        return [uid in existing_uids for uid in uids]
 
     @transaction()
-    def obj_exists(
-        self, uids: List[str], conn: Optional[Connection] = None
-    ) -> List[bool]:
-        assert isinstance(uids, list)
-        df = self.obj_gets(uids, conn=conn)
-        results = [len(df[df[Config.uid_col] == uid]) > 0 for uid in uids]
-        return results
+    def obj_gets(
+        self, uids: list[str], shallow: bool = False, conn: Optional[Connection] = None
+    ) -> List[Ref]:
+        """
+        Given a list of uids, return a table with columns
+            (`Config.uid_col`, `value`)
+        containing the stored values for each uid.
+
+        NOTE: the order of the returned table is not guaranteed to match the
+        order of the input uids.
+        """
+        if len(uids) == 0:
+            return []
+        if shallow:
+            table = Table(Config.vref_table)
+            query = (
+                Query.from_(table)
+                .where(table[Config.uid_col].isin(uids))
+                .select(table[Config.uid_col], table.value)
+            )
+            output = self.rel_storage.execute_arrow(query, conn=conn).to_pandas()
+            output["value"] = output["value"].map(lambda x: deserialize(bytes(x)))
+            return output.set_index(Config.uid_col).loc[uids, "value"].tolist()
+        else:
+            results = [Ref.from_uid(uid=uid) for uid in uids]
+            self.mattach(vrefs=results, shallow=False, conn=conn)
+            return results
 
     @transaction()
-    def obj_get(self, uid: str, conn: Optional[Connection] = None) -> ValueRef:
-        df = self.obj_gets(uids=[uid], conn=conn)
-        return df.loc[0, "value"]
+    def obj_get(self, uid: str, conn: Optional[Connection] = None) -> Ref:
+        vref_option = self.obj_gets(uids=[uid], conn=conn)[0]
+        if vref_option is None:
+            raise ValueError(f"Ref with uid {uid} does not exist")
+        return vref_option
 
     @transaction()
     def obj_set(
-        self, uid: str, value: ValueRef, conn: Optional[Connection] = None
+        self,
+        uid: str,
+        value: Ref,
+        shallow: bool = True,
+        conn: Optional[Connection] = None,
     ) -> None:
-        if self.obj_exists(uids=[uid], conn=conn)[0]:
-            return  # guarantees no overwriting of values
-        serialized_value = serialize(value)
-        query = Query.into(Config.vref_table).insert(Parameter("$1"), Parameter("$2"))
-        self.rel_storage.execute_arrow(
-            query=query, parameters=[uid, serialized_value], conn=conn
-        )
-        log_query = Query.into(self.EVENT_LOG_TABLE).insert(
-            Parameter("$1"), Parameter("$2")
-        )
-        self.rel_storage.execute_arrow(
-            log_query, parameters=[uid, Config.vref_table], conn=conn
-        )
+        self.obj_sets(vrefs={uid: value}, shallow=shallow, conn=conn)
 
     @transaction()
-    def obj_sets(self, kvs: dict[str, Any], conn: Optional[Connection] = None) -> None:
-        uids = list(kvs.keys())
+    def obj_sets(
+        self,
+        vrefs: dict[str, Ref],
+        shallow: bool = True,
+        conn: Optional[Connection] = None,
+    ) -> None:
+        if not shallow:
+            raise NotImplementedError()
+        uids = list(vrefs.keys())
         indicators = self.obj_exists(uids, conn=conn)
         new_uids = [uid for uid, indicator in zip(uids, indicators) if not indicator]
         ta = pa.Table.from_pylist(
             [
-                {Config.uid_col: new_uid, "value": serialize(kvs[new_uid])}
+                {Config.uid_col: new_uid, "value": serialize(vrefs[new_uid])}
                 for new_uid in new_uids
             ]
         )
@@ -944,3 +934,48 @@ class RelAdapter(Transactable):
             ]
         )
         self.rel_storage.upsert(relation=self.EVENT_LOG_TABLE, ta=log_ta, conn=conn)
+
+    @transaction()
+    def mattach(
+        self, vrefs: List[Ref], shallow: bool = False, conn: Optional[Connection] = None
+    ) -> None:
+        """
+        In-place attach objects. If `shallow`, only attach the next level;
+        otherwise, attach until leaf nodes.
+
+        Note that some objects may already be attached.
+        """
+        ### pass to the vrefs that need to be attached
+        detached_vrefs = []
+        for vref in vrefs:
+            if isinstance(vref, Ref) and not vref.in_memory:
+                detached_vrefs.append(vref)
+            elif isinstance(vref, ListRef) and vref.in_memory:
+                detached_vrefs.extend(vref.obj)
+            else:
+                continue
+        vrefs = detached_vrefs
+        ### group the vrefs by uid
+        uids: List[str] = []
+        vrefs_by_uid: Dict[str, List[Ref]] = {}
+        for vref in vrefs:
+            uid = vref.uid
+            if uid not in vrefs_by_uid:
+                uids.append(uid)
+                vrefs_by_uid[uid] = [vref]
+            else:
+                vrefs_by_uid[uid].append(vref)
+        ### load one level of the unique vrefs
+        vals = self.obj_gets(
+            uids=uids, shallow=True, conn=conn
+        )  #! this can be optimized
+        for i, uid in enumerate(uids):
+            objs_with_this_uid = vrefs_by_uid[uid]
+            for obj in objs_with_this_uid:
+                obj.attach(reference=vals[i])
+        if not shallow:
+            residues = [
+                elt for vref in vals if isinstance(vref, ListRef) for elt in vref.obj
+            ]
+            if len(residues) > 0:
+                self.mattach(vrefs=residues, shallow=False, conn=conn)

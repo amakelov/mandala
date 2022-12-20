@@ -191,7 +191,7 @@ def _pprint_structure(
         if module in sources_text and len(sources_text[module]) > 0:
             lines.append(indent("===FUNCTIONS/METHODS===:", " " * 4))
             for func_name, source in sources_text[module].items():
-                lines.append(indent(f"<<<{func_name}>>>:", " " * 8))
+                lines.append(indent(f"{func_name}:", " " * 8))
                 source = textwrap.dedent(source)
                 source_lines = source.splitlines()
                 lines += [indent(f"{line}", " " * 12) for line in source_lines]

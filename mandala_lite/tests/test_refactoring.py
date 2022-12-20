@@ -173,7 +173,8 @@ def test_func_renaming():
     # make sure the call was not new
     assert df.shape == (1, 3)
     # make sure we did not create a new function
-    assert len(storage.sig_adapter.load_state()) == 1
+    sigs = [v for k, v in storage.sig_adapter.load_state().items() if not v.is_builtin]
+    assert len(sigs) == 1
 
     ############################################################################
     ### check that name collisions are not allowed
@@ -259,7 +260,8 @@ def test_arg_renaming():
     # make sure the call was not new
     assert df.shape == (1, 3)
     # make sure we did not create a new function
-    assert len(storage.sig_adapter.load_state()) == 1
+    sigs = [v for k, v in storage.sig_adapter.load_state().items() if not v.is_builtin]
+    assert len(sigs) == 1
 
     ############################################################################
     ### check collisions are not allowed

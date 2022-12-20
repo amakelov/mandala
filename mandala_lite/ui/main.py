@@ -9,15 +9,16 @@ from textwrap import indent
 from ..storages.rel_impls.utils import Transactable, transaction
 from ..storages.kv import InMemoryStorage, MultiProcInMemoryStorage, KVStore
 from ..storages.rel_impls.duckdb_impl import DuckDBRelStorage
-from ..storages.rels import RelAdapter, RemoteEventLogEntry, deserialize, SigAdapter
+from ..storages.rels import RelAdapter, RemoteEventLogEntry
 from ..storages.sigs import SigSyncer
 from ..storages.remote_storage import RemoteStorage
 from ..common_imports import *
 from ..core.config import Config
-from ..core.model import Call, FuncOp, ValueRef, unwrap, Delayed
-from ..core.sig import Signature
+from ..core.model import *
+from ..core.tps import Type
+from ..core.sig import Signature, get_arg_annotations, get_return_annotations
 from ..core.workflow import Workflow, CallStruct
-from ..core.utils import Hashing, get_uid
+from ..core.utils import get_uid
 from ..core.deps import DependencyState
 
 from ..core.weaver import (
@@ -275,6 +276,10 @@ class Storage(Transactable):
             timestamp if timestamp is not None else datetime.datetime.fromtimestamp(0)
         )
 
+        # set up builtins
+        for func_op in Builtins.OPS:
+            self.synchronize_op(func_op=func_op)
+
     ############################################################################
     ### `Transactable` interface
     ############################################################################
@@ -304,21 +309,31 @@ class Storage(Transactable):
             call = call_without_outputs.set_output_values(outputs=outputs)
             return call
 
+    def set_call_and_objs(self, call: Call):
+        for vref in itertools.chain(call.inputs.values(), call.outputs):
+            self.obj_set(vref.uid, vref)
+        self.call_set(call_uid=call.uid, call=call)
+
     def call_set(self, call_uid: str, call: Call) -> None:
         self.call_cache.set(call_uid, call)
 
-    def obj_get(self, obj_uid: str) -> ValueRef:
+    def obj_get(self, obj_uid: str) -> Ref:
         if self.obj_cache.exists(obj_uid):
             return self.obj_cache.get(obj_uid)
         return self.rel_adapter.obj_get(uid=obj_uid)
 
-    def obj_set(self, obj_uid: str, vref: ValueRef) -> None:
+    def obj_set(self, obj_uid: str, vref: Ref) -> None:
         self.obj_cache.set(obj_uid, vref)
 
-    def preload_objs(self, keys: list[str]):
-        keys_not_in_cache = [key for key in keys if not self.obj_cache.exists(key)]
-        for idx, row in self.rel_adapter.obj_gets(keys_not_in_cache).iterrows():
-            self.obj_cache.set(k=row[Config.uid_col], v=row["value"])
+    def preload_objs(self, uids: list[str]):
+        """
+        Put the objects with the given UIDs in the cache.
+        """
+        uids_not_in_cache = [uid for uid in uids if not self.obj_cache.exists(uid)]
+        for uid, vref in zip(
+            uids_not_in_cache, self.rel_adapter.obj_gets(uids=uids_not_in_cache)
+        ):
+            self.obj_cache.set(k=uid, v=vref)
 
     def evict_caches(self):
         for k in self.call_cache.keys():
@@ -721,10 +736,10 @@ class Storage(Transactable):
         else:
             raise NotImplementedError()
         # now, evaluate the table
-        keys_to_collect = [
+        uids_to_collect = [
             item for _, column in df.items() for _, item in column.items()
         ]
-        self.preload_objs(keys_to_collect)
+        self.preload_objs(uids_to_collect)
         result = df.applymap(lambda key: unwrap(self.obj_get(key)))
 
         # finally, name the columns
@@ -749,29 +764,7 @@ class Storage(Transactable):
             memoization_tables=tables_by_fq,
         )
 
-    def _preprocess_run(self, func_op: FuncOp, inputs: Dict[str, Union[Any, ValueRef]]):
-        # wrap inputs
-        wrapped_inputs = wrap_inputs(inputs)
-        # get call UID using *internal names* to guarantee the same UID will be
-        # assigned regardless of renamings
-        hashable_input_uids = {}
-        for k, v in wrapped_inputs.items():
-            # ignore the inputs that were added to the function and have their
-            # default values
-            internal_k = func_op.sig.ui_to_internal_input_map[k]
-            if internal_k in func_op.sig._new_input_defaults_uids:
-                if func_op.sig._new_input_defaults_uids[internal_k] == v.uid:
-                    continue
-            hashable_input_uids[internal_k] = v.uid
-        call_uid = Hashing.get_content_hash(
-            obj=[
-                hashable_input_uids,
-                func_op.sig.versioned_internal_name,
-            ]
-        )
-        return wrapped_inputs, call_uid
-
-    def _process_call_found(self, call_uid):
+    def _process_call_found(self, call_uid) -> Tuple[List[Ref], Call]:
         # get call from call storage
         call = self.call_get(call_uid)
         # get outputs from obj storage
@@ -781,10 +774,20 @@ class Storage(Transactable):
         return wrapped_outputs, call
 
     def _process_call_not_found(
-        self, func_outputs: List[Any], call_uid, wrapped_inputs, func_op
-    ):
+        self,
+        func_outputs: List[Any],
+        call_uid,
+        wrapped_inputs,
+        func_op: FuncOp,
+    ) -> Tuple[List[Ref], Call, List[Call]]:
         # wrap outputs
-        wrapped_outputs = wrap_outputs(func_outputs, call_uid=call_uid)
+        wrapped_outputs, output_calls = wrap_list(
+            objs=func_outputs,
+            annotations=get_return_annotations(
+                func_op.func, support_size=func_op.sig.n_outputs
+            ),
+        )
+        # wrapped_outputs = wrap_outputs(func_outputs, call_uid=call_uid)
         # create call
         call = Call(
             uid=call_uid,
@@ -792,18 +795,24 @@ class Storage(Transactable):
             outputs=wrapped_outputs,
             func_op=func_op,
         )
-        self.call_set(call_uid, call)
+        # self.call_set(call_uid, call)
         # set inputs and outputs in obj storage
         for v in itertools.chain(wrapped_outputs, wrapped_inputs.values()):
             self.obj_set(v.uid, v)
         # return outputs and call
-        return wrapped_outputs, call
+        return wrapped_outputs, call, output_calls
 
     def call_run(
-        self, func_op: FuncOp, inputs: Dict[str, Union[Any, ValueRef]]
-    ) -> Tuple[List[ValueRef], Call]:
-        # todo: should this be all transactional?
-        wrapped_inputs, call_uid = self._preprocess_run(func_op, inputs)
+        self, func_op: FuncOp, inputs: Dict[str, Union[Any, Ref]]
+    ) -> Tuple[List[Ref], Call]:
+        wrapped_inputs, input_calls = wrap_dict(
+            objs=inputs,
+            annotations=get_arg_annotations(
+                func_op.func, support=func_op.sig.input_names
+            ),
+        )
+        # wrapped_inputs = wrap_inputs(inputs)
+        call_uid = func_op.get_call_uid(wrapped_inputs=wrapped_inputs)
         # check if call UID exists in call storage
         if self.call_exists(call_uid):
             if sys.gettrace() is not None and self.deps_root is not None:
@@ -814,29 +823,34 @@ class Storage(Transactable):
         else:
             # compute op
             if Config.autounwrap_inputs:
-                raw_inputs = {k: v.obj for k, v in wrapped_inputs.items()}
+                raw_inputs = unwrap(obj=wrapped_inputs, through_collections=True)
             else:
                 raw_inputs = wrapped_inputs
+            sess.d = locals()
             outputs, dependency_state_option = func_op.compute(
                 raw_inputs,
                 deps_root=self.deps_root,
                 ignore_dependency_tracking_errors=self.ignore_dependency_errors,
             )
-            wrapped_outputs, call = self._process_call_not_found(
+            wrapped_outputs, call, output_calls = self._process_call_not_found(
                 func_outputs=outputs,
                 call_uid=call_uid,
                 wrapped_inputs=wrapped_inputs,
                 func_op=func_op,
             )
+            for call in itertools.chain([call], input_calls, output_calls):
+                self.set_call_and_objs(call=call)
+                # self.call_set(call_uid=call.uid, call=call)
             # update dependencies only after the call has been stored
             if dependency_state_option is not None:
                 self._update_deps(func_op=func_op, new_deps=dependency_state_option)
             return wrapped_outputs, call
 
     async def call_run_async(
-        self, func_op: FuncOp, inputs: Dict[str, Union[Any, ValueRef]]
-    ) -> Tuple[List[ValueRef], Call]:
-        wrapped_inputs, call_uid = self._preprocess_run(func_op, inputs)
+        self, func_op: FuncOp, inputs: Dict[str, Union[Any, Ref]]
+    ) -> Tuple[List[Ref], Call]:
+        wrapped_inputs = wrap_inputs(inputs)
+        call_uid = func_op.get_call_uid(wrapped_inputs=wrapped_inputs)
         # check if call UID exists in call storage
         if self.call_exists(call_uid):
             return self._process_call_found(call_uid=call_uid)
@@ -858,20 +872,23 @@ class Storage(Transactable):
         self, func_op: FuncOp, inputs: Dict[str, ValQuery]
     ) -> List[ValQuery]:
         assert all(isinstance(inp, ValQuery) for inp in inputs.values())
-        func_query = FuncQuery(func_op=func_op, inputs=inputs)
-        for k, v in inputs.items():
-            v.add_consumer(consumer=func_query, consumed_as=k)
-        outputs = [
-            ValQuery(creator=func_query, created_as=i)
-            for i in range(func_op.sig.n_outputs)
-        ]
-        func_query.set_outputs(outputs=outputs)
-        return outputs
+        fq = FuncQuery.link(inputs=inputs, func_op=func_op)
+        return fq.outputs
 
     def call_batch(
-        self, func_op: FuncOp, inputs: Dict[str, ValueRef]
-    ) -> Tuple[List[ValueRef], CallStruct]:
-        outputs = [ValueRef.make_delayed() for _ in range(func_op.sig.n_outputs)]
+        self, func_op: FuncOp, inputs: Dict[str, Ref]
+    ) -> Tuple[List[Ref], CallStruct]:
+        output_types = [
+            Type.from_annotation(a)
+            for a in get_return_annotations(
+                func=func_op.func, support_size=func_op.sig.n_outputs
+            )
+        ]
+        outputs = [
+            Ref.make_delayed(RefCls=ListRef if isinstance(tp, ListType) else ValueRef)
+            for tp in output_types
+        ]
+        # outputs = [Ref.make_delayed() for _, tp in zip(func_op.sig.n_outputs, output_types)]
         call_struct = CallStruct(func_op=func_op, inputs=inputs, outputs=outputs)
         # context._call_structs.append((self.func_op, wrapped_inputs, outputs))
         return outputs, call_struct
@@ -894,9 +911,7 @@ class SimpleWorkflowExecutor(WorkflowExecutor):
                     call_struct.inputs,
                     call_struct.outputs,
                 )
-                assert all(
-                    [not ValueRef.is_delayed(vref=inp) for inp in inputs.values()]
-                )
+                assert all([not inp.is_delayed() for inp in inputs.values()])
                 vref_outputs, call = storage.call_run(
                     func_op=func_op,
                     inputs=inputs,
@@ -924,7 +939,6 @@ class FuncInterface:
         func_op: FuncOp,
         executor: str = "python",
         on_change: Optional[str] = None,
-        autoversion: bool = False,
     ):
         self.func_op = func_op
         self.__name__ = self.func_op.sig.ui_name
@@ -932,7 +946,6 @@ class FuncInterface:
         self.is_invalidated = False
         self.executor = executor
         self.on_change = on_change
-        self.autoversion = autoversion
         if on_change is not None:
             assert (
                 GlobalContext.current is not None
@@ -954,7 +967,7 @@ class FuncInterface:
             # clearly distinguish stale functions
             return f"FuncInterface(func_name={sig.ui_name}, is_invalidated=True)"
         else:
-            return f"FuncInterface(func_name={sig.ui_name}, version={sig.version}, on_change={self.on_change}, autoversion={self.autoversion})"
+            return f"FuncInterface(func_name={sig.ui_name}, version={sig.version}, on_change={self.on_change})"
 
     def invalidate(self):
         self.is_invalidated = True

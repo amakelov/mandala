@@ -41,6 +41,7 @@ if Config.has_torch:
             h(x)
 
         data = storage.rel_adapter.get_all_call_data()
-        assert len(data) == 3
-        for k, v in data.items():
-            assert v.shape[0] == 1
+        func_names = {"f_0", "g_0", "h_0"}
+        assert func_names <= set(data.keys())
+        for k in func_names:
+            assert data[k].shape[0] == 1

@@ -6,20 +6,22 @@ DB_PATH = Path(__file__).parent / "output/asyncio.db"
 
 
 @pytest.mark.asyncio
-async def test_computation():
+async def _test_computation():
 
     if DB_PATH.exists():
         DB_PATH.unlink()
     try:
         storage = Storage(db_path=DB_PATH)
 
-        @op
-        async def inc(x: int) -> int:
-            return x + 1
+        with storage.define():
 
-        @op
-        async def add(x: int, y: int) -> int:
-            return x + y
+            @op
+            async def inc(x: int) -> int:
+                return x + 1
+
+            @op
+            async def add(x: int, y: int) -> int:
+                return x + y
 
         with storage.run():
             x = 23
