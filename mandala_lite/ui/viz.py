@@ -1,6 +1,7 @@
 """
 A minimal OOP wrapper around dot/graphviz
 """
+import difflib
 from ..common_imports import *
 from ..core.config import Config
 import tempfile
@@ -40,8 +41,50 @@ SOLARIZED_LIGHT = {
     "green": Color(133, 153, 0, 1),
 }
 
+
+def _colorize(text: str, color: str) -> str:
+    """
+    Return `text` with ANSI color codes for `color` added.
+    """
+    colors = {
+        "red": 31,
+        "green": 32,
+        "blue": 34,
+        "yellow": 33,
+        "magenta": 35,
+        "cyan": 36,
+        "white": 37,
+    }
+    return f"\033[{colors[color]}m{text}\033[0m"
+
+
+def _get_colorized_diff(current: str, new: str) -> str:
+    """
+    Return a line-by-line colorized diff of the changes between `current` and
+    `new`. each line removed from `current` is colored red, and each line added
+    to `new` is colored green.
+    """
+    lines = []
+    for line in difflib.unified_diff(
+        current.splitlines(),
+        new.splitlines(),
+        n=2,  # number of lines of context around changes to show
+        # fromfile="current", tofile="new"
+        lineterm="",
+    ):
+        if line.startswith("@@") or line.startswith("+++") or line.startswith("---"):
+            continue
+        if line.startswith("-"):
+            lines.append(_colorize(line, "red"))
+        elif line.startswith("+"):
+            lines.append(_colorize(line, "green"))
+        else:
+            lines.append(line)
+    return "\n".join(lines)
+
+
 ################################################################################
-### OOP model of graphviz graphs
+### tiny graphviz model
 ################################################################################
 class Cell:
     def __init__(
@@ -186,7 +229,7 @@ EDGE_CONFIG = {
     "fontcolor": SOLARIZED_LIGHT["base03"],
 }
 
-################################################################################
+
 def dict_to_dot_string(d: Dict[str, Any]) -> str:
     """Converts a dict to a dot string"""
     return ",".join([f'{k}="{v}"' for k, v in d.items()])

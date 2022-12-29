@@ -27,7 +27,7 @@ class Type:
             elif annotation.__origin__ is tuple:
                 return AnyType()
             else:
-                raise NotImplementedError(f"Got annotation {annotation}")
+                return AnyType()
         else:
             return AnyType()
 

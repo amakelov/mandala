@@ -1,4 +1,6 @@
 import hashlib
+import textwrap
+import importlib
 from .config import *
 from ..common_imports import *
 
@@ -63,3 +65,38 @@ class Hashing:
         get_content_hash = get_cityhash
     else:
         raise ValueError("Unknown content hasher: {}".format(Config.content_hasher))
+
+
+def load_obj(module_name: str, obj_name: str) -> Tuple[Any, bool]:
+    module = importlib.import_module(module_name)
+    parts = obj_name.split(".")
+    current = module
+    found = True
+    for part in parts:
+        if not hasattr(current, part):
+            found = False
+            break
+        else:
+            current = getattr(current, part)
+    return current, found
+
+
+def remove_func_signature_and_comments(source: str) -> str:
+    """
+    Given the source code of a function, remove the part that contains the
+    function signature.
+
+    This is used to prevent changes to the signatures of `@op` functions from
+    triggering the dependency tracking logic.
+
+    NOTE: Has the extra effect of removing comments and docstrings by going
+    through an ast parse->unparse cycle.
+    """
+    # using dedent is necessary here to handle decorators
+    tree = ast.parse(textwrap.dedent(source))
+    assert isinstance(tree, ast.Module)
+    body = tree.body
+    assert len(body) == 1
+    assert isinstance(body[0], ast.FunctionDef)
+    func_body = body[0].body
+    return ast.unparse(func_body)

@@ -10,7 +10,7 @@ from ..common_imports import *
 from ..core.config import Config, Prov, dump_output_name
 from ..core.model import Call, unwrap, FuncOp, Ref, ValueRef, ListRef
 from ..core.sig import Signature
-from ..core.deps import DependencyState
+from ..core.deps import DependencyGraph, MandalaDependencies
 from ..utils import serialize, deserialize, _rename_cols
 from .rel_impls.duckdb_impl import DuckDBRelStorage
 from .rel_impls.utils import Transactable, transaction
@@ -41,7 +41,7 @@ class DependencyAdapter(Transactable):
     @transaction()
     def dump_state(
         self,
-        state: Dict[Tuple[str, int], DependencyState],
+        state: MandalaDependencies,
         conn: Optional[Connection] = None,
     ):
         """
@@ -70,9 +70,7 @@ class DependencyAdapter(Transactable):
         return len(df) != 0
 
     @transaction()
-    def load_state(
-        self, conn: Optional[Connection] = None
-    ) -> Dict[Tuple[str, int], DependencyState]:
+    def load_state(self, conn: Optional[Connection] = None) -> MandalaDependencies:
         """
         Load the state of the signatures from the database. All interactions
         with the state of the signatures are done transactionally through this
@@ -81,7 +79,7 @@ class DependencyAdapter(Transactable):
         query = f"SELECT * FROM {self.rel_adapter.DEPS_TABLE} WHERE index = 0"
         df = self.rel_storage.execute_df(query=query, conn=conn)
         if len(df) == 0:
-            return {}
+            return MandalaDependencies()
         else:
             return deserialize(df["deps"][0])
 
@@ -332,10 +330,7 @@ class SigAdapter(Transactable):
     @transaction()
     def _init_deps(self, sig: Signature, conn: Optional[Connection] = None):
         deps = self.deps_adapter.load_state(conn=conn)
-        deps_root = self.rel_adapter.deps_root
-        deps[(sig.internal_name, sig.version)] = DependencyState(
-            roots=[deps_root] if deps_root is not None else []
-        )
+        deps.op_graphs[(sig.internal_name, sig.version)] = DependencyGraph()
         self.deps_adapter.dump_state(state=deps, conn=conn)
 
     @transaction()

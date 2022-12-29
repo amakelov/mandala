@@ -87,6 +87,10 @@ def dump_output_name(index: int) -> str:
     return f"{Config.output_name_prefix}{index}"
 
 
+def parse_output_idx(output_name: str) -> int:
+    return int(output_name[len(Config.output_name_prefix) :])
+
+
 class Prov:
     relname = "__provenance__"
     call_uid = "call_uid"

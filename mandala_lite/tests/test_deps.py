@@ -1,5 +1,6 @@
 from mandala_lite.all import *
 from mandala_lite.tests.utils import *
+from mandala_lite.core.deps import DependencyGraph, CallableNode, GlobalVarNode
 
 
 ### some code is set up at the top level to replicate how the user would use the library
@@ -105,43 +106,57 @@ with storage.define():
         obj = DepsClsChild(x)
         return obj.method_1(x)
 
+    @op
+    def f_listcomp(x) -> List[int]:  # illustrates a list comprehension
+        return [x + CONST_INT for i in range(10)]
 
-def test_deps_tracking():
+
+def unpack(graph: DependencyGraph) -> Tuple[Dict[str, List[str]], Dict[str, List[str]]]:
+    func_ids = {}  # module name -> list of function ids
+    globals_ids = {}  # module name -> list of global ids
+    for node in graph.nodes.values():
+        if isinstance(node, CallableNode):
+            func_ids.setdefault(node.module_name, []).append(node.obj_addr)
+        elif isinstance(node, GlobalVarNode):
+            globals_ids.setdefault(node.module_name, []).append(node.obj_addr)
+    return func_ids, globals_ids
+
+
+def test_tracking():
 
     # check dependencies start out empty
     deps = storage.sig_adapter.deps_adapter.load_state()
-    for k, v in deps.items():
-        assert v.size == 0
+    for v in deps.op_graphs.values():
+        assert len(v.nodes) == 0
 
     with storage.run():
         f_call_func(23)
 
     deps = storage.get_deps(f_call_func)
-    assert deps.globals_.keys() == {MODULE_NAME}
-    assert deps.globals_[MODULE_NAME].keys() == {"CONST_DICT", "CONST_INT"}
-    assert deps.sources.keys() == {MODULE_NAME}
-    assert deps.sources[MODULE_NAME].keys() == {"func_1", "f_call_func"}
+    fs, gs = unpack(deps)
+    assert gs.keys() == {MODULE_NAME}
+    assert set(gs[MODULE_NAME]) == {"CONST_DICT", "CONST_INT"}
+    assert fs.keys() == {MODULE_NAME}
+    assert set(fs[MODULE_NAME]) == {"func_1", "f_call_func"}
 
     with storage.run():
         f_call_func_with_deps(23, 42)
 
     deps = storage.get_deps(f_call_func_with_deps)
-    assert deps.globals_.keys() == {MODULE_NAME}
-    assert deps.globals_[MODULE_NAME].keys() == {"CONST_DICT", "CONST_INT"}
-    assert deps.sources.keys() == {MODULE_NAME}
-    assert deps.sources[MODULE_NAME].keys() == {
-        "func_1",
-        "func_2",
-        "f_call_func_with_deps",
-    }
+    fs, gs = unpack(deps)
+    assert gs.keys() == {MODULE_NAME}
+    assert set(gs[MODULE_NAME]) == {"CONST_DICT", "CONST_INT"}
+    assert fs.keys() == {MODULE_NAME}
+    assert set(fs[MODULE_NAME]) == {"func_1", "func_2", "f_call_func_with_deps"}
 
     with storage.run():
         f_make_obj(23)
 
     deps = storage.get_deps(f_make_obj)
-    assert deps.num_globals == 0
-    assert deps.sources.keys() == {MODULE_NAME}
-    assert deps.sources[MODULE_NAME].keys() == {
+    fs, gs = unpack(deps)
+    assert gs.keys() == set()
+    assert fs.keys() == {MODULE_NAME}
+    assert set(fs[MODULE_NAME]) == {
         "_setup_class_state",
         "DepsCls.__init__",
         "f_make_obj",
@@ -161,10 +176,11 @@ def test_deps_tracking():
         f_make_child_obj(23)
 
     deps = storage.get_deps(f_make_child_obj)
-    assert deps.globals_.keys() == {MODULE_NAME}
-    assert deps.globals_[MODULE_NAME].keys() == {"CONST_LIST", "CONST_INT"}
-    assert deps.sources.keys() == {MODULE_NAME}
-    assert deps.sources[MODULE_NAME].keys() == {
+    fs, gs = unpack(deps)
+    assert gs.keys() == {MODULE_NAME}
+    assert set(gs[MODULE_NAME]) == {"CONST_LIST", "CONST_INT"}
+    assert fs.keys() == {MODULE_NAME}
+    assert set(fs[MODULE_NAME]) == {
         "_setup_class_state",
         "DepsClsChild.__init__",
         "f_make_child_obj",
@@ -218,32 +234,33 @@ def test_changes():
         def method_1(self, y):  # overrides a method, uses different dependencies
             return func_1(23) + sum(CONST_LIST)
 
-    # todo: more precise tests with diffs to see if we detect the correct changes
+    # todo: more precise tests with diffs to see if we detect the correct
+    # changes
+    storage.on_change = OnChange.new_version
     with storage.define():
-        # ops with different kinds of responses to changes
 
-        @op(on_change=OnChange.new_version)
-        def f_call_func(x: int) -> int:  # calls a func, uses a global variable
+        @op
+        def f_call_func(x: int) -> int:
             print("Changed the source code!")
             return func_1(x) + CONST_DICT["a"]
 
-        @op(on_change=OnChange.new_version)
-        def f_call_func_with_deps(
-            x: int, y: int
-        ) -> int:  # calls a func with dependencies of its own
+        @op
+        def f_call_func_with_deps(x: int, y: int) -> int:
             return func_2(x)
 
-        @op(on_change=OnChange.overwrite)
-        def f_make_obj(x: int) -> int:  # creates a class instance, calls a method
+        @op
+        def f_make_obj(x: int) -> int:
             obj = DepsCls(x)
             return obj.method_1(x)
 
-        @op(on_change=OnChange.overwrite)
-        def f_make_child_obj(x: int) -> int:  # use a child class
+        @op
+        def f_make_child_obj(x: int) -> int:
             obj = DepsClsChild(x)
             return obj.method_1(x)
 
+    sess.d = locals()
+
     assert f_call_func.func_op.sig.version == 1
     assert f_call_func_with_deps.func_op.sig.version == 1
-    assert f_make_obj.func_op.sig.version == 0
-    assert f_make_child_obj.func_op.sig.version == 0
+    assert f_make_obj.func_op.sig.version == 1
+    assert f_make_child_obj.func_op.sig.version == 1

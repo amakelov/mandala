@@ -36,8 +36,8 @@ Assumptions:
     the directory, this chain of dependency will not be tracked.
         - (this could be configurable)
     - Only functions whose source is available using `inspect.getsource` have
-      their source code tracked (note that calls they make to other functions
-      may still be tracked).
+      their source code tracked (note that if `getsource` doesn't work for `f`,
+      functions called by `f` will still be tracked).
     - Only global variables that can be content-hashed are tracked.
 
 Guarantees:
@@ -51,12 +51,12 @@ Guarantees:
 
 Limitations:
     - **the tracker is possibly unsound**: 
-        - it can overestimate dependencies on global variables. 
-        - when a global variable has some structure (e.g. a dict), it can
+        - it may overestimate dependencies on global variables. 
+        - when a global variable has some structure (e.g. a dict), it may
         overestimate the part of the structure relevant for a given call of the
         function (the entire structure is tracked, even if only a small part of
         it is relevant for a given call).
-        - it can overestimate the part of a function's source code relevant for
+        - it may overestimate the part of a function's source code relevant for
         a given call of the function (the entire function's source code is
         tracked, even if only a small part of it is relevant for a given call).
     - **the recovery process can't recover closure variables** because they
@@ -89,766 +89,346 @@ Safeguards:
 
 """
 from ..common_imports import *
-from ..core.utils import Hashing
-from ..core.config import Config
+from .utils import Hashing, remove_func_signature_and_comments, load_obj
+from .config import Config
 import sys
 import inspect
 import importlib
+import types
 import textwrap
-from textwrap import indent
-import difflib
-import webbrowser
 
 from ..ui.viz import (
-    Node,
-    Edge,
-    Group,
+    Node as DotNode,
+    Edge as DotEdge,
+    Group as DotGroup,
     to_dot_string,
-    write_output,
     SOLARIZED_LIGHT,
     write_output,
 )
 
-################################################################################
-### utils
-################################################################################
-ValType = TypeVar("ValType")
-DiffType = TypeVar("DiffType")
-NestedDictType = Dict[str, Dict[str, ValType]]
-
-
-def _nested_dict_subtract(
-    x: NestedDictType[ValType], y: NestedDictType[ValType]
-) -> NestedDictType[ValType]:
-    """
-    Given two nested string-keyed dictionaries, return a nested dict that has
-    all the "depth-2" keys in `x` that are not found in `y`
-    """
-    result: NestedDictType = {}
-    for k, v in x.items():
-        if k not in y:
-            result[k] = v
-            continue
-        for k2, v2 in v.items():
-            if k2 not in y[k]:
-                result.setdefault(k, {})[k2] = v2
-    return result
-
-
-def _nested_dict_diff(
-    new: NestedDictType[ValType],
-    old: NestedDictType[ValType],
-    differ: Callable[[ValType, ValType], DiffType],
-) -> NestedDictType[DiffType]:
-    """
-    Given two nested string-keyed dictionaries, return a nested dict that has
-    the result of `differ` applied to all the "depth-2" keys in `new` that are
-    also found in `old` but have different values.
-    """
-    changed = {}
-    for new_outer_key, new_inner_dict in new.items():
-        if new_outer_key not in old:
-            continue
-        for new_inner_key, new_val in new_inner_dict.items():
-            if new_inner_key not in old[new_outer_key]:
-                continue
-            old_val = old[new_outer_key][new_inner_key]
-            if new_val != old_val:  # note that values can use custom __eq__ here
-                changed.setdefault(new_outer_key, {})[new_inner_key] = differ(
-                    new_val, old_val
-                )
-    return changed
-
-
-def _pprint_structure(
-    globals_text: Dict[str, Dict[str, str]], sources_text: Dict[str, Dict[str, str]]
-) -> str:
-    """
-    Pretty-print text about global variables and functions, organized by module
-    name.
-
-    Does not handle truncation.
-    """
-    all_modules = set(globals_text.keys()).union(sources_text.keys())
-    lines = []
-    for module in all_modules:
-        # add the module name to the lines, with some decoration around
-        module_line = f"MODULE {module}:"
-        module_below = "=" * len(module_line)
-        lines += [module_line, module_below]
-        ### show globals data
-        if module in globals_text and len(globals_text[module]) > 0:
-            lines.append(indent("===GLOBALS===:", " " * 4))
-            for global_name in globals_text[module].keys():
-                s = globals_text[module][global_name]
-                lines.append(
-                    indent(
-                        f"{global_name}: {s}",
-                        " " * 8,
-                    )
-                )
-        ### show sources
-        if module in sources_text and len(sources_text[module]) > 0:
-            lines.append(indent("===FUNCTIONS/METHODS===:", " " * 4))
-            for func_name, source in sources_text[module].items():
-                lines.append(indent(f"{func_name}:", " " * 8))
-                source = textwrap.dedent(source)
-                source_lines = source.splitlines()
-                lines += [indent(f"{line}", " " * 12) for line in source_lines]
-        # add a blank line between modules
-        lines.append("")
-    return "\n".join(lines)
-
-
-def _colorize(text: str, color: str) -> str:
-    """
-    Return `text` with ANSI color codes for `color` added.
-    """
-    colors = {
-        "red": 31,
-        "green": 32,
-        "blue": 34,
-        "yellow": 33,
-        "magenta": 35,
-        "cyan": 36,
-        "white": 37,
-    }
-    return f"\033[{colors[color]}m{text}\033[0m"
-
-
-def _get_colorized_diff(current: str, new: str) -> str:
-    """
-    Return a line-by-line colorized diff of the changes between `current` and
-    `new`. each line removed from `current` is colored red, and each line added
-    to `new` is colored green.
-    """
-    lines = []
-    for line in difflib.unified_diff(
-        current.splitlines(),
-        new.splitlines(),
-        n=2,  # number of lines of context around changes to show
-        # fromfile="current", tofile="new"
-        lineterm="",
-    ):
-        if line.startswith("@@") or line.startswith("+++") or line.startswith("---"):
-            continue
-        if line.startswith("-"):
-            lines.append(_colorize(line, "red"))
-        elif line.startswith("+"):
-            lines.append(_colorize(line, "green"))
-        else:
-            lines.append(line)
-    return "\n".join(lines)
-
 
 ################################################################################
-### a model of dependencies
+### dependency graph model
 ################################################################################
-class GlobalVar:
-    def __init__(self, name: str, content_hash: Optional[str], repr_: Optional[str]):
-        self.content_hash = content_hash
-        self.repr_ = repr_
-        self.name = name
-
-    def __eq__(self, other: object) -> bool:
-        """
-        Equality is decided by content hash alone
-        """
-        if not isinstance(other, GlobalVar):
-            return NotImplemented
-        return self.content_hash == other.content_hash
-
-    def to_string(self) -> str:
-        return (
-            "<repr() not available>"
-            if self.repr_ is None
-            else textwrap.shorten(self.repr_, width=80)
-        )
-
-    def __repr__(self) -> str:
-        return f"GlobalVar({self.name}, {self.content_hash}, {self.repr_})"
+DepKey = Tuple[str, str]  # (module name, object address in module)
 
 
-class FuncSource:
+class Node:
     def __init__(
-        self, source: Optional[str], qualified_name: str, is_op: Optional[bool] = None
+        self, module_name: str, obj_addr: str, representation: Optional[Any] = None
     ):
-        self.source = source
-        self.is_op = is_op
-        self.qualified_name = qualified_name
+        self.module_name = module_name
+        self.obj_addr = obj_addr
+        self.representation = representation
 
     @property
+    def key(self) -> DepKey:
+        return (self.module_name, self.obj_addr)
+
+    @staticmethod
+    def represent(obj: Any) -> Any:
+        raise NotImplementedError()
+
+    def comparable_representation(self) -> Any:
+        return self.representation
+
+    def diff_representation(self) -> str:
+        raise NotImplementedError()
+
+
+class CallableNode(Node):
+    @property
     def is_method(self) -> bool:
-        return "." in self.qualified_name
+        return "." in self.obj_addr
 
     @property
     def class_name(self) -> str:
-        return self.qualified_name.split(".")[0]
-
-    def to_string(self) -> str:
-        return "<source not available>" if self.source is None else self.source
-
-    def __eq__(self, other: object) -> bool:
-        """
-        Importantly, @ops will compare equal when their bodies agree, even if
-        the signatures are different. This is to enable refactoring of @op
-        signatures without triggering the dependency tracking logic.
-
-        This decision should remain hidden in this class.
-        """
-        if not isinstance(other, FuncSource):
-            return NotImplemented
-        if self.is_op:
-            if not other.is_op:
-                return False
-            if self.source is None or other.source is None:
-                return self.source == other.source
-            return FuncSource.remove_function_signature(
-                self.source
-            ) == FuncSource.remove_function_signature(other.source)
-        return self.source == other.source and self.is_op == other.is_op
+        assert self.is_method
+        return ".".join(self.obj_addr.split(".")[:-1])
 
     @staticmethod
-    def remove_function_signature(source: str) -> str:
-        """
-        Given the source code of a function, remove the part that contains the
-        function signature.
+    def represent(obj: types.FunctionType) -> str:
+        if type(obj).__name__ == "FuncInterface":
+            obj = obj.func_op.func
+        try:
+            source = inspect.getsource(obj)
+        except OSError:
+            raise RuntimeError(
+                f"Failed to get source code for {obj} in module {obj.__module__}"
+            )
+        return inspect.getsource(obj)
 
-        This is used to prevent changes to the signatures of `@op` functions from
-        triggering the dependency tracking logic.
+    def comparable_representation(self) -> str:
+        return remove_func_signature_and_comments(self.representation)
 
-        NOTE: Has the extra effect of removing comments and docstrings by going
-        through an ast parse->unparse cycle. This means that it should be
-        applied consistently when recovering dependency state.
-        """
-        # using dedent is necessary here to handle decorators
-        tree = ast.parse(textwrap.dedent(source))
-        assert isinstance(tree, ast.Module)
-        body = tree.body
-        assert len(body) == 1
-        assert isinstance(body[0], ast.FunctionDef)
-        func_body = body[0].body
-        return ast.unparse(func_body)
+    def diff_representation(self) -> str:
+        return self.representation
 
 
-class Call:
+class GlobalVarNode(Node):
     def __init__(
         self,
-        is_tracked: bool,
-        module_name: str = "",
-        qualified_func_name: str = "",
+        module_name: str,
+        obj_addr: str,
+        # (content hash, truncated repr)
+        representation: Optional[Tuple[str, str]] = None,
     ):
-        self.is_tracked = is_tracked
-        if self.is_tracked:
-            assert all([module_name is not None, qualified_func_name is not None])
+        super().__init__(module_name, obj_addr, representation)
+
+    @staticmethod
+    def represent(obj: Any) -> Tuple[str, str]:
+        try:
+            content_hash = Hashing.get_content_hash(obj=obj)
+        except Exception as e:
+            raise RuntimeError(
+                f"Failed to hash global variable {obj} of type {type(obj)}"
+            )
+        return content_hash, textwrap.shorten(text=repr(obj), width=80)
+
+    def comparable_representation(self) -> str:
+        return self.representation[0]
+
+    def diff_representation(self) -> str:
+        return self.representation[1]
+
+
+class TerminalData:
+    def __init__(
+        self, internal_name: str, version: int, module_name: str, func_name: str
+    ):
+        self.internal_name = internal_name
+        self.version = version
         self.module_name = module_name
-        self.qualified_func_name = qualified_func_name
-
-    def __repr__(self) -> str:
-        return (
-            f"Call({self.is_tracked}, {self.module_name}, {self.qualified_func_name})"
-        )
+        self.func_name = func_name
 
 
-class CallEdge:
-    def __init__(self, caller: Call, callee: Call):
-        assert caller.is_tracked and callee.is_tracked
-        self.caller = caller
-        self.callee = callee
+class TerminalNode(Node):
+    def __init__(self, module_name: str, obj_addr: str, representation: TerminalData):
+        super().__init__(module_name, obj_addr, representation)
 
-    def __repr__(self) -> str:
-        return f"CallEdge({self.caller}, {self.callee})"
-
-
-class GlobalEdge:
-    def __init__(self, caller: Call, global_var: GlobalVar):
-        assert caller.is_tracked
-        self.caller = caller
-        self.global_var = global_var
-
-    def __repr__(self) -> str:
-        return f"GlobalEdge({self.caller}, {self.global_var})"
+    @property
+    def key(self) -> DepKey:
+        return (self.representation.module_name, self.representation.func_name)
 
 
-class DependencyState:
-    def __init__(
-        self,
-        roots: List[Path],
-        sources: Optional[Dict[str, Dict[str, FuncSource]]] = None,
-        globals_: Optional[Dict[str, Dict[str, GlobalVar]]] = None,
-        call_edges: Optional[List[CallEdge]] = None,
-        globals_edges: Optional[List[GlobalEdge]] = None,
-    ):
-        """
-        - roots=[] means unrestricted tracing. Otherwise, you only look
-          inside the paths in `roots`.
-        """
-        self.roots = [root.absolute().resolve() for root in roots]
-        # module name -> func address in module -> `FuncSource`
-        self.sources = {} if sources is None else sources
-        # qualified module name -> global variable name -> `GlobalVar`
-        self.globals_ = {} if globals_ is None else globals_
-        # tracked by the call stack
-        self.call_edges = [] if call_edges is None else call_edges
-        self.globals_edges = [] if globals_edges is None else globals_edges
+class DependencyGraph:
+    def __init__(self):
+        self.nodes: Dict[DepKey, Node] = {}
+        self.roots: Set[DepKey] = set()
+        self.edges: Set[Tuple[DepKey, DepKey]] = set()
 
     def show(self, path: Optional[Path] = None, how: str = "none"):
-        dot = self.to_dot()
+        dot = to_dot(self)
         output_ext = "svg" if how in ["browser"] else "png"
         return write_output(
             dot_string=dot, output_path=path, output_ext=output_ext, show_how=how
         )
 
-    @staticmethod
-    def get_readable_description(
-        sources: Dict[str, Dict[str, FuncSource]],
-        globals_: Dict[str, Dict[str, GlobalVar]],
-    ) -> str:
-        sources_text = {
-            k: {k2: v2.to_string() for k2, v2 in v.items()} for k, v in sources.items()
-        }
-        globals_text = {
-            k: {k2: v2.to_string() for k2, v2 in v.items()} for k, v in globals_.items()
-        }
-        return _pprint_structure(globals_text=globals_text, sources_text=sources_text)
-
     def __repr__(self) -> str:
-        if self.size == 0:
-            return "Empty DependencyState object"
-        return self.get_readable_description(self.sources, self.globals_)
+        if len(self.nodes) == 0:
+            return "DependencyGraph()"
+        return to_string(self)
 
-    @property
-    def num_sources(self) -> int:
-        return sum(len(v) for v in self.sources.values())
+    def add_node(self, node: Node):
+        self.nodes[node.key] = node
 
-    @property
-    def num_globals(self) -> int:
-        return sum(len(v) for v in self.globals_.values())
+    def add_edge(self, source: Node, target: Node):
+        if source.key not in self.nodes:
+            self.nodes[source.key] = source
+        if target.key not in self.nodes:
+            self.nodes[target.key] = target
+        self.edges.add((source.key, target.key))
 
-    @property
-    def size(self) -> int:
-        return self.num_sources + self.num_globals
+    def remove_node(self, node_key: DepKey):
+        if node_key in self.nodes:
+            del self.nodes[node_key]
+        self.roots.discard(node_key)
+        self.edges = {
+            (source, target)
+            for source, target in self.edges
+            if source != node_key and target != node_key
+        }
 
-    def merge(self, new: "DependencyState") -> "DependencyState":
-        # todo: more careful implementation may be better. For now, just
-        # accumulate state
-        diff = self.diff(new=new)
-        result = copy.deepcopy(self)
-        for module, func_sources in diff.changed_sources.items():
-            for k, v in func_sources.items():
-                result.sources[module][k] = v.new
-        for module, func_sources in diff.new_sources.items():
-            for k, v in func_sources.items():
-                result.sources.setdefault(module, {})[k] = v
-        for module, globals_ in diff.changed_globals.items():
-            for k, v in globals_.items():
-                result.globals_[module][k] = v.new
-        for module, globals_ in diff.new_globals.items():
-            for k, v in globals_.items():
-                result.globals_.setdefault(module, {})[k] = v
-        for edge in new.call_edges:
-            if edge not in result.call_edges:
-                result.call_edges.append(edge)
-        for edge in new.globals_edges:
-            if edge not in result.globals_edges:
-                result.globals_edges.append(edge)
+    def load_current_state(self, keys: List[DepKey]) -> Dict[DepKey, Node]:
+        result = {}
+        for key in keys:
+            node = copy.deepcopy(self.nodes[key])
+            obj, found = load_obj(node.module_name, node.obj_addr)
+            if found:
+                node.representation = node.represent(obj)
+                result[key] = node
         return result
 
-    @staticmethod
-    def recover(
-        old: "DependencyState", ignore_errors: bool = False
-    ) -> Tuple["DependencyState", "DepsDiff"]:
-        """
-        Given an old dependency state, recover what's possible, and return a new
-        dependency state and a diff from the old to the new.
+    def update(self, other: "DependencyGraph"):
+        self.nodes.update(other.nodes)
+        self.roots.update(other.roots)
+        self.edges.update(other.edges)
 
-        Note that the diff will not contain any "new" items by construction.
-        """
-        sources, globals_ = {}, {}
-        ### recover sources
-        for module_name, func_sources in old.sources.items():
-            try:
-                module = importlib.import_module(module_name)
-            except ModuleNotFoundError:
-                continue
-            sources[module_name] = {}
-            for qualified_func_name, old_source in func_sources.items():
-                parts = qualified_func_name.split(".")
-                current = module
-                found = True
-                for part in parts:
-                    if not hasattr(current, part):
-                        found = False
-                        break
-                    else:
-                        current = getattr(current, part)
-                if not found:
-                    msg = f"Could not find function {qualified_func_name} from module {module_name}."
-                    if ignore_errors:
-                        logging.warning(msg)
-                    else:
-                        raise RuntimeError(msg)
-                if inspect.isfunction(current):
-                    if old_source.is_op:
-                        logging.warning(
-                            f"Function {qualified_func_name} from module {module_name} is not an op, but was marked as such in the old dependency state."
-                        )
-                    is_op, func_obj = False, current
-                elif type(current).__name__ == "FuncInterface":  #! a hack
-                    if not old_source.is_op:
-                        logging.warning(
-                            f"Function {qualified_func_name} from module {module_name} is an op, but was not marked as such in the old dependency state."
-                        )
-                    is_op, func_obj = True, current.func_op.func
-                else:
-                    msg = f"{qualified_func_name} from module {module_name} used to be a function, but is now neither a function nor an op."
-                    if ignore_errors:
-                        logging.warning(msg)
-                        continue
-                    else:
-                        raise RuntimeError(msg)
-                try:
-                    source = inspect.getsource(func_obj)
-                except Exception as e:
-                    msg = f"Unable to recover source for {qualified_func_name} from module {module_name}."
-                    if ignore_errors:
-                        logging.warning(msg)
-                        continue
-                    else:
-                        raise RuntimeError(msg) from e
-                source_representation = FuncSource(
-                    source=source, is_op=is_op, qualified_name=qualified_func_name
-                )
-                sources[module_name][qualified_func_name] = source_representation
-        ### recover globals
-        for module_name, old_globals in old.globals_.items():
-            try:
-                module = importlib.import_module(module_name)
-            except ModuleNotFoundError:
-                msg = f"Could not find module {module_name} from old dependency state."
-                if ignore_errors:
-                    logging.warning(msg)
-                    continue
-                else:
-                    raise RuntimeError(msg)
-            globals_[module_name] = {}
-            for global_name, _ in old_globals.items():
-                if not hasattr(module, global_name):
-                    msg = f"Could not find global variable {global_name} from module {module_name} from old dependency state."
-                    if ignore_errors:
-                        logging.warning(msg)
-                        continue
-                    else:
-                        raise RuntimeError(msg)
-                try:
-                    content_hash = Hashing.get_content_hash(
-                        getattr(module, global_name)
-                    )
-                except:
-                    msg = f"Unable to recover content hash for global variable {global_name} from module {module_name}."
-                    if ignore_errors:
-                        logging.warning(msg)
-                        continue
-                    else:
-                        raise RuntimeError(msg)
-                try:
-                    repr_ = repr(getattr(module, global_name))
-                except Exception as e:
-                    repr_ = None
-                globals_[module_name][global_name] = GlobalVar(
-                    name=global_name,
-                    content_hash=content_hash,
-                    repr_=repr_,
-                )
-        recovered = DependencyState(roots=old.roots, sources=sources, globals_=globals_)
-        diff = old.diff(new=recovered)
-        return recovered, diff
+    def update_nodes(self, nodes: Dict[DepKey, Node]):
+        for key, node in nodes.items():
+            if key not in self.nodes:
+                self.nodes[key] = node
 
-    def diff(self, new: "DependencyState") -> "DepsDiff":
-        new_sources = _nested_dict_subtract(new.sources, self.sources)
-        removed_sources = _nested_dict_subtract(self.sources, new.sources)
-        changed_sources = _nested_dict_diff(
-            new=new.sources, old=self.sources, differ=FuncSourceDiff
-        )
-        new_globals = _nested_dict_subtract(new.globals_, self.globals_)
-        removed_globals = _nested_dict_subtract(self.globals_, new.globals_)
-        changed_globals = _nested_dict_diff(
-            new=new.globals_, old=self.globals_, differ=GlobalVarDiff
-        )
-        return DepsDiff(
-            new_sources=new_sources,
-            removed_sources=removed_sources,
-            changed_sources=changed_sources,
-            new_globals=new_globals,
-            removed_globals=removed_globals,
-            changed_globals=changed_globals,
-        )
-
-    def to_dot(self) -> str:
-        nodes: Dict[
-            Tuple[str, str], Node
-        ] = {}  # (module name, object name) -> Node object
-        edges: Dict[Tuple[Node, Node], Edge] = {}  # (Node, Node) -> Edge object
-        module_groups: Dict[str, Group] = {}  # module name -> Group
-        class_groups: Dict[str, Group] = {}  # class name -> Group
-        for module_name, module_globals in self.globals_.items():
-            if module_name not in module_groups:
-                module_groups[module_name] = Group(
-                    label=module_name, nodes=[], parent=None
-                )
-            for global_name, global_var in module_globals.items():
-                node_name = f"{module_name}.{global_name}"
-                node = Node(
-                    internal_name=node_name,
-                    label=global_name,
-                    color=SOLARIZED_LIGHT["red"],
-                )
-                nodes[(module_name, global_name)] = node
-                module_groups[module_name].nodes.append(node)
-        for module_name, module_sources in self.sources.items():
-            if module_name not in module_groups:
-                module_groups[module_name] = Group(
-                    label=module_name, nodes=[], parent=None
-                )
-            for func_name, func_source in module_sources.items():
-                node_name = f"{module_name}.{func_name}"
-                if func_source.is_method:
-                    color = SOLARIZED_LIGHT["violet"]
-                else:
-                    color = SOLARIZED_LIGHT["blue"]
-                node = Node(internal_name=node_name, label=func_name, color=color)
-                nodes[(module_name, func_name)] = node
-                module_groups[module_name].nodes.append(node)
-                if func_source.is_method:
-                    class_name = func_source.class_name
-                    class_groups.setdefault(
-                        class_name,
-                        Group(
-                            label=class_name,
-                            nodes=[],
-                            parent=module_groups[module_name],
-                        ),
-                    ).nodes.append(node)
-        for call_edge in self.call_edges:
-            caller_node = nodes[
-                (call_edge.caller.module_name, call_edge.caller.qualified_func_name)
-            ]
-            callee_node = nodes[
-                (call_edge.callee.module_name, call_edge.callee.qualified_func_name)
-            ]
-            edge = Edge(source_node=caller_node, target_node=callee_node)
-            edges[(caller_node, callee_node)] = edge
-        for global_edge in self.globals_edges:
-            caller_node = nodes[
-                (global_edge.caller.module_name, global_edge.caller.qualified_func_name)
-            ]
-            global_node = nodes[
-                (global_edge.caller.module_name, global_edge.global_var.name)
-            ]
-            edge = Edge(source_node=caller_node, target_node=global_node)
-            edges[(caller_node, global_node)] = edge
-        dot_string = to_dot_string(
-            nodes=list(nodes.values()),
-            edges=list(edges.values()),
-            groups=list(module_groups.values()) + list(class_groups.values()),
-            rankdir="BT",
-        )
-        return dot_string
-
-
-################################################################################
-### a model of dependency diffs
-################################################################################
-class FuncSourceDiff:
-    def __init__(self, new: FuncSource, old: FuncSource):
-        self.new = new
-        self.old = old
-
-    def to_string(self) -> str:
-        return _get_colorized_diff(
-            current=self.old.to_string(), new=self.new.to_string()
-        )
-
-
-class GlobalVarDiff:
-    def __init__(self, new: GlobalVar, old: GlobalVar):
-        self.new = new
-        self.old = old
-
-    def to_string(self) -> str:
-        return "\n" + _get_colorized_diff(
-            current=self.old.to_string(), new=self.new.to_string()
-        )
-
-
-class DepsDiff:
-    def __init__(
-        self,
-        new_sources: Dict[str, Dict[str, FuncSource]],
-        removed_sources: Dict[str, Dict[str, FuncSource]],
-        changed_sources: Dict[str, Dict[str, FuncSourceDiff]],
-        new_globals: Dict[str, Dict[str, GlobalVar]],
-        removed_globals: Dict[str, Dict[str, GlobalVar]],
-        changed_globals: Dict[str, Dict[str, GlobalVarDiff]],
-    ):
-        self.new_sources = new_sources
-        self.removed_sources = removed_sources
-        self.changed_sources = changed_sources
-        self.new_globals = new_globals
-        self.removed_globals = removed_globals
-        self.changed_globals = changed_globals
-
-    @property
-    def is_empty(self) -> bool:
-        return (
-            len(self.new_sources) == 0
-            and len(self.removed_sources) == 0
-            and len(self.changed_sources) == 0
-            and len(self.new_globals) == 0
-            and len(self.removed_globals) == 0
-            and len(self.changed_globals) == 0
-        )
-
-    @staticmethod
-    def get_readable_description(diff: "DepsDiff") -> str:
-        result_parts = []
-        ### process new dependencies
-        if len(diff.new_globals) > 0 or len(diff.new_sources) > 0:
-            raise NotImplementedError()
-        ### process missing dependencies
-        if len(diff.removed_globals) > 0 or len(diff.removed_sources) > 0:
-            preamble_missing = "===THE FOLLOWING DEPENDENCIES COULD NOT BE RECOVERED==="
-            missing_sources_text = {
-                k: {k2: "" for k2, v2 in v.items()}
-                for k, v in diff.removed_sources.items()
-            }
-            missing_globals_text = {
-                k: {k2: "" for k2, v2 in v.items()}
-                for k, v in diff.removed_globals.items()
-            }
-            missing_desc = _pprint_structure(
-                globals_text=missing_globals_text, sources_text=missing_sources_text
-            )
-            result_parts += [preamble_missing, missing_desc]
-        if len(diff.changed_globals) > 0 or len(diff.changed_sources) > 0:
-            ### process changes
-            preamble_changed = "===THE FOLLOWING DEPENDENCIES HAVE CHANGED==="
-            changed_sources_text = {
-                k: {k2: v2.to_string() for k2, v2 in v.items()}
-                for k, v in diff.changed_sources.items()
-            }
-            changed_globals_text = {
-                k: {k2: v2.to_string() for k2, v2 in v.items()}
-                for k, v in diff.changed_globals.items()
-            }
-            changed_desc = _pprint_structure(
-                globals_text=changed_globals_text, sources_text=changed_sources_text
-            )
-            result_parts += [preamble_changed, changed_desc]
-        return "\n".join(result_parts)
-
-    def __repr__(self) -> str:
-        return self.get_readable_description(self)
+    def update_representations(self, nodes: Dict[DepKey, Node]):
+        for key, node in nodes.items():
+            if key in self.nodes:
+                self.nodes[key].representation = node.representation
 
 
 ################################################################################
 ### tracer
 ################################################################################
-class DependencyTracer:
-    """
-    Attempt to collect the source code of all functions called within this
-    context, as well as the content hashes and `repr()` of global variables
-    *contained in the source code* of these functions.
-    """
+class Tracer:
+    BREAK = "break"
+    CONTINUE = "continue"
+    KEEP = "keep"
+    BREAK_SIGNAL = "break_signal"
 
-    def __init__(self, ds: DependencyState = None, ignore_errors: bool = False):
-        self.ds = (
-            ds if ds is not None else DependencyState(roots=[], sources={}, globals_={})
+    @staticmethod
+    def break_signal(data):
+        pass
+
+    LAMBDA = "<lambda>"
+    COMPREHENSIONS = ("<listcomp>", "<dictcomp>", "<setcomp>", "<genexpr>")
+
+    def __init__(self, graph: DependencyGraph, paths: List[Path], strict: bool = True):
+        self.call_stack: List[Optional[CallableNode]] = []
+        self.graph = graph
+        self.paths = paths
+        self.strict = strict
+
+    def _process_failure(self, msg: str):
+        if self.strict:
+            raise RuntimeError(msg)
+        else:
+            logging.warning(msg)
+
+    def find_most_recent_call(self) -> Optional[CallableNode]:
+        if len(self.call_stack) == 0:
+            return None
+        else:
+            # return the most recent non-None obj on the stack
+            for i in range(len(self.call_stack) - 1, -1, -1):
+                call = self.call_stack[i]
+                if call is not None:
+                    return call
+            return None
+
+    @staticmethod
+    def get_func_key(func: Callable) -> DepKey:
+        # get the module name and function name from the function
+        module_name = func.__module__
+        func_name = func.__qualname__
+        return module_name, func_name
+
+    @staticmethod
+    def get_func_qualname(
+        func_name: str, code: types.CodeType, frame: types.FrameType
+    ) -> str:
+        # get the argument names to *try* to tell if the function is a method
+        arg_names = code.co_varnames[: code.co_argcount]
+        # a necessary but not sufficient condition for this to
+        # be a method
+        is_probably_method = (
+            len(arg_names) > 0
+            and arg_names[0] == "self"
+            and hasattr(frame.f_locals["self"].__class__, func_name)
         )
-        self.ignore_errors = ignore_errors
-        self.call_stack: List[Call] = []
+        if is_probably_method:
+            # handle nested classes via __qualname__
+            cls_qualname = frame.f_locals["self"].__class__.__qualname__
+            func_qualname = f"{cls_qualname}.{func_name}"
+        else:
+            func_qualname = func_name
+        return func_qualname
+
+    def control_flow(self, module_name: str, func_name: str) -> str:
+        if func_name == self.LAMBDA:
+            return self.CONTINUE
+        try:
+            # case 1: module is a file
+            module = importlib.import_module(module_name)
+            module_path = Path(inspect.getfile(module))
+            assert module_path.is_absolute()
+            if len(self.paths) != 0:
+                if not any(root in module_path.parents for root in self.paths):
+                    # module is not in the paths we're inspecting; stop tracing
+                    return self.BREAK
+                elif module_name.startswith(
+                    Config.module_name
+                ) and not module_name.startswith(Config.tests_module_name):
+                    # this function is part of `mandala` functionality. Continue tracing
+                    # but don't add it to the dependency state
+                    return self.CONTINUE
+                else:
+                    return self.KEEP
+            else:
+                return self.KEEP
+        except:
+            # case 2: module is not a file, e.g. it is a jupyter notebook
+            logging.debug(f"Module {module_name} is not a file")
+            if module_name != "__main__":
+                raise NotImplementedError(f"Cannot handle module {module_name}")
+            return self.KEEP
 
     def __enter__(self):
         if sys.gettrace() is not None:
+            # ensure this is used correctly
             raise RuntimeError("Another tracer is already active")
-        # Create a new tracer function that records the calls
+
         def tracer(frame, event, arg):
             if event == "return":
                 if len(self.call_stack) > 0:
                     self.call_stack.pop()
+                else:
+                    # something went wrong
+                    raise RuntimeError("Call stack is empty")
             if event != "call":
                 return
 
             # qualified name of the module where the function/method is defined.
-            def_module_name = frame.f_globals.get("__name__")
-            code = frame.f_code  # code object of function being called
-            func_name = code.co_name  # function's name
-            if func_name == "<lambda>":
-                logging.warning("Cannot handle lambdas")
-                call = Call(is_tracked=False)
-                self.call_stack.append(call)
-                return tracer  #! continue tracing in the lambda
-            # ? if func_name == '<module>':
-            # ?     self.calls.append(f'{code.co_filename}.{func_name}')
+            module_name = frame.f_globals.get("__name__")
+            # code object of function being called
+            code = frame.f_code
+            # function's name
+            func_name = code.co_name
 
-            ### figure out the module we're importing from
-            try:
-                # case 1: module is a file
-                module = importlib.import_module(def_module_name)
-                module_path = Path(inspect.getfile(module))
-                assert module_path.is_absolute()
-                if len(self.ds.roots) != 0:
-                    if not any(root in module_path.parents for root in self.ds.roots):
-                        # module is not in the paths we're inspecting; stop tracing
-                        return
-                    elif def_module_name.startswith(
-                        Config.module_name
-                    ) and not def_module_name.startswith(Config.tests_module_name):
-                        # this function is part of `mandala` functionality. Continue tracing
-                        # but don't add it to the dependency state
-                        collect_dependency = False
-                    else:
-                        collect_dependency = True
-                else:
-                    collect_dependency = True
-            except:
-                # case 2: module is not a file, e.g. it is a jupyter notebook
-                logging.debug(f"Module {def_module_name} is not a file")
-                if def_module_name != "__main__":
-                    raise NotImplementedError()
-                collect_dependency = True
+            if func_name == self.BREAK_SIGNAL:
+                data = frame.f_locals["data"]
+                node = TerminalNode(
+                    module_name=module_name, obj_addr=func_name, representation=data
+                )
+                most_recent_option = self.find_most_recent_call()
+                if most_recent_option is not None:
+                    self.graph.add_edge(source=most_recent_option, target=node)
+                self.call_stack.append(None)
+                return
 
-            if not collect_dependency:
-                call = Call(is_tracked=False)
-                self.call_stack.append(call)
+            control = self.control_flow(module_name=module_name, func_name=func_name)
+            if control == self.BREAK:
+                return
+            elif control == self.CONTINUE:
+                self.call_stack.append(None)
                 return tracer
+            elif control == self.KEEP:
+                pass
+            else:
+                raise ValueError(f"Invalid control value {control}")
 
-            ####################################################################
             ### detect use of closure variables
-            ####################################################################
-            closure = frame.f_code.co_freevars
-            if closure:
+            closure_vars = code.co_freevars
+            if len(closure_vars) > 0 and func_name not in self.COMPREHENSIONS:
                 closure_values = {
                     var: frame.f_locals.get(var, frame.f_globals.get(var, None))
-                    for var in closure
+                    for var in closure_vars
                 }
-                msg = f"Found closure variables accessed by function {def_module_name}.{func_name}:\n{closure_values}"
-                if self.ignore_errors:
-                    logging.warning(msg)
-                else:
-                    raise RuntimeError(msg)
+                msg = f"Found closure variables accessed by function {module_name}.{func_name}:\n{closure_values}"
+                self._process_failure(msg=msg)
 
-            ####################################################################
             ### get the global variables used by the function
-            ####################################################################
-            this_call_globals = []
-            if def_module_name not in self.ds.globals_:
-                self.ds.globals_[def_module_name] = {}
-            for (
-                name
-            ) in (
-                code.co_names
-            ):  # names used by the function; not all of them are global variables
+            globals_nodes = []
+            for name in code.co_names:
+                # names used by the function; not all of them are global variables
                 if name in frame.f_globals:
                     global_val = frame.f_globals[name]
                     if (
@@ -859,108 +439,217 @@ class DependencyTracer:
                     ):
                         # ignore modules, classes and functions
                         continue
-                    try:
-                        content_hash = Hashing.get_content_hash(global_val)
-                    except Exception as e:
-                        msg = f"Found global variable '{name}' accessed from module '{def_module_name}' of type {type(global_val)} that cannot be pickled"
-                        if self.ignore_errors:
-                            logging.warning(msg)
-                            content_hash = None
-                        else:
-                            raise RuntimeError(msg)
-                    global_var = GlobalVar(
-                        name=name, content_hash=content_hash, repr_=repr(global_val)
-                    )
-                    if name in self.ds.globals_[def_module_name]:
-                        if global_var != self.ds.globals_[def_module_name][name]:
-                            msg = f"Global variable {name} accessed from module '{def_module_name}' has changed its value. This is likely due to a global variable being modified by a function call."
-                            if self.ignore_errors:
-                                logging.warning(msg)
-                            else:
-                                raise RuntimeError(msg)
-                    self.ds.globals_[def_module_name][name] = global_var
-                    this_call_globals.append(global_var)
+                    node = GlobalVarNode(module_name=module_name, obj_addr=name)
+                    globals_nodes.append(node)
 
-            ####################################################################
+            ### if this is a comprehension call, add the globals to the most
+            ### recent tracked call
+            if func_name in self.COMPREHENSIONS:
+                most_recent_tracked_call = self.find_most_recent_call()
+                assert most_recent_tracked_call is not None
+                for global_node in globals_nodes:
+                    self.graph.add_edge(
+                        source=most_recent_tracked_call, target=global_node
+                    )
+                self.call_stack.append(None)
+                return tracer
+
             ### get the qualified name of the function/method
-            ####################################################################
-            # get the argument names to *try* to tell if the function is a method
-            arg_names = code.co_varnames[: code.co_argcount]
-            # a necessary but not sufficient condition for this to
-            # be a method
-            is_probably_method = (
-                len(arg_names) > 0
-                and arg_names[0] == "self"
-                and hasattr(frame.f_locals["self"].__class__, func_name)
+            func_qualname = self.get_func_qualname(
+                func_name=func_name, frame=frame, code=code
             )
-            if is_probably_method:
-                # handle nested classes via __qualname__
-                cls_qualname = frame.f_locals["self"].__class__.__qualname__
-                func_qualname = f"{cls_qualname}.{func_name}"
-            else:
-                func_qualname = func_name
-            if def_module_name not in self.ds.sources:
-                self.ds.sources[def_module_name] = {}
 
-            ####################################################################
-            ### get the function source
-            ####################################################################
-            try:
-                # source code is not always available
-                func_source = inspect.getsource(code)
-                if self.ds.num_sources == 0:
-                    #! a hack
-                    # this is the first function we're tracing, i.e. an op under the
-                    # current implementation.
-                    source = FuncSource(
-                        source=func_source,
-                        is_op=True,
-                        qualified_name=func_qualname,
-                    )
-                else:
-                    source = FuncSource(
-                        source=func_source, is_op=False, qualified_name=func_qualname
-                    )
-            except OSError:
-                source = FuncSource(
-                    source=None, is_op=None, qualified_name=func_qualname
-                )
-            if func_qualname in self.ds.sources[def_module_name]:
-                if source != self.ds.sources[def_module_name][func_qualname]:
-                    logging.warning(
-                        f"Function {func_qualname} has changed its source code or op status. This may cause dependency tracking to fail."
-                    )
-            self.ds.sources[def_module_name][func_qualname] = source
-
-            ####################################################################
             ### manage the call stack
-            ####################################################################
-            call = Call(
-                is_tracked=True,
-                module_name=def_module_name,
-                qualified_func_name=func_qualname,
-            )
+            call = CallableNode(module_name=module_name, obj_addr=func_qualname)
+            self.graph.add_node(node=call)
             ### global variable edges from this function always exist
-            globals_edges = [
-                GlobalEdge(caller=call, global_var=global_var)
-                for global_var in this_call_globals
-            ]
-            self.ds.globals_edges += globals_edges
+            for global_node in globals_nodes:
+                self.graph.add_edge(source=call, target=global_node)
             ### call edges exist only if there is a caller on the stack
             if len(self.call_stack) > 0:
                 # find the most recent tracked call
-                i = None
-                for i in range(len(self.call_stack) - 1, -1, -1):
-                    if self.call_stack[i].is_tracked:
-                        break
-                if i is not None:
-                    caller = self.call_stack[i]
-                    call_edge = CallEdge(caller=caller, callee=call)
-                    self.ds.call_edges.append(call_edge)
+                most_recent_tracked_call = self.find_most_recent_call()
+                if most_recent_tracked_call is not None:
+                    self.graph.add_edge(source=most_recent_tracked_call, target=call)
             self.call_stack.append(call)
+            if len(self.call_stack) == 1:
+                self.graph.roots.add(call.key)
             return tracer
 
         sys.settrace(tracer)
 
     def __exit__(self, *exc_info):
         sys.settrace(None)  # Stop tracing
+
+
+################################################################################
+### mandala-specific things
+################################################################################
+OpKey = Tuple[str, int]
+
+
+class MandalaDependencies:
+    def __init__(self):
+        self.global_graph: DependencyGraph = DependencyGraph()
+        # (internal name, version) -> graph for this op
+        self.op_graphs: Dict[OpKey, DependencyGraph] = {}
+
+    @staticmethod
+    def expand_terminal(
+        graph: DependencyGraph,
+        terminal: TerminalNode,
+        subgraph: DependencyGraph,
+        replacement: Node,
+    ):
+        del graph.nodes[terminal.key]
+        for key, node in subgraph.nodes.items():
+            graph.nodes[key] = node
+        # graph.roots.update(subgraph.roots)
+        graph.edges.update(subgraph.edges)
+
+    def get_expanded(self, op_key: OpKey) -> DependencyGraph:
+        graph = copy.deepcopy(self.op_graphs.get(op_key, DependencyGraph()))
+        terminals = [
+            node for node in graph.nodes.values() if isinstance(node, TerminalNode)
+        ]
+        for terminal in terminals:
+            internal_name, version = (
+                terminal.representation.internal_name,
+                terminal.representation.version,
+            )
+            sub_key: OpKey = (internal_name, version)
+            subgraph = self.get_expanded(op_key=sub_key)
+            assert len(subgraph.roots) == 1
+            replacement = subgraph.nodes[list(subgraph.roots)[0]]
+            self.expand_terminal(
+                graph=graph,
+                terminal=terminal,
+                subgraph=subgraph,
+                replacement=replacement,
+            )
+        for key, node in graph.nodes.items():
+            node.representation = self.global_graph.nodes[key].representation
+        return graph
+
+    def get_deps_to_ops(self) -> Dict[DepKey, List[OpKey]]:
+        res: Dict[DepKey, List[OpKey]] = {}
+        for op_key in self.op_graphs:
+            graph = self.get_expanded(op_key=op_key)
+            for dep_key in graph.nodes:
+                res.setdefault(dep_key, []).append(op_key)
+        return res
+
+    def update_op(self, op_key: OpKey, graph: DependencyGraph):
+        ### unify the graph with this op's graph
+        if op_key not in self.op_graphs:
+            self.op_graphs[op_key] = DependencyGraph()
+        self.op_graphs[op_key].update(other=graph)
+        ### unify the global graph with this op's graph
+        # add the non-terminals
+        nodes = {
+            key: node
+            for key, node in graph.nodes.items()
+            if not isinstance(node, TerminalNode)
+        }
+        self.global_graph.update_nodes(nodes=nodes)
+        # load the representations of these new objects
+        current_state = self.global_graph.load_current_state(keys=nodes.keys())
+        self.global_graph.update_representations(nodes=current_state)
+
+
+################################################################################
+### visualizations
+################################################################################
+def to_string(graph: DependencyGraph) -> str:
+    """
+    Get a string for pretty-printing.
+    """
+    # group the nodes by module
+    module_groups: Dict[str, List[Node]] = {}
+    for key, node in graph.nodes.items():
+        module_name, _ = key
+        module_groups.setdefault(module_name, []).append(node)
+    # for each module, include the representations of the global variables first,
+    # then the functions.
+    lines = []
+    for module_name, nodes in module_groups.items():
+        global_nodes = [node for node in nodes if isinstance(node, GlobalVarNode)]
+        callable_nodes = [node for node in nodes if isinstance(node, CallableNode)]
+        module_desc = f"MODULE: {module_name}"
+        lines.append(module_desc)
+        lines.append("-" * len(module_desc))
+        lines.append("===Global Variables===")
+        for node in global_nodes:
+            desc = f"{node.obj_addr} = {node.diff_representation()}"
+            lines.append(textwrap.indent(desc, 4 * " "))
+            # lines.append(f"  {node.diff_representation()}")
+        lines.append("")
+        lines.append("===Functions===")
+        # group the methods by class
+        method_nodes = [node for node in callable_nodes if node.is_method]
+        func_nodes = [node for node in callable_nodes if not node.is_method]
+        methods_by_class: Dict[str, List[CallableNode]] = {}
+        for method_node in method_nodes:
+            methods_by_class.setdefault(method_node.class_name, []).append(method_node)
+        for class_name, method_nodes in methods_by_class.items():
+            lines.append(textwrap.indent(f"class {class_name}:", 4 * " "))
+            for node in method_nodes:
+                desc = node.diff_representation()
+                lines.append(textwrap.indent(textwrap.dedent(desc), 8 * " "))
+            lines.append("")
+        for node in func_nodes:
+            desc = node.diff_representation()
+            lines.append(textwrap.indent(textwrap.dedent(desc), 4 * " "))
+        lines.append("")
+    return "\n".join(lines)
+
+
+def to_dot(graph: DependencyGraph) -> str:
+    nodes: Dict[DepKey, DotNode] = {}
+    module_groups: Dict[str, DotGroup] = {}  # module name -> Group
+    class_groups: Dict[str, DotGroup] = {}  # class name -> Group
+    for key, node in graph.nodes.items():
+        module_name, obj_addr = key
+        if module_name not in module_groups:
+            module_groups[module_name] = DotGroup(
+                label=module_name, nodes=[], parent=None
+            )
+        if isinstance(node, GlobalVarNode):
+            color = SOLARIZED_LIGHT["red"]
+        elif isinstance(node, CallableNode):
+            color = (
+                SOLARIZED_LIGHT["blue"]
+                if not node.is_method
+                else SOLARIZED_LIGHT["violet"]
+            )
+        else:
+            color = SOLARIZED_LIGHT["base03"]
+            # raise NotImplementedError()
+        dot_node = DotNode(
+            internal_name=".".join(key), label=node.obj_addr, color=color
+        )
+        nodes[key] = dot_node
+        module_groups[module_name].nodes.append(dot_node)
+        if isinstance(node, CallableNode) and node.is_method:
+            class_name = node.class_name
+            class_groups.setdefault(
+                class_name,
+                DotGroup(
+                    label=class_name,
+                    nodes=[],
+                    parent=module_groups[module_name],
+                ),
+            ).nodes.append(dot_node)
+    edges: Dict[Tuple[DotNode, DotNode], DotEdge] = {}
+    for source, target in graph.edges:
+        source_node = nodes[source]
+        target_node = nodes[target]
+        edge = DotEdge(source_node=source_node, target_node=target_node)
+        edges[(source_node, target_node)] = edge
+    dot_string = to_dot_string(
+        nodes=list(nodes.values()),
+        edges=list(edges.values()),
+        groups=list(module_groups.values()) + list(class_groups.values()),
+        rankdir="BT",
+    )
+    return dot_string

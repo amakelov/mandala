@@ -204,7 +204,7 @@ def test_superops_multilevel():
         return unwrap(x) + unwrap(y)
 
     @op
-    def add_many(xs: List[int], ys: List[int]) -> List[int]:
+    def add_many(xs: Any, ys: Any) -> Any:
         result = []
         for x in unwrap(xs):
             for y in unwrap(ys):
@@ -245,7 +245,7 @@ def test_superops_multilevel():
 
     # two levels of nesting
     @op
-    def add_many_many(xs: List[int], ys: List[int], zs: List[int]) -> List[int]:
+    def add_many_many(xs: Any, ys: Any, zs: Any) -> Any:
         intermediate = add_many(xs, ys)
         final = add_many(intermediate, zs)
         return final

@@ -1,11 +1,11 @@
 from collections.abc import Sequence
 
-from .config import Config, dump_output_name
+from .config import Config, dump_output_name, parse_output_idx
 from ..common_imports import *
 from .utils import Hashing
 from .sig import Signature, _postprocess_outputs
 from .tps import Type, AnyType, ListType
-from ..core.deps import DependencyTracer, DependencyState
+from .deps import DependencyGraph, Tracer, TerminalData
 
 if Config.has_torch:
     import torch
@@ -170,7 +170,7 @@ class Call:
             },
             outputs=[
                 Ref.from_uid(uid=row.column(k)[0].as_py())
-                for k in sorted(output_columns, key=lambda x: int(x[7:]))
+                for k in sorted(output_columns, key=parse_output_idx)
             ],
             func_op=func_op,
         )
@@ -216,59 +216,51 @@ class FuncOp:
 
     def __init__(
         self,
-        func: Callable,
+        func: Optional[Callable] = None,
+        sig: Optional[Signature] = None,
         version: Optional[int] = None,
         ui_name: Optional[str] = None,
+        is_super: bool = False,
         _is_builtin: bool = False,
     ):
-        # `ui_name` is useful for simulating multi-user scenarios in tests
-        self.func = func
-        if Config.has_torch and isinstance(func, torch.jit.ScriptFunction):
-            sig, py_sig = sig_from_jit_script(self.func, version=version)
-            ui_name = sig.ui_name
+        self.is_super = is_super
+        if func is None:
+            self.sig = sig
+            self.py_sig = None
+            self.func = None
         else:
-            py_sig = inspect.signature(self.func)
-            ui_name = self.func.__name__ if ui_name is None else ui_name
-        self.py_sig = py_sig
-        self.sig = Signature.from_py(
-            sig=self.py_sig, name=ui_name, version=version, _is_builtin=_is_builtin
+            self.func = func
+            if Config.has_torch and isinstance(func, torch.jit.ScriptFunction):
+                sig, py_sig = sig_from_jit_script(self.func, version=version)
+                ui_name = sig.ui_name
+            else:
+                py_sig = inspect.signature(self.func)
+                ui_name = self.func.__name__ if ui_name is None else ui_name
+            self.py_sig = py_sig
+            self.sig = Signature.from_py(
+                sig=self.py_sig, name=ui_name, version=version, _is_builtin=_is_builtin
+            )
+
+    def _set_func(self, func: Callable) -> None:
+        # set the function only
+        self.func = func
+        self.py_sig = inspect.signature(self.func)
+
+    def _generate_terminal_data(self) -> TerminalData:
+        module_name, func_name = Tracer.get_func_key(func=self.func)
+        data = TerminalData(
+            internal_name=self.sig.internal_name,
+            version=self.sig.version,
+            module_name=module_name,
+            func_name=func_name,
         )
+        return data
 
     def compute(
         self,
         inputs: Dict[str, Any],
         deps_root: Optional[Path] = None,
-        ignore_dependency_tracking_errors: bool = False,
-    ) -> Tuple[List[Any], Optional[DependencyState]]:
-        """
-        Computes the function on the given *unwrapped* inputs. Returns a list of
-        `self.sig.n_outputs` outputs (after checking they are the number
-        expected by the interface).
-
-        This expects the inputs to be named using *internal* input names.
-        """
-        if sys.gettrace() is None and deps_root is not None:
-            ds = DependencyState(roots=[deps_root, Config.mandala_path])
-            tracer = DependencyTracer(
-                ds=ds, ignore_errors=ignore_dependency_tracking_errors
-            )
-            with tracer:
-                result = self.func(**inputs)
-        else:
-            if deps_root is not None:
-                raise NotImplementedError(
-                    f"Detected an @op call from another @op, tracking dependencies through this is not implemented yet"
-                )
-            result = self.func(**inputs)
-            ds = None
-        return _postprocess_outputs(sig=self.sig, result=result), ds
-
-    async def compute_async(
-        self,
-        inputs: Dict[str, Any],
-        deps_root: Optional[Path] = None,
-        ignore_dependency_tracking_errors: bool = False,
-    ) -> Tuple[List[Any], Optional[DependencyState]]:
+    ) -> Tuple[List[Any], Optional[DependencyGraph]]:
         """
         Computes the function on the given *unwrapped* inputs. Returns a list of
         `self.sig.n_outputs` outputs (after checking they are the number
@@ -277,14 +269,48 @@ class FuncOp:
         This expects the inputs to be named using *internal* input names.
         """
         if deps_root is not None:
-            raise NotImplementedError()
-        result = (
-            await self.func(**inputs)
-            if inspect.iscoroutinefunction(self.func)
-            else self.func(**inputs)
-        )
-        ds = None
-        return _postprocess_outputs(sig=self.sig, result=result), ds
+            graph = DependencyGraph()
+            # ds = DependencyState(roots=[deps_root, Config.mandala_path], origin=(self.sig.internal_name, self.sig.version))
+            tracer = Tracer(
+                graph=graph, strict=True, paths=[deps_root, Config.mandala_path]
+            )
+            if sys.gettrace() is None:
+                with tracer:
+                    result = self.func(**inputs)
+            else:
+                current_trace = sys.gettrace()
+                Tracer.break_signal(data=self._generate_terminal_data())
+                sys.settrace(None)
+                with tracer:
+                    result = self.func(**inputs)
+                sys.settrace(current_trace)
+        else:
+            result = self.func(**inputs)
+            graph = None
+        return _postprocess_outputs(sig=self.sig, result=result), graph
+
+    # async def compute_async(
+    #     self,
+    #     inputs: Dict[str, Any],
+    #     deps_root: Optional[Path] = None,
+    #     ignore_dependency_tracking_errors: bool = False,
+    # ) -> Tuple[List[Any], Optional[DependencyState]]:
+    #     """
+    #     Computes the function on the given *unwrapped* inputs. Returns a list of
+    #     `self.sig.n_outputs` outputs (after checking they are the number
+    #     expected by the interface).
+
+    #     This expects the inputs to be named using *internal* input names.
+    #     """
+    #     if deps_root is not None:
+    #         raise NotImplementedError()
+    #     result = (
+    #         await self.func(**inputs)
+    #         if inspect.iscoroutinefunction(self.func)
+    #         else self.func(**inputs)
+    #     )
+    #     ds = None
+    #     return _postprocess_outputs(sig=self.sig, result=result), ds
 
     @staticmethod
     def _from_data(sig: Signature, f: Optional[Callable] = None) -> "Op":
@@ -339,8 +365,8 @@ class Builtins:
     def make_list_uid(uid: str) -> str:
         return f"__list__.{uid}"
 
-    list_op = FuncOp(list_func, _is_builtin=True, version=0, ui_name="__list__")
-    dict_op = FuncOp(dict_func, _is_builtin=True, version=0, ui_name="__dict__")
+    list_op = FuncOp(func=list_func, _is_builtin=True, version=0, ui_name="__list__")
+    # dict_op = FuncOp(func=dict_func, _is_builtin=True, version=0, ui_name="__dict__")
 
     OPS = [list_op]
 
@@ -389,6 +415,11 @@ def wrap(obj: Any, uid: Optional[str] = None) -> ValueRef:
 
 def wrap_constructive(obj: Any, annotation: Any) -> Tuple[Ref, List[Call]]:
     tp = Type.from_annotation(annotation=annotation)
+    # check the type
+    if isinstance(tp, ListType) and not (
+        isinstance(obj, list) or isinstance(obj, ListRef)
+    ):
+        raise ValueError(f"Expecting a list, got {type(obj)}")
     calls = []
     if isinstance(obj, Ref):
         return obj, calls
@@ -448,7 +479,7 @@ def unwrap(obj: Union[T, Ref], through_collections: bool = True) -> T:
     tuples, sets, and dict values.
     """
     if isinstance(obj, ValueRef):
-        return obj.obj
+        return unwrap(obj.obj, through_collections=through_collections)
     elif isinstance(obj, ListRef):
         return [unwrap(elt, through_collections=through_collections) for elt in obj.obj]
         # return unwrap(obj.obj, through_collections=through_collections)
