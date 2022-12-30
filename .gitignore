@@ -50,9 +50,9 @@
 ### path-based
 ################################################################################
 # eggs
-mandala_lite.egg-info/*
+mandala.egg-info/*
 
-mandala_lite/demos/data/
+mandala/demos/data/
 scratchpad/
 
 # visualizations
@@ -69,7 +69,7 @@ scratchpad/
 **/htmlcov/*
 # ignore persistent storages
 temp_dbs/*
-mandala_lite/tests/output/*
+mandala/tests/output/*
 
 ## PyCharm stuff
 .idea/**
