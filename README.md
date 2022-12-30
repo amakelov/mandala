@@ -24,12 +24,17 @@ artifacts. This unlocks extremely flexible yet simple patterns of data
 management in complex projects.
 
 ## Features
-- [simple interface and usage](#basic-usage): decorate functions with `@op` to
+- [simple interface and usage](#add-composable-memoization-to-existing-code): decorate functions with `@op` to
   memoize them, and put ordinary Python code in `storage.run()`, `storage.query()`,
   ... blocks depending on what you want to do. The rest is just Python.
+- [rapid iteration](#iterate-rapidly-without-redoing-work) without redoing work,
+  great for notebooks and other interactive environments
 - [query by pattern-matching Python
   code](#query-by-pattern-matching-python-code): produce tables of results
   directly from Python code encoding their relationships.
+- [modify memoized
+  functions](#modify-memoized-functions-without-forgetting-old-calls) seamlessly without
+  forgetting old calls
 - [automatic function-level dependency tracking](#dependency-tracking): get
   (optional) alerts when a function's dependencies change, and decide whether to
   recompute.
@@ -101,6 +106,12 @@ behaviors to a processing step.
 
 </p>
 </details>
+
+### Dependency tracking
+TODO
+
+### Data structures
+TODO
 
 ## Tutorials 
 - see the ["Hello world!"
