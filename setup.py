@@ -12,23 +12,22 @@ install_requires = [
 ]
 
 extras_require = {
+    "base": [],
     "performance": [
         "cityhash >= 0.2.2",  # for faster content hashing
     ],
-    "base": [],
+    "integrations": [
+        "dask[complete]",
+    ],
     "test": [
         "pytest >= 6.0.0",
         "hypothesis >= 6.0.0",
-        # "scikit-learn >= 1.0.0",  # sklearn 1.0+ requires python 3.7+
         "ipython",
         "mongomock",
     ],
-    "integrations": [
-        "dask",
-    ],
     "demos": [
         "torch",
-        "sklearn",
+        "scikit-learn",
     ],
 }
 
