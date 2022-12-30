@@ -1,94 +1,74 @@
-# Automate away the pain of experiment data management
-Mandala eliminates the code and discipline required to manage data in
-computational projects like machine learning / data science experiments. 
+<div align="center">
+	<br>
+		<img src="assets/logo-512x512.png" height=55 alt="logo" align="right">
+	<br>
+</div>
 
-Mandala lets you write **only** the code expressing your computations (like you
-would in a quick interactive session), but get the benefits of a storage that is
-easy to add to, query, and evolve directly from the code of your experiments.
+# Mandala
 
-Mandala lite is a feature-limited but much more heavily tested version of the
-[Mandala](https://github.com/amakelov/mandala) library.
+<div align="left">
+<a href="https://colab.research.google.com/github/amakelov/mandala/blob/master/mandala/tutorials/00_hello.ipynb">
+  <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/>
+</a>
+</div>
+
+Mandala is a
+[`functools.lru_cache`](https://docs.python.org/3/library/functools.html#functools.lru_cache)
+on steroids, applied to elegantly solve all your experiment data management
+needs. 
+
+It turns Python function calls into composable, interlinked, queriable data that
+is automatically co-evolved with your codebase. By applying different semantics
+to this data, the same piece of ordinary Python code can be used to not only
+compute, but also save, load, query, delete, and batch-compute computational
+artifacts. This unlocks extremely flexible yet simple patterns of data
+management in complex projects.
+
+## Features
+- [simple interface and usage](#basic-usage): decorate functions with `@op` to
+  memoize them, and put ordinary Python code in `storage.run()`, `storage.query()`,
+  ... blocks depending on what you want to do. The rest is just Python.
+- [query by pattern-matching Python
+  code](#query-by-pattern-matching-python-code): produce tables of results
+  directly from Python code encoding their relationships.
+- [automatic function-level dependency tracking](#dependency-tracking): get
+  (optional) alerts when a function's dependencies change, and decide whether to
+  recompute.
+- [native data structure support](#data-structures): store and track elements of
+  Python collections separately, enabling Pythonic code and incremental
+  computation.
 
 ## Installation
 ```
-pip install git+https://github.com/amakelov/mandala_lite
+pip install git+https://github.com/amakelov/mandala
 ```
 
-## Features
-- write the computational code only, without worrying about data management, and
-  have the results automatically saved & queriable.
-- use computational code as a flexible declarative query interface to its
-  results, tapping into the power of SQL directly from plain Python
-- modify and version computational primitives without worrying about updating
-  past results: it just works
-- delay computation to enable optimized batch processing without changing the
-  code and having to bundle/unbundle data
-- remote storage to enable collaboration between multiple users and machines
+<!--
+<video src="assets/Kazam_screencast_00000.webm" controls="controls" style="max-width: 730px;">
+</video>
+-->
 
-## Minimal example
-```python
-from mandala_lite.imports import *
+## Video walkthrough
 
-# create a storage for results
-storage = Storage()
+### Add *composable* memoization to existing code
+Decorate functions with `@op` and annotate the number of return values (with a
+`typing.Tuple` for functions returning multiple values):
 
-@op # memoization decorator
-def inc(x) -> int:
-    return x + 1 
+<video src="assets/memoization.mp4" controls="controls" style="max-width: 730px;">
+</video>
 
-@op
-def add(x: int, y: int) -> int:
-    return x + y
+### Iterate rapidly w/ new parameters and logic
 
-with storage.run(): # calls inside `run` block are memoized
-    for i in range(3):
-        j = inc(i)
+### Query by pattern-matching to Python code
 
-# add logic/parameters directly on top of memoized code without re-doing past work
-with storage.run():
-    for i in range(5):
-        j = inc(i)
-        k = add(j, i)
+### Dependency tracking
 
-# pattern-match to memoized call graphs using code itself
-with storage.query() as q: 
-    i = Q() # placeholder for any value
-    j = inc(i) # function calls create constraints
-    k = add(j, i)
-    # get a table where each row satisfies the constraints
-    df = q.get_table(i.named('i'), j.named('j'), k.named('k')) 
-df
-
->>>    i  j  k
->>> 0  0  1  1
->>> 1  1  2  3
->>> 2  2  3  5
->>> 3  3  4  7
->>> 4  4  5  9
-
-# modify the code without worrying about updating past results
-@op
-def inc(x, how_many_times=1) -> int: # add a new argument
-    return x + how_many_times
-
-# still memoized
-with storage.run():
-    for i in range(5):
-        j = inc(i)
-        k = add(j, i)
-
-# do work with the new code
-with storage.run():
-    for i in range(5):
-        j = inc(i, how_many_times=2)
-        k = add(j, i)
-
-# ... 
-```
+### Data structures
 
 ## Tutorials 
 - see the ["Hello world!"
   tutorial](https://github.com/amakelov/mandala_lite/blob/master/mandala_lite/tutorials/00_hello.ipynb)
   for a 2-minute introduction to the library's main features
-- See [this logistic regression notebook](https://github.com/amakelov/mandala_lite/blob/master/mandala_lite/tutorials/01_logistic.ipynb)
+- See [this notebook](https://github.com/amakelov/mandala_lite/blob/master/mandala_lite/tutorials/01_logistic.ipynb)
 for a more realistic example of a machine learning project managed by Mandala.
+- [dependency tracking](https://github.com/amakelov/mandala_lite/blob/master/mandala_lite/tutorials/02_dependencies.ipynb) tutorial
