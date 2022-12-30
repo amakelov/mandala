@@ -1,5 +1,5 @@
-from mandala_lite.all import *
-from mandala_lite.tests.utils import *
+from mandala.all import *
+from mandala.tests.utils import *
 import pytest
 
 DB_PATH = Path(__file__).parent / "output/asyncio.db"

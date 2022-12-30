@@ -6,7 +6,7 @@ from typing import Optional
 from ..common_imports import *
 from ..core.sig import Signature
 
-from mandala_lite.storages.rels import RemoteEventLogEntry, RelAdapter
+from mandala.storages.rels import RemoteEventLogEntry, RelAdapter
 
 
 class RemoteStorage(abc.ABC):

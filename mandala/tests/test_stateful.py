@@ -10,17 +10,17 @@ from hypothesis.stateful import (
 from hypothesis._settings import settings, Verbosity
 from hypothesis import strategies as st
 
-from mandala_lite.common_imports import *
-from mandala_lite.all import *
-from mandala_lite.tests.utils import *
-from mandala_lite.tests.stateful_utils import *
-from mandala_lite.core.workflow import Workflow, CallStruct
-from mandala_lite.core.utils import Hashing, get_uid
-from mandala_lite.core.compiler import *
-from mandala_lite.core.model import Builtins, Type, ListType
-from mandala_lite.core.sig import get_return_annotations
-from mandala_lite.storages.remote_storage import RemoteStorage
-from mandala_lite.ui.main import SimpleWorkflowExecutor, FuncInterface
+from mandala.common_imports import *
+from mandala.all import *
+from mandala.tests.utils import *
+from mandala.tests.stateful_utils import *
+from mandala.core.workflow import Workflow, CallStruct
+from mandala.core.utils import Hashing, get_uid
+from mandala.core.compiler import *
+from mandala.core.model import Builtins, Type, ListType
+from mandala.core.sig import get_return_annotations
+from mandala.storages.remote_storage import RemoteStorage
+from mandala.ui.main import SimpleWorkflowExecutor, FuncInterface
 
 
 class MockStorage:

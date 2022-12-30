@@ -3,9 +3,9 @@ from typing import Literal
 
 
 def get_mandala_path() -> Path:
-    import mandala_lite
+    import mandala
 
-    return Path(os.path.dirname(mandala_lite.__file__))
+    return Path(os.path.dirname(mandala.__file__))
 
 
 class Config:
@@ -79,8 +79,8 @@ class Config:
 
     ### some module names needed by internals
     mandala_path = get_mandala_path()
-    module_name = "mandala_lite"
-    tests_module_name = "mandala_lite.tests"
+    module_name = "mandala"
+    tests_module_name = "mandala.tests"
 
 
 def dump_output_name(index: int) -> str:

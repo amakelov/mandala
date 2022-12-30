@@ -2,8 +2,8 @@ import datetime
 
 import pymongo
 
-from mandala_lite.storages.rels import RemoteEventLogEntry
-from mandala_lite.storages.remote_storage import RemoteStorage
+from mandala.storages.rels import RemoteEventLogEntry
+from mandala.storages.remote_storage import RemoteStorage
 
 
 class MongoRemoteStorage(RemoteStorage):

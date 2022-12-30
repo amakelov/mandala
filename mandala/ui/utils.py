@@ -64,11 +64,11 @@ def bind_inputs(args, kwargs, mode: str, func_op: FuncOp) -> Dict[str, Any]:
     inputs_dict = dict(bound_args.arguments)
 
     if mode == MODES.query:
-        #! TODO: add a point constraint for defaults
-        for k in inputs_dict.keys():
-            if not isinstance(inputs_dict[k], ValQuery):
-                raise NotImplementedError(
-                    f'Passing concrete values in queries not supported yet. Got "{inputs_dict[k]}" for argument "{k}" when calling "{func_op.sig.ui_name}".'
+        for k, v in inputs_dict.items():
+            if not isinstance(v, ValQuery):
+                content_hash = Hashing.get_content_hash(v)
+                inputs_dict[k] = ValQuery(
+                    creator=None, created_as=None, constraint=[content_hash]
                 )
     return inputs_dict
 

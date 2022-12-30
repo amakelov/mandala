@@ -36,19 +36,19 @@ extras_require = {
 extras_require["complete"] = sorted({v for req in extras_require.values() for v in req})
 
 packages = [
-    "mandala_lite",
-    "mandala_lite.core",
-    "mandala_lite.storages",
-    "mandala_lite.storages.rel_impls",
-    "mandala_lite.ui",
-    "mandala_lite.tests",
+    "mandala",
+    "mandala.core",
+    "mandala.storages",
+    "mandala.storages.rel_impls",
+    "mandala.ui",
+    "mandala.tests",
 ]
 
 setup(
-    name="mandala_lite",
+    name="mandala",
     version="0.1.0",
     description="",
-    url="https://github.com/amakelov/mandala_lite",
+    url="https://github.com/amakelov/mandala",
     license="Apache 2.0",
     keywords="computational-experiments data-management machine-learning data-science",
     classifiers=[

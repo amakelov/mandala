@@ -27,13 +27,19 @@ class ValQuery:
     subsequent calls to operations that consume this `ValQuery` object.
     """
 
-    def __init__(self, creator: Optional["FuncQuery"], created_as: Optional[int]):
+    def __init__(
+        self,
+        creator: Optional["FuncQuery"],
+        created_as: Optional[int],
+        constraint: Optional[List[str]] = None,
+    ):
         self.creator = creator
         self.created_as = created_as
         self.consumers: List["FuncQuery"] = []
         self.consumed_as: List[str] = []
         self.aliases = []
         self.column_name = None
+        self.constraint = constraint
 
     def add_consumer(self, consumer: "FuncQuery", consumed_as: str):
         self.consumers.append(consumer)

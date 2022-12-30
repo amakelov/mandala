@@ -12,7 +12,6 @@ class Compiler:
     def __init__(self, val_queries: List[ValQuery], func_queries: List[FuncQuery]):
         self.val_queries = val_queries
         self.func_queries = func_queries
-        # self._generate_aliases()
         self.val_aliases, self.func_aliases = self._generate_aliases()
 
     def _generate_aliases(self) -> Tuple[Dict[ValQuery, Table], Dict[FuncQuery, Table]]:
@@ -36,6 +35,9 @@ class Compiler:
         for input_name, val_query in op_query.inputs.items():
             val_alias = self.val_aliases[val_query]
             constraints.append(val_alias[Config.uid_col] == func_alias[input_name])
+            if val_query.constraint is not None:
+                sess.d = locals()
+                constraints.append(val_alias[Config.uid_col].isin(val_query.constraint))
             select_fields.append(val_alias[Config.uid_col])
         for output_idx, val_query in enumerate(op_query.outputs):
             val_alias = self.val_aliases[val_query]
@@ -58,9 +60,6 @@ class Compiler:
             - The list of columns, partitioned into sublists per value query, is
             also returned.
         """
-        # if select_queries is None:
-        #     select_queries = tuple(self.val_queries)
-        # assert all([vq in self.val_queries for vq in select_queries])
         from_tables = []
         all_constraints = []
         select_cols = [self.val_aliases[vq][Config.uid_col] for vq in select_queries]

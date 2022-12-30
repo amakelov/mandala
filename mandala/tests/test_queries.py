@@ -1,6 +1,6 @@
-from mandala_lite.all import *
-from mandala_lite.tests.utils import *
-from mandala_lite.core.weaver import visualize_computational_graph, traverse_all
+from mandala.all import *
+from mandala.tests.utils import *
+from mandala.core.weaver import visualize_computational_graph, traverse_all
 
 OUTPUT_ROOT = Path(__file__).parent / "output/"
 

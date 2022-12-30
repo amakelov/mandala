@@ -1,11 +1,11 @@
-from mandala_lite.all import *
-from mandala_lite.tests.utils import *
-from mandala_lite.core.deps import DependencyGraph, CallableNode, GlobalVarNode
+from mandala.all import *
+from mandala.tests.utils import *
+from mandala.core.deps import DependencyGraph, CallableNode, GlobalVarNode
 
 
 ### some code is set up at the top level to replicate how the user would use the library
 MODULE_PATH = os.path.dirname(__file__)
-MODULE_NAME = "mandala_lite.tests.test_deps"
+MODULE_NAME = "mandala.tests.test_deps"
 storage = Storage(deps_root=Path(MODULE_PATH))
 
 ################################################################################

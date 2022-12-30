@@ -1,12 +1,12 @@
 import mongomock
 
 from ..common_imports import *
-from mandala_lite.all import *
-from mandala_lite.ui.main import MODES
-from mandala_lite.core.config import Config
-from mandala_lite.core.model import Ref
-from mandala_lite.storages.remote_impls.mongo_impl import MongoRemoteStorage
-from mandala_lite.storages.remote_impls.mongo_mock import MongoMockRemoteStorage
+from mandala.all import *
+from mandala.ui.main import MODES
+from mandala.core.config import Config
+from mandala.core.model import Ref
+from mandala.storages.remote_impls.mongo_impl import MongoRemoteStorage
+from mandala.storages.remote_impls.mongo_mock import MongoMockRemoteStorage
 
 
 def signatures_are_equal(storage_1: Storage, storage_2: Storage) -> bool:

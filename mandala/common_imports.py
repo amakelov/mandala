@@ -41,7 +41,7 @@ class Session:
         self.items = []
 
 
-logger = logging.getLogger("mandala_lite")
+logger = logging.getLogger("mandala")
 # logger.addHandler(logging.StreamHandler())
 FORMAT = "[%(filename)s:%(lineno)s - %(funcName)20s() ] %(message)s"
 logging.basicConfig(format=FORMAT)

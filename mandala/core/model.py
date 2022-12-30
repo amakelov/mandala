@@ -211,7 +211,7 @@ class FuncOp:
     performing the necessary updates to the stored signature.
 
     See also:
-        - `mandala_lite.core.sig.Signature`
+        - `mandala.core.sig.Signature`
     """
 
     def __init__(

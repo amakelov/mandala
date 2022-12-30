@@ -1,5 +1,5 @@
 """
-Intended way for users to import mandala_lite
+Intended way for users to import mandala
 """
 from .core.model import unwrap, wrap
 from .core.config import Config
