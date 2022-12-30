@@ -1,6 +1,6 @@
 <div align="center">
 	<br>
-		<img src="assets/logo-512x512.png" height=55 alt="logo" align="right">
+		<img src="assets/logo-no-background.png" height=128 alt="logo" align="center">
 	<br>
 </div>
 
@@ -14,8 +14,7 @@
 
 Mandala is a
 [`functools.lru_cache`](https://docs.python.org/3/library/functools.html#functools.lru_cache)
-on steroids, applied to elegantly solve all your experiment data management
-needs. 
+on steroids, applied to elegantly solve experiment data management.
 
 It turns Python function calls into composable, interlinked, queriable data that
 is automatically co-evolved with your codebase. By applying different semantics
@@ -43,27 +42,65 @@ management in complex projects.
 pip install git+https://github.com/amakelov/mandala
 ```
 
-<!--
-<video src="assets/Kazam_screencast_00000.webm" controls="controls" style="max-width: 730px;">
-</video>
--->
-
 ## Video walkthrough
 
 ### Add *composable* memoization to existing code
 Decorate functions with `@op` and annotate the number of return values (with a
-`typing.Tuple` for functions returning multiple values):
+`typing.Tuple` for functions returning multiple values). Below is a simple
+example with a `scikit-learn` pipeline:
 
-<video src="assets/memoization.mp4" controls="controls" style="max-width: 730px;">
-</video>
+<details open><summary>Show/hide gif</summary>
+<p>
 
-### Iterate rapidly w/ new parameters and logic
+![01_memoization](https://user-images.githubusercontent.com/1467702/210118002-4d2418a3-5d34-42f4-bf49-8a0522b788b1.gif)
 
-### Query by pattern-matching to Python code
+</p>
+</details>
 
-### Dependency tracking
 
-### Data structures
+### Iterate rapidly without redoing work
+`mandala`'s memoization is designed to be composed across functions, and makes
+it straightforward to grow a project: just add new parameters and functions on
+top of a piece of memoized code.
+
+<details open><summary>Show/hide gif</summary>
+<p>
+
+![02_iteration](https://user-images.githubusercontent.com/1467702/210118075-f48501ab-ba13-473f-a8fe-0fd2d555b9e1.gif)
+
+</p>
+</details>
+
+
+### Query by pattern-matching Python code
+Define rich declarative queries by directly using the code of your experiments.
+In a `.query()` context, function calls are interpeted as building a graph of
+**computational dependencies between variables**. Calling `get_table(...)` on the
+context manager gives you tables of all the tuples in the storage satisfying all
+these dependencies:
+
+<details open><summary>Show/hide gif</summary>
+<p>
+
+![03_queries](https://user-images.githubusercontent.com/1467702/210118099-0fcbfb60-cc02-438b-b975-3e335558d8d1.gif)
+
+</p>
+</details>
+
+### Modify memoized functions without forgetting old calls
+You can modify memoized functions without losing past calls by adding extra
+arguments with default values. All past calls are treated as if they used this
+default value. This is very convenient in machine learning and data science
+scenarios, for e.g. exposing hard-coded constants as parameters, or adding new
+behaviors to a processing step.
+
+<details open><summary>Show/hide gif</summary>
+<p>
+
+![04_add_input](https://user-images.githubusercontent.com/1467702/210118150-f8abd146-9b3e-4987-9ac2-782be8c4f856.gif)
+
+</p>
+</details>
 
 ## Tutorials 
 - see the ["Hello world!"
