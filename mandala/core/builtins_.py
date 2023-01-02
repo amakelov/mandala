@@ -6,6 +6,10 @@ from .utils import Hashing
 
 
 class ListRef(Ref, Sequence):
+    """
+    Immutable list of Refs.
+    """
+
     def __init__(self, uid: str, obj: Optional[List[Ref]], in_memory: bool):
         assert uid.startswith("__list__.")
         self.uid = uid
@@ -48,6 +52,10 @@ class ListRef(Ref, Sequence):
 
 
 class DictRef(Ref, Mapping):
+    """
+    Immutable dict of Refs.
+    """
+
     def __init__(self, uid: str, obj: Optional[Dict[str, Ref]], in_memory: bool):
         assert uid.startswith("__dict__.")
         self.uid = uid
@@ -93,6 +101,10 @@ class DictRef(Ref, Mapping):
 
 
 class SetRef(Ref, SetABC):
+    """
+    Immutable set of Refs.
+    """
+
     def __init__(self, uid: str, obj: Optional[Set[Ref]], in_memory: bool):
         assert uid.startswith("__set__.")
         self.uid = uid

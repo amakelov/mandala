@@ -30,6 +30,10 @@ def invert_dict(d: Dict) -> Dict:
     return {v: k for k, v in d.items()}
 
 
+def concat_lists(lists: List[list]) -> list:
+    return [x for lst in lists for x in lst]
+
+
 class Hashing:
     """
     Helpers for hashing e.g. function inputs and call metadata.

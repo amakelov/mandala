@@ -1,6 +1,8 @@
 from ..common_imports import *
 from .model import FuncOp
+from .tps import Type, ListType, DictType, SetType, AnyType
 from .builtins_ import Builtins
+from .utils import Hashing, concat_lists
 from ..ui.viz import (
     Node,
     Edge,
@@ -32,6 +34,7 @@ class ValQuery:
         self,
         creator: Optional["FuncQuery"],
         created_as: Optional[int],
+        tp: Optional[Type] = None,
         constraint: Optional[List[str]] = None,
     ):
         self.creator = creator
@@ -41,6 +44,7 @@ class ValQuery:
         self.aliases = []
         self.column_name = None
         self.constraint = constraint
+        self.tp = tp
 
     def add_consumer(self, consumer: "FuncQuery", consumed_as: str):
         self.consumers.append(consumer)
@@ -57,6 +61,21 @@ class ValQuery:
     def named(self, name: str) -> "ValQuery":
         self.column_name = name
         return self
+
+    def __getitem__(self, idx: Union[int, str, "ValQuery"]) -> "ValQuery":
+        tp = self.tp or _infer_type(self)
+        if isinstance(tp, ListType):
+            assert isinstance(idx, int)
+            return BuiltinQueries.GetListItemQuery(
+                lst=self, idx=qwrap(idx, tp=tp.elt_type)
+            )
+        elif isinstance(tp, DictType):
+            assert isinstance(idx, str)
+            return BuiltinQueries.GetDictItemQuery(
+                dct=self, key=qwrap(idx, tp=tp.val_type)
+            )
+        else:
+            raise NotImplementedError(f"Cannot index into query of type {tp}")
 
 
 class FuncQuery:
@@ -94,8 +113,8 @@ class FuncQuery:
         result = FuncQuery(inputs=inputs, func_op=func_op)
         result.set_outputs(
             outputs=[
-                ValQuery(creator=result, created_as=i)
-                for i in range(func_op.sig.n_outputs)
+                ValQuery(creator=result, created_as=i, tp=tp)
+                for i, tp in zip(range(func_op.sig.n_outputs), func_op.output_types)
             ]
         )
         for k, v in inputs.items():
@@ -115,10 +134,6 @@ class FuncQuery:
         for out in self.outputs:
             out.creator = None
             out.created_as = None
-
-
-def concat_lists(lists: List[list]) -> list:
-    return [x for lst in lists for x in lst]
 
 
 def traverse_all(val_queries: List[ValQuery]) -> Tuple[List[ValQuery], List[FuncQuery]]:
@@ -149,7 +164,7 @@ def traverse_all(val_queries: List[ValQuery]) -> Tuple[List[ValQuery], List[Func
 class BuiltinQueries:
     @staticmethod
     def ListQuery(elt: ValQuery, idx: Optional[ValQuery] = None) -> ValQuery:
-        result = ValQuery(creator=None, created_as=None)
+        result = ValQuery(creator=None, created_as=None, tp=ListType(elt_type=elt.tp))
         if idx is not None:
             inputs = {"elt": elt, "idx": idx, "lst": result}
         else:
@@ -159,7 +174,7 @@ class BuiltinQueries:
 
     @staticmethod
     def DictQuery(val: ValQuery, key: Optional[ValQuery] = None) -> ValQuery:
-        result = ValQuery(creator=None, created_as=None)
+        result = ValQuery(creator=None, created_as=None, tp=DictType(val_type=val.tp))
         if key is not None:
             inputs = {"val": val, "key": key, "dct": result}
         else:
@@ -169,20 +184,58 @@ class BuiltinQueries:
 
     @staticmethod
     def SetQuery(elt: ValQuery) -> ValQuery:
-        result = ValQuery(creator=None, created_as=None)
+        result = ValQuery(creator=None, created_as=None, tp=SetType(elt_type=elt.tp))
         inputs = {"elt": elt, "st": result}
         FuncQuery.link(inputs=inputs, func_op=Builtins.set_op)
         return result
 
     @staticmethod
     def GetListItemQuery(lst: ValQuery, idx: Optional[ValQuery] = None) -> ValQuery:
-        result = ValQuery(creator=None, created_as=None)
+        elt_tp = lst.tp.elt_type if isinstance(lst.tp, ListType) else None
+        result = ValQuery(creator=None, created_as=None, tp=elt_tp)
         if idx is not None:
             inputs = {"lst": lst, "idx": idx, "elt": result}
         else:
             inputs = {"lst": lst, "elt": result}
         FuncQuery.link(inputs=inputs, func_op=Builtins.list_op)
         return result
+
+    @staticmethod
+    def GetDictItemQuery(dct: ValQuery, key: Optional[ValQuery] = None) -> ValQuery:
+        val_tp = dct.tp.val_type if isinstance(dct.tp, DictType) else None
+        result = ValQuery(creator=None, created_as=None, tp=val_tp)
+        if key is not None:
+            inputs = {"dct": dct, "key": key, "val": result}
+        else:
+            inputs = {"dct": dct, "val": result}
+        FuncQuery.link(inputs=inputs, func_op=Builtins.dict_op)
+        return result
+
+
+def _infer_type(val_query: ValQuery) -> Type:
+    consumer_op_names = [c.func_op.sig.ui_name for c in val_query.consumers]
+    mapping = {"__list__": ListType(), "__dict__": DictType(), "__set__": SetType()}
+    tps = [mapping.get(x, None) for x in consumer_op_names]
+    struct_tps = [x for x in tps if x is not None]
+    if len(struct_tps) == 0:
+        return AnyType()
+    elif len(struct_tps) == 1:
+        return struct_tps[0]
+    else:
+        raise RuntimeError(f"Multiple types for {val_query}: {struct_tps}")
+
+
+def qwrap(obj: Any, tp: Any) -> ValQuery:
+    # wrap an atom as a pointwise constraint
+    if isinstance(obj, ValQuery):
+        return obj
+    else:
+        return ValQuery(
+            tp=tp,
+            creator=None,
+            created_as=None,
+            constraint=[Hashing.get_content_hash(obj)],
+        )
 
 
 def visualize_computational_graph(

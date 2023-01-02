@@ -33,6 +33,20 @@ def test_unit():
     assert all(df["elt"] == 42)
     assert sorted(df["idx"]) == list(range(23))
 
+    # test list constructor
+    with storage.query() as q:
+        # a query for all the lists whose mean we've taken
+        lst = BuiltinQueries.ListQuery(elt=Q()).named("lst")
+        x = get_list_mean(nums=lst).named("x")
+        df = q.get_table(lst, x)
+
+    # test syntax sugar
+    with storage.query() as q:
+        x = Q().named("x")
+        lst = repeat(x).named("lst")
+        first_elt = lst[0].named("first_elt")
+        df = q.get_table(x, lst, first_elt)
+
     ### dicts
     @op
     def get_dict_mean(nums: Dict[str, float]) -> float:
@@ -49,6 +63,7 @@ def test_unit():
     with storage.run():
         dct = describe_sequence(seq=[1, 2, 3])
         dct_mean = get_dict_mean(nums=dct)
+        dct_mean_2 = get_dict_mean(nums={"a": dct["min"]})
         assert unwrap(dct_mean) == 2.0
         assert unwrap(dct["min"]) == 1
         assert len(dct) == 3
@@ -58,6 +73,20 @@ def test_unit():
         seq = Q().named("seq")
         dct = describe_sequence(seq=seq).named("dct")
         dct_mean = get_dict_mean(nums=dct).named("dct_mean")
+        df = q.get_table(seq, dct, dct_mean)
+
+    # test dict constructor
+    with storage.query() as q:
+        # a query for all the dicts whose mean we've taken
+        dct = BuiltinQueries.DictQuery(val=Q()).named("dct")
+        dct_mean = get_dict_mean(nums=dct).named("dct_mean")
+        df = q.get_table(dct, dct_mean)
+
+    # test syntax sugar
+    with storage.query() as q:
+        seq = Q().named("seq")
+        dct = describe_sequence(seq=seq).named("dct")
+        dct_mean = dct["mean"].named("dct_mean")
         df = q.get_table(seq, dct, dct_mean)
 
     ### sets

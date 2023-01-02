@@ -3,7 +3,7 @@ from ..core.model import FuncOp, Ref, Call, wrap
 from ..core.sig import Signature
 from ..core.utils import Hashing
 from ..core.config import Config
-from ..core.weaver import ValQuery
+from ..core.weaver import ValQuery, qwrap
 
 
 class MODES:
@@ -43,16 +43,6 @@ def wrap_outputs(outputs: List[Any], call_uid: str) -> List[Ref]:
     return wrapped_outputs
 
 
-def Q() -> ValQuery:
-    """
-    Create a `ValQuery` instance.
-
-    Later on, we can add parameters to this to enforce query constraints in a
-    more natural way.
-    """
-    return ValQuery(creator=None, created_as=None)
-
-
 def bind_inputs(args, kwargs, mode: str, func_op: FuncOp) -> Dict[str, Any]:
     """
     Given args and kwargs passed by the user from python, this adds defaults
@@ -62,14 +52,12 @@ def bind_inputs(args, kwargs, mode: str, func_op: FuncOp) -> Dict[str, Any]:
     if mode == MODES.run:
         bound_args.apply_defaults()
     inputs_dict = dict(bound_args.arguments)
+    input_tps = func_op.input_types
 
     if mode == MODES.query:
         for k, v in inputs_dict.items():
             if not isinstance(v, ValQuery):
-                content_hash = Hashing.get_content_hash(v)
-                inputs_dict[k] = ValQuery(
-                    creator=None, created_as=None, constraint=[content_hash]
-                )
+                inputs_dict[k] = qwrap(obj=v, tp=input_tps[k])
     return inputs_dict
 
 

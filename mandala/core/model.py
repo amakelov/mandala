@@ -1,7 +1,12 @@
 from .config import Config, dump_output_name, parse_output_idx
 from ..common_imports import *
 from .utils import Hashing
-from .sig import Signature, _postprocess_outputs
+from .sig import (
+    Signature,
+    _postprocess_outputs,
+    get_arg_annotations,
+    get_return_annotations,
+)
 from .tps import Type, AnyType, ListType, DictType, SetType
 from .deps import DependencyGraph, Tracer, TerminalData
 
@@ -196,6 +201,20 @@ class FuncOp:
                 sig=self.py_sig, name=ui_name, version=version, _is_builtin=_is_builtin
             )
 
+    @property
+    def input_types(self) -> Dict[str, Type]:
+        annotations = get_arg_annotations(
+            func=self.func, support=list(self.sig.input_names)
+        )
+        return {k: Type.from_annotation(v) for k, v in annotations.items()}
+
+    @property
+    def output_types(self) -> List[Type]:
+        return [
+            Type.from_annotation(v)
+            for v in get_return_annotations(self.func, support_size=self.sig.n_outputs)
+        ]
+
     def _set_func(self, func: Callable) -> None:
         # set the function only
         self.func = func
@@ -319,3 +338,17 @@ def wrap(obj: Any, uid: Optional[str] = None) -> ValueRef:
     else:
         uid = Hashing.get_content_hash(obj) if uid is None else uid
         return ValueRef(uid=uid, obj=obj, in_memory=True)
+
+
+from .builtins_ import ListRef, DictRef, SetRef
+
+TP_TO_CLS = {
+    AnyType: ValueRef,
+    ListType: ListRef,
+    DictType: DictRef,
+    SetType: SetRef,
+}
+
+
+def make_delayed(tp: Type) -> Ref:
+    return TP_TO_CLS[type(tp)](uid="", obj=Delayed(), in_memory=False)

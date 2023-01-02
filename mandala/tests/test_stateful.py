@@ -17,7 +17,7 @@ from mandala.tests.stateful_utils import *
 from mandala.core.workflow import Workflow, CallStruct
 from mandala.core.utils import Hashing, get_uid
 from mandala.core.compiler import *
-from mandala.core.model import Type, ListType
+from mandala.core.model import Type, ListType, make_delayed
 from mandala.core.builtins_ import Builtins
 from mandala.core.sig import get_return_annotations
 from mandala.storages.remote_storage import RemoteStorage
@@ -604,10 +604,7 @@ class SingleClientSimulator(RuleBasedStateMachine):
                 func=func_op.func, support_size=func_op.sig.n_outputs
             )
         ]
-        outputs = [
-            Ref.make_delayed(RefCls=ListRef if isinstance(tp, ListType) else ValueRef)
-            for tp in output_types
-        ]
+        outputs = [make_delayed(tp=tp) for tp in output_types]
         call_struct = CallStruct(
             func_op=op_node.func_op, inputs=input_values, outputs=outputs
         )

@@ -14,7 +14,7 @@ from ..storages.sigs import SigSyncer
 from ..storages.remote_storage import RemoteStorage
 from ..common_imports import *
 from ..core.config import Config
-from ..core.model import Ref, ValueRef, Call, FuncOp
+from ..core.model import Ref, ValueRef, Call, FuncOp, make_delayed
 from ..core.builtins_ import Builtins, ListRef
 from ..core.wrapping import wrap_dict, wrap_list, unwrap
 from ..core.tps import Type, ListType
@@ -920,13 +920,8 @@ class Storage(Transactable):
                 func=func_op.func, support_size=func_op.sig.n_outputs
             )
         ]
-        outputs = [
-            Ref.make_delayed(RefCls=ListRef if isinstance(tp, ListType) else ValueRef)
-            for tp in output_types
-        ]
-        # outputs = [Ref.make_delayed() for _, tp in zip(func_op.sig.n_outputs, output_types)]
+        outputs = [make_delayed(tp=tp) for tp in output_types]
         call_struct = CallStruct(func_op=func_op, inputs=inputs, outputs=outputs)
-        # context._call_structs.append((self.func_op, wrapped_inputs, outputs))
         return outputs, call_struct
 
 
