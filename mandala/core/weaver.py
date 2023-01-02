@@ -1,5 +1,6 @@
 from ..common_imports import *
-from .model import FuncOp, Builtins
+from .model import FuncOp
+from .builtins_ import Builtins
 from ..ui.viz import (
     Node,
     Edge,
@@ -157,7 +158,24 @@ class BuiltinQueries:
         return result
 
     @staticmethod
-    def GetItemQuery(lst: ValQuery, idx: Optional[ValQuery] = None) -> ValQuery:
+    def DictQuery(val: ValQuery, key: Optional[ValQuery] = None) -> ValQuery:
+        result = ValQuery(creator=None, created_as=None)
+        if key is not None:
+            inputs = {"val": val, "key": key, "dct": result}
+        else:
+            inputs = {"val": val, "dct": result}
+        FuncQuery.link(inputs=inputs, func_op=Builtins.dict_op)
+        return result
+
+    @staticmethod
+    def SetQuery(elt: ValQuery) -> ValQuery:
+        result = ValQuery(creator=None, created_as=None)
+        inputs = {"elt": elt, "st": result}
+        FuncQuery.link(inputs=inputs, func_op=Builtins.set_op)
+        return result
+
+    @staticmethod
+    def GetListItemQuery(lst: ValQuery, idx: Optional[ValQuery] = None) -> ValQuery:
         result = ValQuery(creator=None, created_as=None)
         if idx is not None:
             inputs = {"lst": lst, "idx": idx, "elt": result}

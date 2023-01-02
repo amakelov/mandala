@@ -7,8 +7,10 @@ from pypika.terms import LiteralValue
 from duckdb import DuckDBPyConnection as Connection
 
 from ..common_imports import *
-from ..core.config import Config, Prov, dump_output_name
-from ..core.model import Call, unwrap, FuncOp, Ref, ValueRef, ListRef
+from ..core.config import Config, dump_output_name
+from ..core.model import Call, FuncOp, Ref, ValueRef
+from ..core.builtins_ import ListRef, DictRef, SetRef
+from ..core.wrapping import unwrap
 from ..core.sig import Signature
 from ..core.deps import DependencyGraph, MandalaDependencies
 from ..utils import serialize, deserialize, _rename_cols
@@ -859,16 +861,8 @@ class RelAdapter(Transactable):
 
     @transaction()
     def obj_gets(
-        self, uids: list[str], shallow: bool = False, conn: Optional[Connection] = None
+        self, uids: List[str], shallow: bool = False, conn: Optional[Connection] = None
     ) -> List[Ref]:
-        """
-        Given a list of uids, return a table with columns
-            (`Config.uid_col`, `value`)
-        containing the stored values for each uid.
-
-        NOTE: the order of the returned table is not guaranteed to match the
-        order of the input uids.
-        """
         if len(uids) == 0:
             return []
         if shallow:
@@ -946,6 +940,10 @@ class RelAdapter(Transactable):
             if isinstance(vref, Ref) and not vref.in_memory:
                 detached_vrefs.append(vref)
             elif isinstance(vref, ListRef) and vref.in_memory:
+                detached_vrefs.extend(vref.obj)
+            elif isinstance(vref, DictRef) and vref.in_memory:
+                detached_vrefs.extend(vref.obj.values())
+            elif isinstance(vref, SetRef) and vref.in_memory:
                 detached_vrefs.extend(vref.obj)
             else:
                 continue

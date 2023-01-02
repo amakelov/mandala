@@ -322,6 +322,19 @@ class Tracer:
         return module_name, func_name
 
     @staticmethod
+    def generate_terminal_data(
+        func: Callable, internal_name: str, version: int
+    ) -> TerminalData:
+        module_name, func_name = Tracer.get_func_key(func=func)
+        data = TerminalData(
+            internal_name=internal_name,
+            version=version,
+            module_name=module_name,
+            func_name=func_name,
+        )
+        return data
+
+    @staticmethod
     def get_func_qualname(
         func_name: str, code: types.CodeType, frame: types.FrameType
     ) -> str:

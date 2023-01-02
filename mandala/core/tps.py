@@ -16,6 +16,10 @@ class Type:
         elif isinstance(annotation, type):
             if annotation is list:
                 return ListType()
+            elif annotation is dict:
+                return DictType()
+            elif annotation is set:
+                return SetType()
             else:
                 return AnyType()
         elif hasattr(annotation, "__origin__"):
@@ -24,6 +28,14 @@ class Type:
                 return ListType(
                     elt_type=Type.from_annotation(annotation=elt_annotation)
                 )
+            elif annotation.__origin__ is dict:
+                value_annotation = annotation.__args__[1]
+                return DictType(
+                    val_type=Type.from_annotation(annotation=value_annotation)
+                )
+            elif annotation.__origin__ is set:
+                elt_annotation = annotation.__args__[0]
+                return SetType(elt_type=Type.from_annotation(annotation=elt_annotation))
             elif annotation.__origin__ is tuple:
                 return AnyType()
             else:
@@ -37,5 +49,15 @@ class AnyType(Type):
 
 
 class ListType(Type):
+    def __init__(self, elt_type: Optional[Type] = None):
+        self.elt_type = AnyType() if elt_type is None else elt_type
+
+
+class DictType(Type):
+    def __init__(self, val_type: Optional[Type] = None):
+        self.val_type = AnyType() if val_type is None else val_type
+
+
+class SetType(Type):
     def __init__(self, elt_type: Optional[Type] = None):
         self.elt_type = AnyType() if elt_type is None else elt_type

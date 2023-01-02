@@ -6,25 +6,86 @@ from mandala.core.weaver import *
 def test_unit():
     storage = Storage()
 
+    ### lists
     @op
-    def repeat(x: int, n_times: int = None) -> List[int]:
-        return [x] * n_times
+    def repeat(x: int, times: int = None) -> List[int]:
+        return [x] * times
 
     @op
-    def mean(nums: List[float]) -> float:
+    def get_list_mean(nums: List[float]) -> float:
         return sum(nums) / len(nums)
 
     with storage.run():
-        a = repeat(x=23, n_times=5)
-        b = mean(nums=a)
-        assert isinstance(a, ListRef)
+        lst = repeat(x=42, times=23)
+        x = get_list_mean(nums=lst)
+        y = get_list_mean(nums=lst[:10])
+        assert unwrap(lst[1]) == 42
+        assert len(lst) == 23
+    storage.rel_adapter.obj_get(uid=lst.uid)
 
     with storage.query() as q:
-        x = Q()
-        a = repeat(x)
-        idx = Q()
-        elt = BuiltinQueries.GetItemQuery(lst=a, idx=idx)
-        df = q.get_table(x, a, elt, idx)
+        x = Q().named("x")
+        lst = repeat(x).named("lst")
+        idx = Q().named("idx")
+        elt = BuiltinQueries.GetListItemQuery(lst=lst, idx=idx).named("elt")
+        df = q.get_table(x, lst, elt, idx)
+    assert df.shape == (23, 4)
+    assert all(df["elt"] == 42)
+    assert sorted(df["idx"]) == list(range(23))
+
+    ### dicts
+    @op
+    def get_dict_mean(nums: Dict[str, float]) -> float:
+        return sum(nums.values()) / len(nums)
+
+    @op
+    def describe_sequence(seq: List[int]) -> Dict[str, float]:
+        return {
+            "min": min(seq),
+            "max": max(seq),
+            "mean": sum(seq) / len(seq),
+        }
+
+    with storage.run():
+        dct = describe_sequence(seq=[1, 2, 3])
+        dct_mean = get_dict_mean(nums=dct)
+        assert unwrap(dct_mean) == 2.0
+        assert unwrap(dct["min"]) == 1
+        assert len(dct) == 3
+    storage.rel_adapter.obj_get(uid=dct.uid)
+
+    with storage.query() as q:
+        seq = Q().named("seq")
+        dct = describe_sequence(seq=seq).named("dct")
+        dct_mean = get_dict_mean(nums=dct).named("dct_mean")
+        df = q.get_table(seq, dct, dct_mean)
+
+    ### sets
+    @op
+    def mean_set(nums: Set[float]) -> float:
+        return sum(nums) / len(nums)
+
+    @op
+    def get_prime_factors(num: int) -> Set[int]:
+        factors = set()
+        for i in range(2, num):
+            while num % i == 0:
+                factors.add(i)
+                num /= i
+        return factors
+
+    with storage.run():
+        factors = get_prime_factors(num=42)
+        factors_mean = mean_set(nums=factors)
+        assert unwrap(factors_mean) == 4.0
+        assert len(factors) == 3
+    storage.rel_adapter.obj_get(uid=factors.uid)
+
+    with storage.query() as q:
+        num = Q().named("num")
+        factors = BuiltinQueries.SetQuery(elt=num).named("factors")
+        factors_mean = mean_set(nums=factors).named("factors_mean")
+        df = q.get_table(num, factors, factors_mean)
 
 
 def test_nested():

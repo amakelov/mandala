@@ -1,5 +1,8 @@
 from .common_imports import *
-from .core.model import ValueRef, ListRef, Call, FuncOp, unwrap, wrap
+from .core.model import ValueRef, Call, FuncOp, wrap
+from .core.wrapping import unwrap
+from .core.builtins_ import DictRef, ListRef, SetRef
+from .core.weaver import BuiltinQueries
 from .core.sig import Signature
 from .core.config import Config
 from .ui.main import Storage, Context, MODES, FreeContexts, OnChange

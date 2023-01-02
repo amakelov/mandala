@@ -66,6 +66,20 @@ class Hashing:
     else:
         raise ValueError("Unknown content hasher: {}".format(Config.content_hasher))
 
+    ### deterministic hashing of common collections
+    @staticmethod
+    def hash_list(elts: List[str]) -> str:
+        return Hashing.get_content_hash(elts)
+
+    @staticmethod
+    def hash_dict(elts: Dict[str, str]) -> str:
+        key_order = sorted(elts.keys())
+        return Hashing.get_content_hash([(k, elts[k]) for k in key_order])
+
+    @staticmethod
+    def hash_set(elts: Set[str]) -> str:
+        return Hashing.get_content_hash(sorted(elts))
+
 
 def load_obj(module_name: str, obj_name: str) -> Tuple[Any, bool]:
     module = importlib.import_module(module_name)

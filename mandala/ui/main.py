@@ -14,8 +14,10 @@ from ..storages.sigs import SigSyncer
 from ..storages.remote_storage import RemoteStorage
 from ..common_imports import *
 from ..core.config import Config
-from ..core.model import *
-from ..core.tps import Type
+from ..core.model import Ref, ValueRef, Call, FuncOp
+from ..core.builtins_ import Builtins, ListRef
+from ..core.wrapping import wrap_dict, wrap_list, unwrap
+from ..core.tps import Type, ListType
 from ..core.sig import Signature, get_arg_annotations, get_return_annotations
 from ..core.workflow import Workflow, CallStruct
 from ..core.utils import get_uid
@@ -286,7 +288,7 @@ class Storage(Transactable):
         )
 
         # set up builtins
-        for func_op in Builtins.OPS:
+        for func_op in Builtins.OPS.values():
             self.synchronize_op(func_op=func_op)
 
     ############################################################################
@@ -850,7 +852,11 @@ class Storage(Transactable):
         # check if call UID exists in call storage
         if self.call_exists(call_uid):
             if sys.gettrace() is not None and self.deps_root is not None:
-                data = func_op._generate_terminal_data()
+                data = Tracer.generate_terminal_data(
+                    func=func_op.func,
+                    internal_name=func_op.sig.internal_name,
+                    version=func_op.sig.version,
+                )
                 Tracer.break_signal(data=data)
             return self._process_call_found(call_uid=call_uid)
         else:

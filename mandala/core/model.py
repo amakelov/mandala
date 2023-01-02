@@ -1,10 +1,8 @@
-from collections.abc import Sequence
-
 from .config import Config, dump_output_name, parse_output_idx
 from ..common_imports import *
 from .utils import Hashing
 from .sig import Signature, _postprocess_outputs
-from .tps import Type, AnyType, ListType
+from .tps import Type, AnyType, ListType, DictType, SetType
 from .deps import DependencyGraph, Tracer, TerminalData
 
 if Config.has_torch:
@@ -27,8 +25,11 @@ class Ref:
 
     @staticmethod
     def from_uid(uid: str) -> "Ref":
-        if ListRef._is_list_uid(uid=uid):
-            return ListRef(uid=uid, obj=None, in_memory=False)
+        from .builtins_ import Builtins
+
+        if Builtins.is_builtin_uid(uid=uid):
+            builtin_id, uid = Builtins.parse_builtin_uid(uid=uid)
+            return Builtins.spawn_builtin(builtin_id=builtin_id, uid=uid)
         else:
             return ValueRef(uid=uid, obj=None, in_memory=False)
 
@@ -68,52 +69,6 @@ class ValueRef(Ref):
 
     def dump(self) -> "ValueRef":
         return ValueRef(uid=self.uid, obj=self.obj, in_memory=True)
-
-
-class ListRef(Ref, Sequence):
-    def __init__(self, uid: str, obj: Optional[List[Ref]], in_memory: bool):
-        assert ListRef._is_list_uid(uid=uid)
-        self.uid = uid
-        self.obj = obj
-        self.in_memory = in_memory
-
-    @staticmethod
-    def _is_list_uid(uid: str) -> bool:
-        return uid.startswith("__list__.")
-
-    def __repr__(self) -> str:
-        if self.in_memory:
-            return f"ListRef({self.obj}, uid={self.uid})"
-        else:
-            return f"ListRef(in_memory=False, uid={self.uid})"
-
-    def detached(self) -> "ListRef":
-        return ListRef(uid=self.uid, obj=None, in_memory=False)
-
-    def attach(self, reference: "ListRef"):
-        assert self.uid == reference.uid
-        self.obj = reference.obj
-        self.in_memory = True
-
-    def dump(self) -> "ListRef":
-        return ListRef(
-            uid=self.uid, obj=[vref.detached() for vref in self.obj], in_memory=True
-        )
-
-    ############################################################################
-    ### list interface
-    ############################################################################
-    def __getitem__(self, idx: int) -> Ref:
-        assert self.in_memory
-        return self.obj[idx]
-
-    def __iter__(self):
-        assert self.in_memory
-        return iter(self.obj)
-
-    def __len__(self) -> int:
-        assert self.in_memory
-        return len(self.obj)
 
 
 ################################################################################
@@ -246,16 +201,6 @@ class FuncOp:
         self.func = func
         self.py_sig = inspect.signature(self.func)
 
-    def _generate_terminal_data(self) -> TerminalData:
-        module_name, func_name = Tracer.get_func_key(func=self.func)
-        data = TerminalData(
-            internal_name=self.sig.internal_name,
-            version=self.sig.version,
-            module_name=module_name,
-            func_name=func_name,
-        )
-        return data
-
     def compute(
         self,
         inputs: Dict[str, Any],
@@ -279,7 +224,13 @@ class FuncOp:
                     result = self.func(**inputs)
             else:
                 current_trace = sys.gettrace()
-                Tracer.break_signal(data=self._generate_terminal_data())
+                Tracer.break_signal(
+                    data=Tracer.generate_terminal_data(
+                        func=self.func,
+                        internal_name=self.sig.internal_name,
+                        version=self.sig.version,
+                    )
+                )
                 sys.settrace(None)
                 with tracer:
                     result = self.func(**inputs)
@@ -350,49 +301,6 @@ class FuncOp:
 
 
 ################################################################################
-### builtins
-################################################################################
-class Builtins:
-    @staticmethod
-    def list_func(lst: List[Any], elt: Any, idx: Any):
-        assert lst[idx] is elt
-
-    @staticmethod
-    def dict_func(dct: Dict[str, Any], key: str, val: Any):
-        assert dct[key] is val
-
-    @staticmethod
-    def make_list_uid(uid: str) -> str:
-        return f"__list__.{uid}"
-
-    list_op = FuncOp(func=list_func, _is_builtin=True, version=0, ui_name="__list__")
-    # dict_op = FuncOp(func=dict_func, _is_builtin=True, version=0, ui_name="__dict__")
-
-    OPS = [list_op]
-
-    @staticmethod
-    def construct_list(elts: List[Ref]) -> Tuple[ListRef, List[Call]]:
-        uid = Builtins.make_list_uid(
-            Hashing.get_content_hash([elt.uid for elt in elts])
-        )
-        lst = ListRef(uid=uid, obj=elts, in_memory=True)
-        idxs = [wrap(idx) for idx in range(len(elts))]
-        calls = []
-        for elt, idx in zip(elts, idxs):
-            wrapped_inputs = {"lst": lst, "elt": elt, "idx": idx}
-            call_uid = Builtins.list_op.get_call_uid(wrapped_inputs=wrapped_inputs)
-            calls.append(
-                Call(
-                    uid=call_uid,
-                    inputs=wrapped_inputs,
-                    outputs=[],
-                    func_op=Builtins.list_op,
-                )
-            )
-        return lst, calls
-
-
-################################################################################
 ### wrapping
 ################################################################################
 def wrap(obj: Any, uid: Optional[str] = None) -> ValueRef:
@@ -411,88 +319,3 @@ def wrap(obj: Any, uid: Optional[str] = None) -> ValueRef:
     else:
         uid = Hashing.get_content_hash(obj) if uid is None else uid
         return ValueRef(uid=uid, obj=obj, in_memory=True)
-
-
-def wrap_constructive(obj: Any, annotation: Any) -> Tuple[Ref, List[Call]]:
-    tp = Type.from_annotation(annotation=annotation)
-    # check the type
-    if isinstance(tp, ListType) and not (
-        isinstance(obj, list) or isinstance(obj, ListRef)
-    ):
-        raise ValueError(f"Expecting a list, got {type(obj)}")
-    calls = []
-    if isinstance(obj, Ref):
-        return obj, calls
-    if isinstance(tp, AnyType):
-        return wrap(obj=obj), calls
-    elif isinstance(tp, ListType):
-        assert isinstance(obj, list)
-        elt_results = [wrap_constructive(elt, annotation=tp.elt_type) for elt in obj]
-        elt_calls = [c for _, cs in elt_results for c in cs]
-        elt_vrefs = [v for v, _ in elt_results]
-        calls.extend(elt_calls)
-        result, construction_calls = Builtins.construct_list(elts=elt_vrefs)
-        calls.extend(construction_calls)
-        return result, calls
-    else:
-        raise ValueError()
-
-
-def wrap_dict(
-    objs: Dict[str, Any], annotations: Dict[str, Any]
-) -> Tuple[Dict[str, Ref], List[Call]]:
-    calls = []
-    wrapped_objs = {}
-    for k, v in objs.items():
-        wrapped_obj, wrapping_calls = wrap_constructive(
-            obj=v, annotation=annotations[k]
-        )
-        wrapped_objs[k] = wrapped_obj
-        calls.extend(wrapping_calls)
-    return wrapped_objs, calls
-
-
-def wrap_list(objs: List[Any], annotations: List[Any]) -> Tuple[List[Ref], List[Call]]:
-    calls = []
-    wrapped_objs = []
-    for i, v in enumerate(objs):
-        wrapped_obj, wrapping_calls = wrap_constructive(
-            obj=v, annotation=annotations[i]
-        )
-        wrapped_objs.append(wrapped_obj)
-        calls.extend(wrapping_calls)
-    return wrapped_objs, calls
-
-
-################################################################################
-### unwrapping
-################################################################################
-T = TypeVar("T")
-
-
-def unwrap(obj: Union[T, Ref], through_collections: bool = True) -> T:
-    """
-    If an object is a `ValueRef`, returns the wrapped object; otherwise, return
-    the object itself.
-
-    If `through_collections` is True, recursively unwraps objects in lists,
-    tuples, sets, and dict values.
-    """
-    if isinstance(obj, ValueRef):
-        return unwrap(obj.obj, through_collections=through_collections)
-    elif isinstance(obj, ListRef):
-        return [unwrap(elt, through_collections=through_collections) for elt in obj.obj]
-        # return unwrap(obj.obj, through_collections=through_collections)
-    elif isinstance(obj, tuple) and through_collections:
-        return tuple(unwrap(v, through_collections=through_collections) for v in obj)
-    elif isinstance(obj, set) and through_collections:
-        return {unwrap(v, through_collections=through_collections) for v in obj}
-    elif isinstance(obj, list) and through_collections:
-        return [unwrap(v, through_collections=through_collections) for v in obj]
-    elif isinstance(obj, dict) and through_collections:
-        return {
-            k: unwrap(v, through_collections=through_collections)
-            for k, v in obj.items()
-        }
-    else:
-        return obj

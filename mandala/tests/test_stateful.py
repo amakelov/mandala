@@ -17,7 +17,8 @@ from mandala.tests.stateful_utils import *
 from mandala.core.workflow import Workflow, CallStruct
 from mandala.core.utils import Hashing, get_uid
 from mandala.core.compiler import *
-from mandala.core.model import Builtins, Type, ListType
+from mandala.core.model import Type, ListType
+from mandala.core.builtins_ import Builtins
 from mandala.core.sig import get_return_annotations
 from mandala.storages.remote_storage import RemoteStorage
 from mandala.ui.main import SimpleWorkflowExecutor, FuncInterface
@@ -41,7 +42,7 @@ class MockStorage:
         self.values: Dict[str, Any] = {}
         # versioned internal op name -> (internal input name -> default uid)
         self.default_uids: Dict[str, Dict[str, str]] = {}
-        for builtin_op in Builtins.OPS:
+        for builtin_op in Builtins.OPS.values():
             name = builtin_op.sig.versioned_internal_name
             self.calls[name] = pd.DataFrame(
                 columns=list(builtin_op.sig.input_names) + [Config.uid_col]
