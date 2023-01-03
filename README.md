@@ -47,48 +47,48 @@ management in complex projects.
 pip install git+https://github.com/amakelov/mandala
 ```
 
-## Video walkthrough
+## Video walkthroughs
 
 ### Add *composable* memoization to existing code
 Decorate functions with `@op` and annotate the number of return values (with a
 `typing.Tuple` for functions returning multiple values). Below is a simple
 example with a `scikit-learn` pipeline:
 
-<details open><summary>Show/hide gif</summary>
+<details closed><summary>Show/hide gif</summary>
 <p>
 
 ![01_memoization](https://user-images.githubusercontent.com/1467702/210118002-4d2418a3-5d34-42f4-bf49-8a0522b788b1.gif)
-
 </p>
 </details>
 
-
 ### Iterate rapidly without redoing work
-`mandala`'s memoization is designed to be composed across functions, and makes
-it straightforward to grow a project: just add new parameters and functions on
-top of a piece of memoized code.
+`mandala`'s memoization is designed to be composed across functions (and [data
+structures](#data-structures)). This makes it straightforward to interact with
+and grow a project:
+- add new parameters and functions directly on top of a piece of memoized code
+  to do new work;
+- retrace existing memoized code to imperatively query results
 
-<details open><summary>Show/hide gif</summary>
+<details closed><summary>Show/hide gif</summary>
 <p>
 
 ![02_iteration](https://user-images.githubusercontent.com/1467702/210118075-f48501ab-ba13-473f-a8fe-0fd2d555b9e1.gif)
-
 </p>
 </details>
 
-
 ### Query by pattern-matching Python code
-Define rich declarative queries by directly using the code of your experiments.
+Sometimes, retracing memoized code is not enough to query a project; you need a
+global view of all experiments matching some condition. To this end, you can
+define rich declarative queries by directly using the code of your experiments.
 In a `.query()` context, function calls are interpeted as building a graph of
-**computational dependencies between variables**. Calling `get_table(...)` on the
-context manager gives you tables of all the tuples in the storage satisfying all
+**computational dependencies between variables**. Calling `get_table(...)` on
+the context manager gives you tables of all the tuples in the storage satisfying 
 these dependencies:
 
-<details open><summary>Show/hide gif</summary>
+<details closed><summary>Show/hide gif</summary>
 <p>
 
 ![03_queries](https://user-images.githubusercontent.com/1467702/210118099-0fcbfb60-cc02-438b-b975-3e335558d8d1.gif)
-
 </p>
 </details>
 
@@ -97,20 +97,40 @@ You can modify memoized functions without losing past calls by adding extra
 arguments with default values. All past calls are treated as if they used this
 default value. This is very convenient in machine learning and data science
 scenarios, for e.g. exposing hard-coded constants as parameters, or adding new
-behaviors to a processing step.
+behaviors to an algorithm:
 
-<details open><summary>Show/hide gif</summary>
+<details closed><summary>Show/hide gif</summary>
 <p>
 
 ![04_add_input](https://user-images.githubusercontent.com/1467702/210118150-f8abd146-9b3e-4987-9ac2-782be8c4f856.gif)
+</p>
+</details>
 
+### Data structures
+Often, collections like lists, dicts and sets naturally come up in experiments.
+Think of a clustering algorithm returning an unknown number of clusters,
+ensembling multiple ML models, or picking the best element out of some
+collection. It's desirable to be able to save, load and query elements of these
+collections separately, as well as keep track of the relationship between
+a collection and its elements. 
+
+`mandala` allows you to do this by **using Python’s own collections in
+Python-native ways** in your computations and queries. Below you can see a tiny
+demo of this: a do-it-yourself random forest classifier where you directly pass
+a list of trees to the evaluation function. Each tree is saved separately, which
+means you can freely vary the number of trees in the list while storing each
+tree only once, and you get to reuse past tree trainings. The relationship
+between individual trees and lists of trees propagates through the declarative
+query interface:
+
+<details closed><summary>Show/hide gif</summary>
+<p>
+
+![05_data_structures](https://user-images.githubusercontent.com/1467702/210394133-8533e0ec-6f30-43ab-bbad-3facc3f6f909.gif)
 </p>
 </details>
 
 ### Dependency tracking
-TODO
-
-### Data structures
 TODO
 
 ## Tutorials 

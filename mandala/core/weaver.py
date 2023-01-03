@@ -163,53 +163,139 @@ def traverse_all(val_queries: List[ValQuery]) -> Tuple[List[ValQuery], List[Func
 
 class BuiltinQueries:
     @staticmethod
-    def ListQuery(elt: ValQuery, idx: Optional[ValQuery] = None) -> ValQuery:
-        result = ValQuery(creator=None, created_as=None, tp=ListType(elt_type=elt.tp))
-        if idx is not None:
-            inputs = {"elt": elt, "idx": idx, "lst": result}
-        else:
-            inputs = {"elt": elt, "lst": result}
+    def list_relation(
+        lst: Optional[ValQuery] = None,
+        elt: Optional[Union[ValQuery, Any]] = None,
+        idx: Optional[Union[ValQuery, int]] = None,
+    ):
+        inputs = {"lst": lst, "elt": elt, "idx": idx}
+        inputs = {k: v for k, v in inputs.items() if v is not None}
         FuncQuery.link(inputs=inputs, func_op=Builtins.list_op)
+
+    @staticmethod
+    def dict_relation(
+        dct: Optional[ValQuery] = None,
+        key: Optional[ValQuery] = None,
+        val: Optional[ValQuery] = None,
+    ):
+        inputs = {"dct": dct, "key": key, "val": val}
+        inputs = {k: v for k, v in inputs.items() if v is not None}
+        FuncQuery.link(inputs=inputs, func_op=Builtins.dict_op)
+
+    @staticmethod
+    def set_relation(st: Optional[ValQuery] = None, elt: Optional[ValQuery] = None):
+        inputs = {"st": st, "elt": elt}
+        inputs = {k: v for k, v in inputs.items() if v is not None}
+        FuncQuery.link(inputs=inputs, func_op=Builtins.set_op)
+
+    ############################################################################
+    ### special cases
+    ############################################################################
+    @staticmethod
+    def ListQuery(elt: Any, idx: Optional[Any] = None) -> ValQuery:
+        result = ValQuery(creator=None, created_as=None, tp=ListType(elt_type=elt.tp))
+        BuiltinQueries.list_relation(lst=result, elt=elt, idx=idx)
         return result
 
     @staticmethod
-    def DictQuery(val: ValQuery, key: Optional[ValQuery] = None) -> ValQuery:
+    def DictQuery(
+        val: Optional[ValQuery] = None, key: Optional[ValQuery] = None
+    ) -> ValQuery:
         result = ValQuery(creator=None, created_as=None, tp=DictType(val_type=val.tp))
-        if key is not None:
-            inputs = {"val": val, "key": key, "dct": result}
-        else:
-            inputs = {"val": val, "dct": result}
-        FuncQuery.link(inputs=inputs, func_op=Builtins.dict_op)
+        BuiltinQueries.dict_relation(dct=result, key=key, val=val)
         return result
 
     @staticmethod
     def SetQuery(elt: ValQuery) -> ValQuery:
         result = ValQuery(creator=None, created_as=None, tp=SetType(elt_type=elt.tp))
-        inputs = {"elt": elt, "st": result}
-        FuncQuery.link(inputs=inputs, func_op=Builtins.set_op)
+        BuiltinQueries.set_relation(st=result, elt=elt)
         return result
 
     @staticmethod
     def GetListItemQuery(lst: ValQuery, idx: Optional[ValQuery] = None) -> ValQuery:
         elt_tp = lst.tp.elt_type if isinstance(lst.tp, ListType) else None
         result = ValQuery(creator=None, created_as=None, tp=elt_tp)
-        if idx is not None:
-            inputs = {"lst": lst, "idx": idx, "elt": result}
-        else:
-            inputs = {"lst": lst, "elt": result}
-        FuncQuery.link(inputs=inputs, func_op=Builtins.list_op)
+        BuiltinQueries.list_relation(lst=lst, elt=result, idx=idx)
         return result
 
     @staticmethod
     def GetDictItemQuery(dct: ValQuery, key: Optional[ValQuery] = None) -> ValQuery:
         val_tp = dct.tp.val_type if isinstance(dct.tp, DictType) else None
         result = ValQuery(creator=None, created_as=None, tp=val_tp)
-        if key is not None:
-            inputs = {"dct": dct, "key": key, "val": result}
-        else:
-            inputs = {"dct": dct, "val": result}
-        FuncQuery.link(inputs=inputs, func_op=Builtins.dict_op)
+        BuiltinQueries.dict_relation(dct=dct, key=key, val=result)
         return result
+
+    ############################################################################
+    ### syntactic sugar
+    ############################################################################
+    @staticmethod
+    def classify_pattern(obj: Any) -> str:
+        if isinstance(obj, list) and obj[1] == Ellipsis:
+            return "list"
+        elif isinstance(obj, dict) and Ellipsis in obj.keys():
+            return "dict"
+        elif isinstance(obj, set) and Ellipsis in obj:
+            return "set"
+        else:
+            return "atom"
+
+    @staticmethod
+    def parse_list_pattern(obj: list) -> Tuple[ValQuery, List[Any]]:
+        # parse a pattern of the form [x, ...]
+        children = [obj[0]]
+        if not all([isinstance(x, ValQuery) for x in children]):
+            raise NotImplementedError()
+        return BuiltinQueries.ListQuery(elt=obj[0]), children
+
+    @staticmethod
+    def parse_dict_pattern(obj: dict) -> Tuple[ValQuery, List[Any]]:
+        # parse a pattern of the form {...: x} | {x: ...} | {x: y, ...:...}
+        if len(obj) == 1:
+            k = list(obj.keys())[0]
+            if k == Ellipsis:
+                res, children = BuiltinQueries.DictQuery(val=obj[k]), [obj[k]]
+            else:
+                res, children = BuiltinQueries.DictQuery(key=k), [k]
+        else:
+            k = [k for k in list(obj.keys()) if k != Ellipsis][0]
+            v = obj[k]
+            res, children = BuiltinQueries.DictQuery(key=k, val=v), [k, v]
+        if not all([isinstance(x, ValQuery) for x in children]):
+            raise NotImplementedError()
+        return res, children
+
+    @staticmethod
+    def parse_set_pattern(obj: set) -> Tuple[ValQuery, List[Any]]:
+        # parse a pattern of the form {x, ...}
+        res, children = BuiltinQueries.SetQuery(elt=list(obj)[0]), list(obj)
+        if not all([isinstance(x, ValQuery) for x in children]):
+            raise NotImplementedError()
+        return res, children
+
+
+def qwrap(obj: Any, tp: Optional[Type] = None) -> ValQuery:
+    pattern_type = BuiltinQueries.classify_pattern(obj=obj)
+    if pattern_type == "atom":
+        if tp is None:
+            tp = AnyType()
+        # wrap an atom as a pointwise constraint
+        if isinstance(obj, ValQuery):
+            return obj
+        else:
+            return ValQuery(
+                tp=tp,
+                creator=None,
+                created_as=None,
+                constraint=[Hashing.get_content_hash(obj)],
+            )
+    elif pattern_type == "list":
+        return BuiltinQueries.parse_list_pattern(obj=obj)[0]
+    elif pattern_type == "dict":
+        return BuiltinQueries.parse_dict_pattern(obj=obj)[0]
+    elif pattern_type == "set":
+        return BuiltinQueries.parse_set_pattern(obj=obj)[0]
+    else:
+        raise NotImplementedError()
 
 
 def _infer_type(val_query: ValQuery) -> Type:
@@ -223,19 +309,6 @@ def _infer_type(val_query: ValQuery) -> Type:
         return struct_tps[0]
     else:
         raise RuntimeError(f"Multiple types for {val_query}: {struct_tps}")
-
-
-def qwrap(obj: Any, tp: Any) -> ValQuery:
-    # wrap an atom as a pointwise constraint
-    if isinstance(obj, ValQuery):
-        return obj
-    else:
-        return ValQuery(
-            tp=tp,
-            creator=None,
-            created_as=None,
-            constraint=[Hashing.get_content_hash(obj)],
-        )
 
 
 def visualize_computational_graph(

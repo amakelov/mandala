@@ -1,14 +1,17 @@
 from ..common_imports import *
 from ..core.model import FuncOp
-from ..core.weaver import ValQuery
+from ..core.weaver import ValQuery, BuiltinQueries, qwrap
 from .main import FuncInterface, AsyncioFuncInterface, OnChange
 
 
-def Q() -> ValQuery:
+def Q(pattern: Optional[Any] = None) -> ValQuery:
     """
     Create a `ValQuery` instance to be used as a placeholder in a query
     """
-    return ValQuery(creator=None, created_as=None)
+    if pattern is None:
+        return ValQuery(creator=None, created_as=None)
+    else:
+        return qwrap(obj=pattern)
 
 
 class FuncDecorator:

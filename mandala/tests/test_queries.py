@@ -350,3 +350,22 @@ def test_weird():
             visualize_steps_at=OUTPUT_ROOT,
         )
         assert compare_dfs_as_relations(df, df_naive)
+
+
+def test_required_args():
+    storage = Storage()
+
+    @op
+    def add(x: int, y: int) -> int:
+        return x + y
+
+    with storage.run():
+        for x in [1, 2, 3]:
+            for y in [4, 5, 6]:
+                add(x, y)
+
+    with storage.query() as q:
+        x = Q().named("x")
+        result = add(x=x).named("result")
+        df = q.get_table(x, result)
+        assert df.shape == (9, 2)

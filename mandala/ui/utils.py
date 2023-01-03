@@ -48,16 +48,16 @@ def bind_inputs(args, kwargs, mode: str, func_op: FuncOp) -> Dict[str, Any]:
     Given args and kwargs passed by the user from python, this adds defaults
     and returns a dict where they are indexed via internal names.
     """
-    bound_args = func_op.py_sig.bind(*args, **kwargs)
-    if mode == MODES.run:
-        bound_args.apply_defaults()
-    inputs_dict = dict(bound_args.arguments)
-    input_tps = func_op.input_types
-
     if mode == MODES.query:
-        for k, v in inputs_dict.items():
-            if not isinstance(v, ValQuery):
-                inputs_dict[k] = qwrap(obj=v, tp=input_tps[k])
+        bound_args = func_op.py_sig.bind_partial(*args, **kwargs)
+        inputs_dict = dict(bound_args.arguments)
+        input_tps = func_op.input_types
+        inputs_dict = {k: qwrap(obj=v, tp=input_tps[k]) for k, v in inputs_dict.items()}
+    else:
+        bound_args = func_op.py_sig.bind(*args, **kwargs)
+        bound_args.apply_defaults()
+        inputs_dict = dict(bound_args.arguments)
+        return inputs_dict
     return inputs_dict
 
 
