@@ -151,8 +151,8 @@ or create new versions of the functions (hence re-computing memoized calls):
 
 ## Tutorials 
 - see the ["Hello world!"
-  tutorial](https://github.com/amakelov/mandala_lite/blob/master/mandala_lite/tutorials/00_hello.ipynb)
+  tutorial](https://github.com/amakelov/mandala/blob/master/tutorials/00_hello.ipynb)
   for a 2-minute introduction to the library's main features
-- See [this notebook](https://github.com/amakelov/mandala_lite/blob/master/mandala_lite/tutorials/01_logistic.ipynb)
+- See [this notebook](https://github.com/amakelov/blob/master/tutorials/01_logistic.ipynb)
 for a more realistic example of a machine learning project managed by Mandala.
-- [dependency tracking](https://github.com/amakelov/mandala_lite/blob/master/mandala_lite/tutorials/02_dependencies.ipynb) tutorial
+- [dependency tracking](https://github.com/amakelov/mandala/blob/master/tutorials/02_dependencies.ipynb) tutorial
