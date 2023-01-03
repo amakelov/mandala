@@ -58,7 +58,7 @@ def _colorize(text: str, color: str) -> str:
     return f"\033[{colors[color]}m{text}\033[0m"
 
 
-def _get_colorized_diff(current: str, new: str) -> str:
+def _get_colorized_diff(current: str, new: str, style: str = "multiline") -> str:
     """
     Return a line-by-line colorized diff of the changes between `current` and
     `new`. each line removed from `current` is colored red, and each line added
@@ -75,12 +75,21 @@ def _get_colorized_diff(current: str, new: str) -> str:
         if line.startswith("@@") or line.startswith("+++") or line.startswith("---"):
             continue
         if line.startswith("-"):
+            if style == "inline":
+                line = line[1:]
             lines.append(_colorize(line, "red"))
         elif line.startswith("+"):
+            if style == "inline":
+                line = line[1:]
             lines.append(_colorize(line, "green"))
         else:
             lines.append(line)
-    return "\n".join(lines)
+    if style == "multiline":
+        return "\n".join(lines)
+    elif style == "inline":
+        return " ---> ".join(lines)
+    else:
+        raise ValueError(f"Unknown style: {style}")
 
 
 ################################################################################

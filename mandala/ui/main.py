@@ -21,7 +21,7 @@ from ..core.tps import Type, ListType
 from ..core.sig import Signature, get_arg_annotations, get_return_annotations
 from ..core.workflow import Workflow, CallStruct
 from ..core.utils import get_uid
-from ..core.deps import DependencyGraph, DepKey, OpKey
+from ..core.deps import DependencyGraph, DepKey, OpKey, GlobalVarNode, CallableNode
 from .viz import _get_colorized_diff
 
 from ..core.weaver import (
@@ -107,6 +107,8 @@ class Context:
         if self.storage is not None:
             # self.storage.sync_with_remote()
             self.storage.sync_from_remote()
+        if self.mode == MODES.run and self.storage.deps_root is not None:
+            self.storage.refresh_deps()
         return self
 
     def _undo_updates(self):
@@ -678,21 +680,35 @@ class Storage(Transactable):
                 affected_ops_ui_names = [
                     signatures[op_key].ui_name for op_key in affected_ops
                 ]
-                dependency_label = ".".join(key)
+                affected_ops_label = "[{}]".format(", ".join(affected_ops_ui_names))
+                # fix above
+                dependency_label = key[1]
                 process_msg(
-                    f'  {change_type.upper()} dependency {dependency_label} for functions [{",".join(affected_ops_ui_names)}]'
+                    f"  {change_type.upper()} dependency {dependency_label} for memoized functions {affected_ops_label}"
                 )
                 if change_type == "changed":
                     current_rep = global_graph.nodes[key].diff_representation()
                     new_rep = new_deps[key].diff_representation()
-                    process_msg(_get_colorized_diff(current=current_rep, new=new_rep))
+                    style = (
+                        "multiline"
+                        if isinstance(global_graph.nodes[key], CallableNode)
+                        else "inline"
+                    )
+                    process_msg(
+                        indent(
+                            _get_colorized_diff(
+                                current=current_rep, new=new_rep, style=style
+                            ),
+                            prefix=4 * " ",
+                        )
+                    )
                 action = get_action()
                 if action == "a":
                     raise Exception("Aborting")
                 for op_key in affected_ops:
                     actions.setdefault(op_key, []).append(action)
                 process_msg(
-                    f'Choice: {action_decoder[action]} for functions {",".join(affected_ops_ui_names)}'
+                    f"Choice: {action_decoder[action]} for memoized functions {affected_ops_label}"
                 )
         new_func_ops = {}  # ui_name -> new func op
         for op_key, op_actions in actions.items():

@@ -35,7 +35,7 @@ management in complex projects.
 - [modify memoized
   functions](#modify-memoized-functions-without-forgetting-old-calls) seamlessly without
   forgetting old calls
-- [automatic function-level dependency tracking](#dependency-tracking): get
+- [automatic function-level dependency tracking](#function-level-dependency-tracking): get
   (optional) alerts when a function's dependencies change, and decide whether to
   recompute.
 - [native data structure support](#data-structures): store and track elements of
@@ -130,8 +130,24 @@ query interface:
 </p>
 </details>
 
-### Dependency tracking
-TODO
+### Function-level dependency tracking
+It can be annoying and error-prone to manually keep track of whether a new code
+change makes a memoized result "stale". `mandala` streamlines this process
+through a very simple interface! 
+
+Behind the scenes, it tracks the dependencies of memoized functions **on the
+level of individual functions and global variables**. It presents you with a
+diff of changes, alongside the memoized functions affected by each change, and
+lets you decide whether to ignore the change (keeping the old memoized results),
+or create new versions of the functions (hence re-computing memoized calls):
+
+<details closed><summary>Show/hide gif</summary>
+<p>
+
+![06_dependencies](https://user-images.githubusercontent.com/1467702/210449697-3bd8fa87-38f1-4755-9a48-84cc9a1d2ad7.gif)
+</p>
+</details>
+
 
 ## Tutorials 
 - see the ["Hello world!"

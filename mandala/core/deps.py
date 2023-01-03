@@ -545,8 +545,18 @@ class MandalaDependencies:
         return graph
 
     def get_deps_to_ops(self) -> Dict[DepKey, List[OpKey]]:
+        """
+        Importantly, return only latest versions of each op.
+        """
         res: Dict[DepKey, List[OpKey]] = {}
-        for op_key in self.op_graphs:
+        latest_versions = {k: 0 for k, _ in self.op_graphs.keys()}
+        for k, version in self.op_graphs.keys():
+            if version > latest_versions[k]:
+                latest_versions[k] = version
+        latest_keys = {
+            (k, v) for k, v in self.op_graphs.keys() if v == latest_versions[k]
+        }
+        for op_key in latest_keys:
             graph = self.get_expanded(op_key=op_key)
             for dep_key in graph.nodes:
                 res.setdefault(dep_key, []).append(op_key)
