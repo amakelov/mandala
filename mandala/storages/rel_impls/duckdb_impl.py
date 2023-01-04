@@ -121,6 +121,15 @@ class DuckDBRelStorage(RelStorage, Transactable):
         logger.debug(f'Added column "{name}" to table "{relation}"')
 
     @transaction()
+    def drop_column(self, relation: str, name: str, conn: Optional[Connection] = None):
+        """
+        Drop a column from a table.
+        """
+        query = f"ALTER TABLE {relation} DROP COLUMN {name}"
+        conn.execute(query=query)
+        logger.debug(f'Dropped column "{name}" from table "{relation}"')
+
+    @transaction()
     def rename_relation(
         self, name: str, new_name: str, conn: Optional[Connection] = None
     ):

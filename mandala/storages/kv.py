@@ -27,8 +27,6 @@ class KVStore:
 class InMemoryStorage(KVStore):
     """
     Simple in-memory implementation for local testing and/or buffering
-
-    NOTE: delegates error handling
     """
 
     def __init__(self):

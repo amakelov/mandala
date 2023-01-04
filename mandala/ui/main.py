@@ -1,6 +1,5 @@
 from duckdb import DuckDBPyConnection as Connection
 from abc import ABC, abstractmethod
-from collections import defaultdict
 import datetime
 from pypika import Query, Table
 import pyarrow.parquet as pq
@@ -14,14 +13,14 @@ from ..storages.sigs import SigSyncer
 from ..storages.remote_storage import RemoteStorage
 from ..common_imports import *
 from ..core.config import Config
-from ..core.model import Ref, ValueRef, Call, FuncOp, make_delayed
-from ..core.builtins_ import Builtins, ListRef
+from ..core.model import Ref, Call, FuncOp, make_delayed
+from ..core.builtins_ import Builtins
 from ..core.wrapping import wrap_dict, wrap_list, unwrap
-from ..core.tps import Type, ListType
+from ..core.tps import Type
 from ..core.sig import Signature, get_arg_annotations, get_return_annotations
 from ..core.workflow import Workflow, CallStruct
 from ..core.utils import get_uid
-from ..core.deps import DependencyGraph, DepKey, OpKey, GlobalVarNode, CallableNode
+from ..core.deps import DependencyGraph, DepKey, OpKey, CallableNode, Tracer
 from .viz import _get_colorized_diff
 
 from ..core.weaver import (
@@ -32,7 +31,7 @@ from ..core.weaver import (
 )
 from ..core.compiler import Compiler, QueryGraph
 
-from .utils import wrap_inputs, wrap_outputs, bind_inputs, format_as_outputs
+from .utils import wrap_inputs, bind_inputs, format_as_outputs
 from ..utils import ask_user
 
 if Config.has_dask:
@@ -310,14 +309,17 @@ class Storage(Transactable):
             call_uid
         )
 
-    def call_get(self, call_uid: str) -> Call:
+    @transaction()
+    def call_get(self, call_uid: str, conn: Optional[Connection] = None) -> Call:
         if self.call_cache.exists(call_uid):
             return self.call_cache.get(call_uid)
         else:
-            lazy_call = self.rel_adapter.call_get_lazy(call_uid)
+            lazy_call = self.rel_adapter.call_get_lazy(call_uid, conn=conn)
             # load the values of the inputs and outputs
-            inputs = {k: self.obj_get(v.uid) for k, v in lazy_call.inputs.items()}
-            outputs = [self.obj_get(v.uid) for v in lazy_call.outputs]
+            inputs = {
+                k: self.obj_get(v.uid, conn=conn) for k, v in lazy_call.inputs.items()
+            }
+            outputs = [self.obj_get(v.uid, conn=conn) for v in lazy_call.outputs]
             call_without_outputs = lazy_call.set_input_values(inputs=inputs)
             call = call_without_outputs.set_output_values(outputs=outputs)
             return call
@@ -330,10 +332,11 @@ class Storage(Transactable):
     def call_set(self, call_uid: str, call: Call) -> None:
         self.call_cache.set(call_uid, call)
 
-    def obj_get(self, obj_uid: str) -> Ref:
+    @transaction()
+    def obj_get(self, obj_uid: str, conn: Optional[Connection] = None) -> Ref:
         if self.obj_cache.exists(obj_uid):
             return self.obj_cache.get(obj_uid)
-        return self.rel_adapter.obj_get(uid=obj_uid)
+        return self.rel_adapter.obj_get(uid=obj_uid, conn=conn)
 
     def obj_set(self, obj_uid: str, vref: Ref) -> None:
         self.obj_cache.set(obj_uid, vref)
@@ -817,7 +820,7 @@ class Storage(Transactable):
             memoization_tables=tables_by_fq,
         )
 
-    def _process_call_found(self, call_uid) -> Tuple[List[Ref], Call]:
+    def _process_call_found(self, call_uid: str) -> Tuple[List[Ref], Call]:
         # get call from call storage
         call = self.call_get(call_uid)
         # get outputs from obj storage

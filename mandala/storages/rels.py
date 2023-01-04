@@ -403,10 +403,11 @@ class SigAdapter(Transactable):
         assert (sig.internal_name, sig.version) in sigs.keys()
         current = sigs[(sig.internal_name, sig.version)]
         # the `update` method also ensures that the signature is compatible
+        n_outputs_new = sig.n_outputs
+        n_outputs_old = current.n_outputs
         new_sig, updates = current.update(new=sig)
         # update the signature data
         sigs[(sig.internal_name, sig.version)] = new_sig
-        self.dump_state(state=sigs, conn=conn)
         # create new inputs in the database, if any
         for new_input, default_value in updates.items():
             internal_input_name = new_sig.ui_to_internal_input_map[new_input]
@@ -421,10 +422,33 @@ class SigAdapter(Transactable):
             # not there already
             default_vref = ValueRef(uid=default_uid, obj=default_value, in_memory=True)
             self.rel_adapter.obj_set(uid=default_uid, value=default_vref, conn=conn)
+        # update the outputs in the database, if this is allowed
+        n_rows = self.rel_storage.get_count(table=new_sig.versioned_ui_name, conn=conn)
+        if n_rows > 0 and n_outputs_new != n_outputs_old:
+            raise ValueError(
+                f"Cannot change the number of outputs of a signature that has already been used. "
+                f"Current number of outputs: {n_outputs_old}, new number of outputs: {n_outputs_new}."
+            )
+        if n_outputs_new > n_outputs_old:
+            for i in range(n_outputs_old, n_outputs_new):
+                self.rel_storage.create_column(
+                    relation=new_sig.versioned_ui_name,
+                    name=dump_output_name(index=i),
+                    default_value=None,
+                    conn=conn,
+                )
+        if n_outputs_new < n_outputs_old:
+            for i in range(n_outputs_new, n_outputs_old):
+                self.rel_storage.drop_column(
+                    relation=new_sig.versioned_ui_name,
+                    name=dump_output_name(index=i),
+                    conn=conn,
+                )
         if len(updates) > 0:
             logger.debug(
                 f"Updated signature:\n    new inputs:{updates} new signature:\n    {sig}"
             )
+        self.dump_state(state=sigs, conn=conn)
 
     @transaction()
     def update_ui_name(

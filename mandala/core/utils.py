@@ -1,6 +1,7 @@
 import hashlib
 import textwrap
 import importlib
+from weakref import WeakKeyDictionary
 from .config import *
 from ..common_imports import *
 
@@ -118,3 +119,19 @@ def remove_func_signature_and_comments(source: str) -> str:
     assert isinstance(body[0], ast.FunctionDef)
     func_body = body[0].body
     return ast.unparse(func_body)
+
+
+class UIDCache:
+    def __init__(self):
+        self.cache = WeakKeyDictionary()
+
+    def get(self, obj) -> str:
+        if obj in self.cache:
+            return self.cache[obj]
+        else:
+            uid = Hashing.get_content_hash(obj)
+            try:
+                self.cache[obj] = uid
+            except TypeError:
+                pass
+            return uid

@@ -42,19 +42,19 @@ def test_signatures():
         assert False
     except ValueError:
         assert True
-    # change number of outputs
-    new = Signature(
-        ui_name="f",
-        input_names={"x", "y"},
-        n_outputs=2,
-        defaults={"y": 42},
-        version=0,
-    )
-    try:
-        sig.update(new=new)
-        assert False
-    except ValueError:
-        assert True
+    # # change number of outputs
+    # new = Signature(
+    #     ui_name="f",
+    #     input_names={"x", "y"},
+    #     n_outputs=2,
+    #     defaults={"y": 42},
+    #     version=0,
+    # )
+    # try:
+    #     sig.update(new=new)
+    #     assert False
+    # except ValueError:
+    #     assert True
     # remove default
     new = Signature(
         ui_name="f",
@@ -104,3 +104,44 @@ def test_output_name_failure():
         assert False
     except:
         assert True
+
+
+def test_changing_num_outputs():
+
+    storage = Storage()
+
+    @op
+    def f(x: int):
+        return x
+
+    try:
+        with storage.run():
+            f(1)
+        assert False
+    except AssertionError:
+        assert True
+
+    @op
+    def f(x: int) -> int:
+        return x
+
+    with storage.run():
+        f(1)
+
+    @op
+    def f(x: int) -> Tuple[int, int]:
+        return x
+
+    try:
+        with storage.run():
+            f(1)
+        assert False
+    except ValueError:
+        assert True
+
+    @op
+    def f(x: int) -> int:
+        return x
+
+    with storage.run():
+        f(1)

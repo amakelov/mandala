@@ -206,8 +206,8 @@ class Signature:
                 return False, "Internal input names must be a superset of current"
         if not set.issubset(set(self.input_names), set(new.input_names)):
             return False, "Removing inputs is not supported"
-        if not self.n_outputs == new.n_outputs:
-            return False, "Changing the number of outputs is not supported"
+        # if not self.n_outputs == new.n_outputs:
+        #     return False, "Changing the number of outputs is not supported"
         if not is_subdict(self.defaults, new.defaults):
             return False, "New defaults are inconsistent with current defaults"
         if new.has_internal_data and not is_subdict(
@@ -257,6 +257,8 @@ class Signature:
                     name=k, default=new_defaults[k], internal_name=internal_name
                 )
                 updates[k] = new_defaults[k]
+        if new.n_outputs != self.n_outputs:
+            new_sig.n_outputs = new.n_outputs
         return new_sig, updates
 
     def create_input(
