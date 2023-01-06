@@ -1,0 +1,139 @@
+baseURL = "https://amakelov.github.io/mandala"
+languageCode = 'en-us'
+title = "Mandala documentation"
+paginate = 5
+theme = "PaperMod"
+enableRobotsTXT = true
+buildDrafts = false
+buildFuture = false
+buildExpired = false
+googleAnalytics = "UA-123-45"
+pygmentsUseClasses = true
+
+[minify]
+disableXML = true
+minifyOutput = true
+
+[params]
+env = "production"
+title = "Blog"
+keywords = [ "Blog", "Portfolio", "PaperMod" ]
+# author = "Alex Makelov"
+images = [ "<link or path of image for opengraph, twitter-cards>" ]
+DateFormat = "January 6, 2023"
+defaultTheme = "auto"
+disableThemeToggle = false
+ShowReadingTime = false
+ShowShareButtons = false
+ShowPostNavLinks = false
+ShowBreadCrumbs = false
+ShowCodeCopyButtons = true
+ShowWordCount = false
+ShowRssButtonInSectionTermList = true
+UseHugoToc = true
+disableSpecial1stPost = false
+disableScrollToTop = false
+comments = false
+hidemeta = false
+hideSummary = false
+showtoc = true
+tocopen = false
+
+  [params.assets]
+  disableHLJS = false
+  # favicon = "<link / abs url>"
+  # favicon16x16 = "<link / abs url>"
+  # favicon32x32 = "<link / abs url>"
+  # apple_touch_icon = "<link / abs url>"
+  # safari_pinned_tab = "<link / abs url>"
+
+  [params.label]
+  text = "Mandala documentation"
+  # icon = "/apple-touch-icon.png"
+  # iconHeight = 35
+
+  [params.profileMode]
+  enabled = false
+  title = "ExampleSite"
+  subtitle = "This is subtitle"
+  imageUrl = "<img location>"
+  imageWidth = 120
+  imageHeight = 120
+  imageTitle = "my image"
+
+    [[params.profileMode.buttons]]
+    name = "Posts"
+    url = "posts"
+
+    [[params.profileMode.buttons]]
+    name = "Tags"
+    url = "tags"
+
+[params.analytics.google]
+# SiteVerificationTag = "XYZabc"
+
+[params.analytics.bing]
+# SiteVerificationTag = "XYZabc"
+
+[params.analytics.yandex]
+# SiteVerificationTag = "XYZabc"
+
+[params.cover]
+  hidden = true
+  hiddenInList = true
+  hiddenInSingle = true
+  linkFullImages = true
+
+  # [params.editPost]
+  # URL = "https://github.com/<path_to_repo>/content"
+  # Text = "Suggest Changes"
+  # appendFilePath = true
+
+  [params.fuseOpts]
+  isCaseSensitive = false
+  shouldSort = true
+  location = 0
+  distance = 1_000
+  threshold = 0.4
+  minMatchCharLength = 0
+  keys = [ "title", "permalink", "summary", "content" ]
+
+# [[menu.main]]
+#   identifier = "about"
+#   name = "about"
+#   url = "/about/"
+#   weight = 10
+
+# [[menu.main]]
+#   identifier = "archives"
+#   name = "archives"
+#   url = "/archives/"
+#   weight = 10
+  
+# [[menu.main]]
+#   identifier = "categories"
+#   name = "categories"
+#   url = "/categories/"
+#   weight = 10
+
+# [[menu.main]]
+#   identifier = "tags"
+#   name = "tags"
+#   url = "/tags/"
+#   weight = 20
+
+# [[menu.main]]
+#   identifier = "blog"
+#   name = "blog"
+#   url = "/blog/"
+#   weight = 10
+
+
+[markup.highlight]
+codeFences = true
+guessSyntax = true
+lineNos = false
+noClasses = false
+
+[outputs]
+home = [ "HTML", "RSS", "JSON" ]
