@@ -1,1 +1,3 @@
 User-agent: *
+Disallow:
+Sitemap: https://amakelov.github.io/mandala/sitemap.xml

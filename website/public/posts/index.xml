@@ -1,9 +1,13 @@
 <?xml version="1.0" encoding="utf-8" standalone="yes"?>
-<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/">
   <channel>
     <title>Posts on Mandala documentation</title>
     <link>https://amakelov.github.io/mandala/posts/</link>
     <description>Recent content in Posts on Mandala documentation</description>
+    <image>
+      <url>https://amakelov.github.io/mandala/%3Clink%20or%20path%20of%20image%20for%20opengraph,%20twitter-cards%3E</url>
+      <link>https://amakelov.github.io/mandala/%3Clink%20or%20path%20of%20image%20for%20opengraph,%20twitter-cards%3E</link>
+    </image>
     <generator>Hugo -- gohugo.io</generator>
     <language>en-us</language>
     <lastBuildDate>Thu, 15 Dec 2022 16:09:58 +0200</lastBuildDate><atom:link href="https://amakelov.github.io/mandala/posts/index.xml" rel="self" type="application/rss+xml" />
