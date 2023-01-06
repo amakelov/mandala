@@ -419,7 +419,20 @@ class Storage(Transactable):
     ############################################################################
     ### func refactoring
     ############################################################################
-    def rename_func(self, func: "FuncInterface", new_name: str) -> Signature:
+    def _check_rename_precondition(self, func: "FuncInterface"):
+        """
+        In order to rename function data, the function must be synced with the
+        storage, and the storage must be clean
+        """
+        if not func.is_synchronized:
+            raise RuntimeError("Cannot rename while function is not synchronized.")
+        if not self.is_clean:
+            raise RuntimeError("Cannot rename while there is uncommited work.")
+
+    @transaction()
+    def rename_func(
+        self, func: "FuncInterface", new_name: str, conn: Optional[Connection] = None
+    ) -> Signature:
         """
         Rename a memoized function.
 
@@ -430,12 +443,21 @@ class Storage(Transactable):
             - update signature object
             - invalidate the function (making it impossible to compute with it)
         """
-        _check_rename_precondition(storage=self, func=func)
-        sig = self.sig_syncer.sync_rename_sig(sig=func.func_op.sig, new_name=new_name)
+        self._check_rename_precondition(func=func)
+        sig = self.sig_syncer.sync_rename_sig(
+            sig=func.func_op.sig, new_name=new_name, conn=conn
+        )
         func.invalidate()
         return sig
 
-    def rename_arg(self, func: "FuncInterface", name: str, new_name: str) -> Signature:
+    @transaction()
+    def rename_arg(
+        self,
+        func: "FuncInterface",
+        name: str,
+        new_name: str,
+        conn: Optional[Connection] = None,
+    ) -> Signature:
         """
         Rename memoized function argument.
 
@@ -445,9 +467,9 @@ class Storage(Transactable):
             - rename table
             - invalidate the function (making it impossible to compute with it)
         """
-        _check_rename_precondition(storage=self, func=func)
+        self._check_rename_precondition(func=func)
         sig = self.sig_syncer.sync_rename_input(
-            sig=func.func_op.sig, input_name=name, new_input_name=new_name
+            sig=func.func_op.sig, input_name=name, new_input_name=new_name, conn=conn
         )
         func.invalidate()
         return sig
@@ -516,7 +538,8 @@ class Storage(Transactable):
         # evaluated_tables = {k: self.rel_adapter.evaluate_call_table(ta=v, conn=conn) for k, v in data.items() if k != Config.vref_table}
         # logger.debug(f'Applied tables from remote: {evaluated_tables}')
 
-    def sync_from_remote(self):
+    @transaction()
+    def sync_from_remote(self, conn: Optional[Connection] = None):
         """
         Pull new calls from the remote server.
 
@@ -529,16 +552,17 @@ class Storage(Transactable):
             return
         # apply signature changes from the server first, because the new calls
         # from the server may depend on the new schema.
-        self.sig_syncer.sync_from_remote()
+        self.sig_syncer.sync_from_remote(conn=conn)
         # next, pull new calls
         new_log_entries, timestamp = self.root.get_log_entries_since(
             self.last_timestamp
         )
-        self.apply_from_remote(new_log_entries)
+        self.apply_from_remote(new_log_entries, conn=conn)
         self.last_timestamp = timestamp
         logger.debug("synced from remote")
 
-    def sync_to_remote(self):
+    @transaction()
+    def sync_to_remote(self, conn: Optional[Connection] = None):
         """
         Send calls to the remote server.
 
@@ -549,20 +573,21 @@ class Storage(Transactable):
         if not isinstance(self.root, RemoteStorage):
             # todo: there should be a way to completely ignore the event log
             # when there's no remote
-            self.rel_adapter.clear_event_log()
+            self.rel_adapter.clear_event_log(conn=conn)
         else:
             # collect new work and send it to the server
-            changes = self.bundle_to_remote()
+            changes = self.bundle_to_remote(conn=conn)
             self.root.save_event_log_entry(changes)
             # clear the event log only *after* the changes have been received
-            self.rel_adapter.clear_event_log()
+            self.rel_adapter.clear_event_log(conn=conn)
             logger.debug("synced to remote")
 
-    def sync_with_remote(self):
+    @transaction()
+    def sync_with_remote(self, conn: Optional[Connection] = None):
         if not isinstance(self.root, RemoteStorage):
             return
-        self.sync_to_remote()
-        self.sync_from_remote()
+        self.sync_to_remote(conn=conn)
+        self.sync_from_remote(conn=conn)
 
     @property
     def is_clean(self) -> bool:
@@ -607,9 +632,9 @@ class Storage(Transactable):
     def get_table(
         self, func_interface: "FuncInterface", conn: Optional[Connection] = None
     ) -> pd.DataFrame:
-        with self.run():
-            df = func_interface.get_table()
-        return df
+        return self.rel_storage.get_data(
+            table=func_interface.func_op.sig.versioned_ui_name, conn=conn
+        )
 
     @transaction()
     def update_op_deps(
@@ -734,22 +759,24 @@ class Storage(Transactable):
     ############################################################################
     ### make calls in contexts
     ############################################################################
+    @transaction()
     def _load_memoization_tables(
-        self, evaluate: bool = False
+        self, evaluate: bool = False, conn: Optional[Connection] = None
     ) -> Dict[str, pd.DataFrame]:
         """
         Get a dict of {versioned internal name: memoization table} for all
         functions. Note that memoization tables are labeled by UI arg names.
         """
-        sigs = self.sig_adapter.load_state()
+        sigs = self.sig_adapter.load_state(conn=conn)
         ui_to_internal = {
             sig.versioned_ui_name: sig.versioned_internal_name for sig in sigs.values()
         }
-        ui_call_data = self.rel_adapter.get_all_call_data()
+        ui_call_data = self.rel_adapter.get_all_call_data(conn=conn)
         call_data = {ui_to_internal[k]: v for k, v in ui_call_data.items()}
         if evaluate:
             call_data = {
-                k: self.rel_adapter.evaluate_call_table(v) for k, v in call_data.items()
+                k: self.rel_adapter.evaluate_call_table(v, conn=conn)
+                for k, v in call_data.items()
             }
         return call_data
 
@@ -780,7 +807,7 @@ class Storage(Transactable):
             val_copies, func_copies, select_copies = QueryGraph._copy_graph(
                 val_queries, func_queries, select_queries=select_queries
             )
-            memoization_tables = self._load_memoization_tables()
+            memoization_tables = self._load_memoization_tables(conn=conn)
             tables = {
                 f: memoization_tables[f.func_op.sig.versioned_internal_name]
                 for f in func_copies
@@ -803,7 +830,7 @@ class Storage(Transactable):
             item for _, column in df.items() for _, item in column.items()
         ]
         self.preload_objs(uids_to_collect, conn=conn)
-        result = df.applymap(lambda key: unwrap(self.obj_get(key)))
+        result = df.applymap(lambda key: unwrap(self.obj_get(key, conn=conn)))
 
         # finally, name the columns
         cols = [
@@ -813,9 +840,12 @@ class Storage(Transactable):
         result.rename(columns=dict(zip(result.columns, cols)), inplace=True)
         return result
 
-    def visualize_query(self, select_queries: List[ValQuery]) -> None:
+    @transaction()
+    def visualize_query(
+        self, select_queries: List[ValQuery], conn: Optional[Connection] = None
+    ) -> None:
         val_queries, func_queries = traverse_all(select_queries)
-        memoization_tables = self._load_memoization_tables(evaluate=True)
+        memoization_tables = self._load_memoization_tables(evaluate=True, conn=conn)
         tables_by_fq = {
             fq: memoization_tables[fq.func_op.sig.versioned_internal_name]
             for fq in func_queries
@@ -829,9 +859,9 @@ class Storage(Transactable):
 
     @transaction()
     def _process_call_found(
-        self, call_uid: str, conn: Optional[Connection] = None
+        self, call_uid: str, conn: Connection
     ) -> Tuple[List[Ref], Call]:
-        call = self.call_get(call_uid)
+        call = self.call_get(call_uid, conn=conn)
         self.preload_objs([v.uid for v in call.outputs], conn=conn)
         wrapped_outputs = [self.obj_get(v.uid, conn=conn) for v in call.outputs]
         return wrapped_outputs, call
@@ -1062,11 +1092,6 @@ class FuncInterface:
         else:
             raise ValueError()
 
-    def get_table(self) -> pd.DataFrame:
-        storage = GlobalContext.current.storage
-        assert storage is not None
-        return storage.rel_storage.get_data(table=self.func_op.sig.versioned_ui_name)
-
 
 class AsyncioFuncInterface(FuncInterface):
     async def __call__(self, *args, **kwargs) -> Union[None, Any, Tuple[Any]]:
@@ -1094,14 +1119,3 @@ class AsyncioFuncInterface(FuncInterface):
             return await async_f(*args, __data__=__data__, **kwargs)
         else:
             return super().__call__(*args, **kwargs)
-
-
-def _check_rename_precondition(storage: Storage, func: FuncInterface):
-    """
-    In order to rename function data, the function must be synced with the
-    storage, and the storage must be clean
-    """
-    if not func.is_synchronized:
-        raise RuntimeError("Cannot rename while function is not synchronized.")
-    if not storage.is_clean:
-        raise RuntimeError("Cannot rename while there is uncommited work.")

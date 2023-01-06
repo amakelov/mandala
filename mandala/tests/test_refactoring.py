@@ -26,8 +26,7 @@ def test_add_input():
         x = inc(23)
 
     assert inc.func_op.sig.input_names == {"x", "y"}
-    with storage.run():
-        df = inc.get_table()
+    df = storage.get_table(inc)
     assert df.shape == (1, 4)
 
     ############################################################################
@@ -168,8 +167,7 @@ def test_func_renaming():
     with storage.run():
         inc_new(23)
 
-    with storage.run():
-        df = inc_new.get_table()
+    df = storage.get_table(inc_new)
     # make sure the call was not new
     assert df.shape == (1, 3)
     # make sure we did not create a new function
@@ -255,8 +253,7 @@ def test_arg_renaming():
     with storage.run():
         inc(23)
 
-    with storage.run():
-        df = inc.get_table()
+    df = storage.get_table(inc)
     # make sure the call was not new
     assert df.shape == (1, 3)
     # make sure we did not create a new function
