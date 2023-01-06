@@ -17,7 +17,7 @@ from ..core.model import Ref, Call, FuncOp, make_delayed
 from ..core.builtins_ import Builtins
 from ..core.wrapping import wrap_dict, wrap_list, unwrap
 from ..core.tps import Type
-from ..core.sig import Signature, get_arg_annotations, get_return_annotations
+from ..core.sig import Signature, _get_arg_annotations, _get_return_annotations
 from ..core.workflow import Workflow, CallStruct
 from ..core.utils import get_uid
 from ..core.deps import DependencyGraph, DepKey, OpKey, CallableNode, Tracer
@@ -304,9 +304,10 @@ class Storage(Transactable):
     ############################################################################
     ### read and write calls/objects
     ############################################################################
-    def call_exists(self, call_uid: str) -> bool:
+    @transaction()
+    def call_exists(self, call_uid: str, conn: Optional[Connection] = None) -> bool:
         return self.call_cache.exists(call_uid) or self.rel_adapter.call_exists(
-            call_uid
+            call_uid, conn=conn
         )
 
     @transaction()
@@ -324,12 +325,12 @@ class Storage(Transactable):
             call = call_without_outputs.set_output_values(outputs=outputs)
             return call
 
-    def set_call_and_objs(self, call: Call):
+    def cache_call_and_objs(self, call: Call) -> None:
         for vref in itertools.chain(call.inputs.values(), call.outputs):
-            self.obj_set(vref.uid, vref)
-        self.call_set(call_uid=call.uid, call=call)
+            self.cache_obj(vref.uid, vref)
+        self.cache_call(call_uid=call.uid, call=call)
 
-    def call_set(self, call_uid: str, call: Call) -> None:
+    def cache_call(self, call_uid: str, call: Call) -> None:
         self.call_cache.set(call_uid, call)
 
     @transaction()
@@ -338,16 +339,18 @@ class Storage(Transactable):
             return self.obj_cache.get(obj_uid)
         return self.rel_adapter.obj_get(uid=obj_uid, conn=conn)
 
-    def obj_set(self, obj_uid: str, vref: Ref) -> None:
+    def cache_obj(self, obj_uid: str, vref: Ref) -> None:
         self.obj_cache.set(obj_uid, vref)
 
-    def preload_objs(self, uids: list[str]):
+    @transaction()
+    def preload_objs(self, uids: list[str], conn: Optional[Connection] = None):
         """
         Put the objects with the given UIDs in the cache.
         """
         uids_not_in_cache = [uid for uid in uids if not self.obj_cache.exists(uid)]
         for uid, vref in zip(
-            uids_not_in_cache, self.rel_adapter.obj_gets(uids=uids_not_in_cache)
+            uids_not_in_cache,
+            self.rel_adapter.obj_gets(uids=uids_not_in_cache, conn=conn),
         ):
             self.obj_cache.set(k=uid, v=vref)
 
@@ -357,7 +360,10 @@ class Storage(Transactable):
         for k in self.obj_cache.keys():
             self.obj_cache.delete(k=k)
 
-    def commit(self, calls: Optional[list[Call]] = None):
+    @transaction()
+    def commit(
+        self, calls: Optional[list[Call]] = None, conn: Optional[Connection] = None
+    ):
         """
         Flush calls and objs from the cache that haven't yet been written to DuckDB.
         """
@@ -374,11 +380,10 @@ class Storage(Transactable):
                 for vref in itertools.chain(call.inputs.values(), call.outputs):
                     new_objs[vref.uid] = vref
             new_calls = calls
-        self.rel_adapter.obj_sets(new_objs)
-        self.rel_adapter.upsert_calls(new_calls)
+        self.rel_adapter.obj_sets(new_objs, conn=conn)
+        self.rel_adapter.upsert_calls(new_calls, conn=conn)
         if Config.evict_on_commit:
             self.evict_caches()
-
         # Remove dirty bits from cache.
         self.obj_cache.dirty_entries.clear()
         self.call_cache.dirty_entries.clear()
@@ -748,12 +753,14 @@ class Storage(Transactable):
             }
         return call_data
 
+    @transaction()
     def execute_query(
         self,
         select_queries: List[ValQuery],
         engine: str = "sql",
         filter_duplicates: bool = True,
         visualize_steps_at: Optional[Path] = None,
+        conn: Optional[Connection] = None,
     ) -> pd.DataFrame:
         """
         Execute the given queries and return the result as a pandas DataFrame.
@@ -768,7 +775,7 @@ class Storage(Transactable):
             query = compiler.compile(
                 select_queries=select_queries, filter_duplicates=filter_duplicates
             )
-            df = self.rel_storage.execute_df(query=str(query))
+            df = self.rel_storage.execute_df(query=str(query), conn=conn)
         elif engine == "naive":
             val_copies, func_copies, select_copies = QueryGraph._copy_graph(
                 val_queries, func_queries, select_queries=select_queries
@@ -795,7 +802,7 @@ class Storage(Transactable):
         uids_to_collect = [
             item for _, column in df.items() for _, item in column.items()
         ]
-        self.preload_objs(uids_to_collect)
+        self.preload_objs(uids_to_collect, conn=conn)
         result = df.applymap(lambda key: unwrap(self.obj_get(key)))
 
         # finally, name the columns
@@ -820,56 +827,29 @@ class Storage(Transactable):
             memoization_tables=tables_by_fq,
         )
 
-    def _process_call_found(self, call_uid: str) -> Tuple[List[Ref], Call]:
-        # get call from call storage
+    @transaction()
+    def _process_call_found(
+        self, call_uid: str, conn: Optional[Connection] = None
+    ) -> Tuple[List[Ref], Call]:
         call = self.call_get(call_uid)
-        # get outputs from obj storage
-        self.preload_objs([v.uid for v in call.outputs])
-        wrapped_outputs = [self.obj_get(v.uid) for v in call.outputs]
-        # return outputs and call
+        self.preload_objs([v.uid for v in call.outputs], conn=conn)
+        wrapped_outputs = [self.obj_get(v.uid, conn=conn) for v in call.outputs]
         return wrapped_outputs, call
 
-    def _process_call_not_found(
-        self,
-        func_outputs: List[Any],
-        call_uid,
-        wrapped_inputs,
-        func_op: FuncOp,
-    ) -> Tuple[List[Ref], Call, List[Call]]:
-        # wrap outputs
-        wrapped_outputs, output_calls = wrap_list(
-            objs=func_outputs,
-            annotations=get_return_annotations(
-                func_op.func, support_size=func_op.sig.n_outputs
-            ),
-        )
-        # wrapped_outputs = wrap_outputs(func_outputs, call_uid=call_uid)
-        # create call
-        call = Call(
-            uid=call_uid,
-            inputs=wrapped_inputs,
-            outputs=wrapped_outputs,
-            func_op=func_op,
-        )
-        # self.call_set(call_uid, call)
-        # set inputs and outputs in obj storage
-        for v in itertools.chain(wrapped_outputs, wrapped_inputs.values()):
-            self.obj_set(v.uid, v)
-        # return outputs and call
-        return wrapped_outputs, call, output_calls
-
+    @transaction()
     def call_run(
-        self, func_op: FuncOp, inputs: Dict[str, Union[Any, Ref]]
+        self,
+        func_op: FuncOp,
+        inputs: Dict[str, Union[Any, Ref]],
+        conn: Optional[Connection] = None,
     ) -> Tuple[List[Ref], Call]:
         wrapped_inputs, input_calls = wrap_dict(
             objs=inputs,
-            annotations=get_arg_annotations(
-                func_op.func, support=func_op.sig.input_names
-            ),
+            annotations=func_op.input_annotations,
         )
         call_uid = func_op.get_call_uid(wrapped_inputs=wrapped_inputs)
         # check if call UID exists in call storage
-        if self.call_exists(call_uid):
+        if self.call_exists(call_uid, conn=conn):
             if sys.gettrace() is not None and self.deps_root is not None:
                 data = Tracer.generate_terminal_data(
                     func=func_op.func,
@@ -877,7 +857,7 @@ class Storage(Transactable):
                     version=func_op.sig.version,
                 )
                 Tracer.break_signal(data=data)
-            return self._process_call_found(call_uid=call_uid)
+            return self._process_call_found(call_uid=call_uid, conn=conn)
         else:
             # compute op
             if Config.autounwrap_inputs and (not func_op.is_super):
@@ -888,40 +868,45 @@ class Storage(Transactable):
                 raw_inputs,
                 deps_root=self.deps_root,
             )
-            wrapped_outputs, call, output_calls = self._process_call_not_found(
-                func_outputs=outputs,
-                call_uid=call_uid,
-                wrapped_inputs=wrapped_inputs,
+            wrapped_outputs, output_calls = wrap_list(
+                objs=outputs, annotations=func_op.output_annotations
+            )
+            call = Call(
+                uid=call_uid,
+                inputs=wrapped_inputs,
+                outputs=wrapped_outputs,
                 func_op=func_op,
             )
-            for call in itertools.chain([call], input_calls, output_calls):
-                self.set_call_and_objs(call=call)
+            for constituent_call in itertools.chain([call], input_calls, output_calls):
+                self.cache_call_and_objs(call=constituent_call)
             # update dependencies only after the call has been stored
             if dependency_state_option is not None:
-                self.update_op_deps(func_op=func_op, new_deps=dependency_state_option)
+                self.update_op_deps(
+                    func_op=func_op, new_deps=dependency_state_option, conn=conn
+                )
             return wrapped_outputs, call
 
-    async def call_run_async(
-        self, func_op: FuncOp, inputs: Dict[str, Union[Any, Ref]]
-    ) -> Tuple[List[Ref], Call]:
-        wrapped_inputs = wrap_inputs(inputs)
-        call_uid = func_op.get_call_uid(wrapped_inputs=wrapped_inputs)
-        # check if call UID exists in call storage
-        if self.call_exists(call_uid):
-            return self._process_call_found(call_uid=call_uid)
-        else:
-            # compute op
-            if Config.autounwrap_inputs:
-                raw_inputs = {k: v.obj for k, v in wrapped_inputs.items()}
-            else:
-                raw_inputs = wrapped_inputs
-            outputs, dependency_state = await func_op.compute_async(raw_inputs)
-            return self._process_call_not_found(
-                func_outputs=outputs,
-                call_uid=call_uid,
-                wrapped_inputs=wrapped_inputs,
-                func_op=func_op,
-            )
+    # async def call_run_async(
+    #     self, func_op: FuncOp, inputs: Dict[str, Union[Any, Ref]]
+    # ) -> Tuple[List[Ref], Call]:
+    #     wrapped_inputs = wrap_inputs(inputs)
+    #     call_uid = func_op.get_call_uid(wrapped_inputs=wrapped_inputs)
+    #     # check if call UID exists in call storage
+    #     if self.call_exists(call_uid):
+    #         return self._process_call_found(call_uid=call_uid)
+    #     else:
+    #         # compute op
+    #         if Config.autounwrap_inputs:
+    #             raw_inputs = {k: v.obj for k, v in wrapped_inputs.items()}
+    #         else:
+    #             raw_inputs = wrapped_inputs
+    #         outputs, dependency_state = await func_op.compute_async(raw_inputs)
+    #         return self._process_call_not_found(
+    #             func_outputs=outputs,
+    #             call_uid=call_uid,
+    #             wrapped_inputs=wrapped_inputs,
+    #             func_op=func_op,
+    #         )
 
     def call_query(
         self, func_op: FuncOp, inputs: Dict[str, ValQuery]
@@ -933,12 +918,7 @@ class Storage(Transactable):
     def call_batch(
         self, func_op: FuncOp, inputs: Dict[str, Ref]
     ) -> Tuple[List[Ref], CallStruct]:
-        output_types = [
-            Type.from_annotation(a)
-            for a in get_return_annotations(
-                func=func_op.func, support_size=func_op.sig.n_outputs
-            )
-        ]
+        output_types = [Type.from_annotation(a) for a in func_op.output_annotations]
         outputs = [make_delayed(tp=tp) for tp in output_types]
         call_struct = CallStruct(func_op=func_op, inputs=inputs, outputs=outputs)
         return outputs, call_struct

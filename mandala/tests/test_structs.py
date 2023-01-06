@@ -44,8 +44,9 @@ def test_unit():
     with storage.query() as q:
         x = Q().named("x")
         lst = repeat(x).named("lst")
-        first_elt = lst[0].named("first_elt")
-        df = q.get_table(x, lst, first_elt)
+        first_elt = lst[Q()].named("first_elt")
+        second_elt = lst[Q()].named("second_elt")
+        df = q.get_table(x, lst, first_elt, second_elt)
 
     ### dicts
     @op

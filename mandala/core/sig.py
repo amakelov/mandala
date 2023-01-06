@@ -390,7 +390,7 @@ def _postprocess_outputs(sig: Signature, result) -> List[Any]:
         return list(result)
 
 
-def get_arg_annotations(func: Callable, support: List[str]) -> Dict[str, Any]:
+def _get_arg_annotations(func: Callable, support: List[str]) -> Dict[str, Any]:
     if Config.has_torch and isinstance(func, torch.jit.ScriptFunction):
         return {a.name: a.type for a in func.schema.arguments}
     # Use the inspect module to get the function's signature
@@ -418,7 +418,7 @@ def is_typing_tuple(obj: Any) -> bool:
         return False
 
 
-def get_return_annotations(func: Callable, support_size: int) -> List[Any]:
+def _get_return_annotations(func: Callable, support_size: int) -> List[Any]:
     if Config.has_torch and isinstance(func, torch.jit.ScriptFunction):
         return_annotation = func.schema.returns[0].type
     else:

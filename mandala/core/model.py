@@ -4,8 +4,8 @@ from .utils import Hashing
 from .sig import (
     Signature,
     _postprocess_outputs,
-    get_arg_annotations,
-    get_return_annotations,
+    _get_arg_annotations,
+    _get_return_annotations,
 )
 from .tps import Type, AnyType, ListType, DictType, SetType
 from .deps import DependencyGraph, Tracer, TerminalData
@@ -181,6 +181,7 @@ class FuncOp:
         version: Optional[int] = None,
         ui_name: Optional[str] = None,
         is_super: bool = False,
+        n_outputs: Optional[int] = None,
         _is_builtin: bool = False,
     ):
         self.is_super = is_super
@@ -200,20 +201,24 @@ class FuncOp:
             self.sig = Signature.from_py(
                 sig=self.py_sig, name=ui_name, version=version, _is_builtin=_is_builtin
             )
+        if n_outputs is not None:
+            self.sig.n_outputs = n_outputs
+
+    @property
+    def input_annotations(self) -> Dict[str, Any]:
+        return _get_arg_annotations(func=self.func, support=list(self.sig.input_names))
 
     @property
     def input_types(self) -> Dict[str, Type]:
-        annotations = get_arg_annotations(
-            func=self.func, support=list(self.sig.input_names)
-        )
-        return {k: Type.from_annotation(v) for k, v in annotations.items()}
+        return {k: Type.from_annotation(v) for k, v in self.input_annotations.items()}
+
+    @property
+    def output_annotations(self) -> List[Any]:
+        return _get_return_annotations(func=self.func, support_size=self.sig.n_outputs)
 
     @property
     def output_types(self) -> List[Type]:
-        return [
-            Type.from_annotation(v)
-            for v in get_return_annotations(self.func, support_size=self.sig.n_outputs)
-        ]
+        return [Type.from_annotation(a) for a in self.output_annotations]
 
     def _set_func(self, func: Callable) -> None:
         # set the function only

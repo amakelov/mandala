@@ -65,7 +65,6 @@ class ValQuery:
     def __getitem__(self, idx: Union[int, str, "ValQuery"]) -> "ValQuery":
         tp = self.tp or _infer_type(self)
         if isinstance(tp, ListType):
-            assert isinstance(idx, int)
             return BuiltinQueries.GetListItemQuery(
                 lst=self, idx=qwrap(idx, tp=tp.elt_type)
             )
@@ -161,6 +160,10 @@ def traverse_all(val_queries: List[ValQuery]) -> Tuple[List[ValQuery], List[Func
     return val_queries_, op_queries_
 
 
+def _filter_qdict(dct: Dict[str, Any]) -> Dict[str, ValQuery]:
+    return {k: qwrap(v) for k, v in dct.items() if v is not None}
+
+
 class BuiltinQueries:
     @staticmethod
     def list_relation(
@@ -168,25 +171,27 @@ class BuiltinQueries:
         elt: Optional[Union[ValQuery, Any]] = None,
         idx: Optional[Union[ValQuery, int]] = None,
     ):
-        inputs = {"lst": lst, "elt": elt, "idx": idx}
-        inputs = {k: v for k, v in inputs.items() if v is not None}
-        FuncQuery.link(inputs=inputs, func_op=Builtins.list_op)
+        FuncQuery.link(
+            inputs=_filter_qdict({"lst": lst, "elt": elt, "idx": idx}),
+            func_op=Builtins.list_op,
+        )
 
     @staticmethod
     def dict_relation(
         dct: Optional[ValQuery] = None,
-        key: Optional[ValQuery] = None,
-        val: Optional[ValQuery] = None,
+        key: Optional[Union[ValQuery, str]] = None,
+        val: Optional[Union[ValQuery, Any]] = None,
     ):
-        inputs = {"dct": dct, "key": key, "val": val}
-        inputs = {k: v for k, v in inputs.items() if v is not None}
-        FuncQuery.link(inputs=inputs, func_op=Builtins.dict_op)
+        FuncQuery.link(
+            inputs=_filter_qdict({"dct": dct, "key": key, "val": val}),
+            func_op=Builtins.dict_op,
+        )
 
     @staticmethod
     def set_relation(st: Optional[ValQuery] = None, elt: Optional[ValQuery] = None):
-        inputs = {"st": st, "elt": elt}
-        inputs = {k: v for k, v in inputs.items() if v is not None}
-        FuncQuery.link(inputs=inputs, func_op=Builtins.set_op)
+        FuncQuery.link(
+            inputs=_filter_qdict({"st": st, "elt": elt}), func_op=Builtins.set_op
+        )
 
     ############################################################################
     ### special cases

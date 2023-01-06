@@ -145,3 +145,23 @@ def test_changing_num_outputs():
 
     with storage.run():
         f(1)
+
+
+def test_nout():
+    storage = Storage()
+
+    @op(nout=2)
+    def f(x: int):
+        return x, x
+
+    with storage.run():
+        a, b = f(1)
+        assert unwrap(a) == 1 and unwrap(b) == 1
+
+    @op(nout=0)
+    def g(x: int) -> Tuple[int, int]:
+        pass
+
+    with storage.run():
+        c = g(1)
+        assert c is None

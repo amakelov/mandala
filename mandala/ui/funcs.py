@@ -25,6 +25,7 @@ class FuncDecorator:
     def __call__(self, func: Callable) -> "func":
         func_op = FuncOp(
             func=func,
+            n_outputs=self.kwargs.get("n_outputs"),
             version=self.kwargs.get("version"),
             ui_name=self.kwargs.get("ui_name"),
             is_super=self.kwargs.get("is_super", False),
@@ -41,13 +42,14 @@ class FuncDecorator:
 
 def op(
     version: Union[Callable, Optional[int]] = None,
+    nout: Optional[int] = None,
     ui_name: Optional[str] = None,
     executor: str = "python",
 ) -> Callable:
     if callable(version):
         # a hack to handle the @op case
         func = version
-        func_op = FuncOp(func=func)
+        func_op = FuncOp(func=func, n_outputs=nout)
         if inspect.iscoroutinefunction(func):
             return AsyncioFuncInterface(func_op=func_op)
         else:
@@ -56,6 +58,7 @@ def op(
         # @op(...) case
         return FuncDecorator(
             version=version,
+            n_outputs=nout,
             ui_name=ui_name,
             executor=executor,
         )

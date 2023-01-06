@@ -19,7 +19,7 @@ from mandala.core.utils import Hashing, get_uid
 from mandala.core.compiler import *
 from mandala.core.model import Type, ListType, make_delayed
 from mandala.core.builtins_ import Builtins
-from mandala.core.sig import get_return_annotations
+from mandala.core.sig import _get_return_annotations
 from mandala.storages.remote_storage import RemoteStorage
 from mandala.ui.main import SimpleWorkflowExecutor, FuncInterface
 
@@ -598,12 +598,7 @@ class SingleClientSimulator(RuleBasedStateMachine):
             name: random.choice(var_to_values[var]) for name, var in input_vars.items()
         }
         func_op = op_node.func_op
-        output_types = [
-            Type.from_annotation(a)
-            for a in get_return_annotations(
-                func=func_op.func, support_size=func_op.sig.n_outputs
-            )
-        ]
+        output_types = [Type.from_annotation(a) for a in func_op.output_annotations]
         outputs = [make_delayed(tp=tp) for tp in output_types]
         call_struct = CallStruct(
             func_op=op_node.func_op, inputs=input_values, outputs=outputs
