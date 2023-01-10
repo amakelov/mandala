@@ -316,20 +316,26 @@ def _infer_type(val_query: ValQuery) -> Type:
         raise RuntimeError(f"Multiple types for {val_query}: {struct_tps}")
 
 
-def visualize_computational_graph(
-    val_queries: List[ValQuery],
-    func_queries: List[FuncQuery],
-    layout: Literal["computational", "bipartite"] = "computational",
-    memoization_tables: Optional[Dict[FuncQuery, pd.DataFrame]] = None,
-    output_path: Optional[Path] = None,
-):
-    if memoization_tables is not None:
-        assert layout == "bipartite"
+
+def computational_graph_to_dot(val_queries: List[ValQuery],
+                               func_queries: List[FuncQuery],
+                               layout: Literal["computational", "bipartite"] = "computational",
+                               memoization_tables: Optional[Dict[FuncQuery, pd.DataFrame]] = None) -> str:
+    # if memoization_tables is not None:
+    #     assert layout == "bipartite"
     nodes = {}  # val/op query -> Node obj
     edges = []
+    col_names = []
+    counter = 0
     for val_query in val_queries:
+        if val_query.column_name is not None:
+            col_names.append(val_query.column_name)
+        else:
+            col_names.append(f"unnamed_{counter}")
+            counter += 1
+    for val_query, col_name in zip(val_queries, col_names):
         html_label = HTMLBuilder()
-        html_label.add_row(cells=[Cell(text=str(val_query.column_name), port=None)])
+        html_label.add_row(cells=[Cell(text=str(col_name), port=None, bold=True, bgcolor=SOLARIZED_LIGHT["orange"], font_color=SOLARIZED_LIGHT["base3"])])
         node = Node(
             internal_name=str(id(val_query)),
             # label=str(val_query.column_name),
@@ -340,19 +346,22 @@ def visualize_computational_graph(
         nodes[val_query] = node
     for func_query in func_queries:
         html_label = HTMLBuilder()
+        func_preview = f'{func_query.func_op.sig.ui_name}({", ".join(func_query.inputs.keys())})'
         title_cell = Cell(
-            text=func_query.func_op.sig.ui_name,
+            text=func_preview,
             port=None,
             bgcolor=SOLARIZED_LIGHT["blue"],
+            bold=True,
+            font_color=SOLARIZED_LIGHT["base3"],
         )
         input_cells = []
         output_cells = []
         for input_name in func_query.inputs.keys():
-            input_cells.append(Cell(text=input_name, port=input_name))
+            input_cells.append(Cell(text=input_name, port=input_name, bold=True))
             # html_label.add_row(elts=[Cell(text=input_name, port=input_name)])
         for output_idx in range(len(func_query.outputs)):
             output_cells.append(
-                Cell(text=f"output_{output_idx}", port=f"output_{output_idx}")
+                Cell(text=f"output_{output_idx}", port=f"output_{output_idx}", bold=True)
             )
         if layout == "bipartite":
             html_label.add_row(cells=[title_cell])
@@ -367,7 +376,7 @@ def visualize_computational_graph(
                 df = memoization_tables[func_query][column_names]
                 rows = list(df.head().itertuples(index=False))
                 for tup in rows:
-                    html_label.add_row(cells=[Cell(text=str(x)) for x in tup])
+                    html_label.add_row(cells=[Cell(text=str(x), bold=True) for x in tup])
                 # add port names to the cells in the *last* row
                 for cell, port_name in zip(html_label.rows[-1], port_names):
                     cell.port = port_name
@@ -418,6 +427,23 @@ def visualize_computational_graph(
                     arrowhead="none" if layout == "bipartite" else None,
                 )
             )
-    dot_string = to_dot_string(nodes=list(nodes.values()), edges=edges, groups=[])
-    output_path = Path("graph.svg") if output_path is None else output_path
+    return to_dot_string(nodes=list(nodes.values()), edges=edges, groups=[])
+
+def visualize_computational_graph(
+    val_queries: List[ValQuery],
+    func_queries: List[FuncQuery],
+    layout: Literal["computational", "bipartite"] = "computational",
+    memoization_tables: Optional[Dict[FuncQuery, pd.DataFrame]] = None,
+    output_path: Optional[Path] = None,
+):
+    dot_string = computational_graph_to_dot(
+        val_queries=val_queries,
+        func_queries=func_queries,
+        layout=layout,
+        memoization_tables=memoization_tables,
+    )
+    if output_path is None:
+        tempfile_obj, output_name = tempfile.mkstemp(suffix=".svg")
+        output_path = Path(output_name)
     write_output(output_path=output_path, dot_string=dot_string, output_ext="svg")
+    return output_path

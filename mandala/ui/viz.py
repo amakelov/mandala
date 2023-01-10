@@ -102,14 +102,25 @@ class Cell:
         port: Optional[str] = None,
         colspan: int = 1,
         bgcolor: Color = SOLARIZED_LIGHT["base3"],
+        border_color: Color = SOLARIZED_LIGHT["base03"], # border color
+        font_color: Optional[Color] = None,
+        bold: bool = False,
     ):
         self.port = port
         self.text = text
         self.colspan = colspan
         self.bgcolor = bgcolor
+        self.border_color = border_color
+        self.font_color = font_color
+        self.bold = bold
 
     def to_dot_string(self) -> str:
-        return f'<TD PORT="{self.port}" BGCOLOR="{self.bgcolor}" COLSPAN="{self.colspan}">{self.text}</TD>'
+        text_str = self.text
+        if self.bold:
+            text_str = f"<B>{text_str}</B>"
+        if self.font_color is not None:
+            text_str = f'<FONT COLOR="{self.font_color}">{text_str}</FONT>'
+        return f'<TD ALIGN="CENTER" PORT="{self.port}" COLOR="{self.border_color}" BGCOLOR="{self.bgcolor}" COLSPAN="{self.colspan}">{text_str}</TD>'
 
 
 class HTMLBuilder:
@@ -120,18 +131,16 @@ class HTMLBuilder:
         self.rows.append(cells)
 
     def to_html_like_label(self) -> str:
-        start = '<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">'
+        start = '<TABLE ALIGN="CENTER" BORDER="0" CELLBORDER="1" CELLSPACING="0" >'
         end = "</TABLE>"
         # broadcast colspan
         row_sizes = set([len(row) for row in self.rows])
-        if len(row_sizes) > 1 and 1 not in row_sizes:
-            raise ValueError(
-                "All rows must have the same number of columns, or else only a single column"
-            )
-        num_columns = max(row_sizes)
+        lcm = np.lcm.reduce(list(row_sizes))
         for row in self.rows:
-            if len(row) == 1:
-                row[0].colspan = num_columns
+            elt_colspan = lcm // len(row)
+            for cell in row:
+                cell.colspan = elt_colspan
+        
         rows = []
         for row in self.rows:
             rows.append("<TR>")

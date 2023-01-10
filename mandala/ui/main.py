@@ -21,13 +21,13 @@ from ..core.sig import Signature, _get_arg_annotations, _get_return_annotations
 from ..core.workflow import Workflow, CallStruct
 from ..core.utils import get_uid
 from ..core.deps import DependencyGraph, DepKey, OpKey, CallableNode, Tracer
-from .viz import _get_colorized_diff
+from .viz import _get_colorized_diff, write_output
 
 from ..core.weaver import (
     ValQuery,
     FuncQuery,
     traverse_all,
-    visualize_computational_graph,
+    computational_graph_to_dot,
 )
 from ..core.compiler import Compiler, QueryGraph
 
@@ -842,7 +842,7 @@ class Storage(Transactable):
 
     @transaction()
     def visualize_query(
-        self, select_queries: List[ValQuery], conn: Optional[Connection] = None
+        self, select_queries: List[ValQuery],  how: str = 'none', output_path: Optional[Path] = None, conn: Optional[Connection] = None
     ) -> None:
         val_queries, func_queries = traverse_all(select_queries)
         memoization_tables = self._load_memoization_tables(evaluate=True, conn=conn)
@@ -850,12 +850,15 @@ class Storage(Transactable):
             fq: memoization_tables[fq.func_op.sig.versioned_internal_name]
             for fq in func_queries
         }
-        visualize_computational_graph(
+        dot_string = computational_graph_to_dot(
             val_queries=val_queries,
             func_queries=func_queries,
-            layout="bipartite",
+            layout="computational",
             memoization_tables=tables_by_fq,
         )
+        output_ext = "svg" if how in ["browser"] else "png"
+        write_output(dot_string=dot_string, output_ext=output_ext, 
+                     output_path=output_path, show_how=how)
 
     @transaction()
     def _process_call_found(
