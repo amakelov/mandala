@@ -1,15 +1,24 @@
 from ..common_imports import *
 from ..core.model import FuncOp, Ref, Call, wrap
-from ..core.sig import Signature
+from ..core.wrapping import unwrap
 from ..core.utils import Hashing
 from ..core.config import Config
 from ..core.weaver import ValQuery, qwrap
+from textwrap import shorten
+
+if Config.has_rich:
+    from rich import print as pprint
+else:
+    from pprint import pprint
 
 
 class MODES:
     run = "run"
     query = "query"
     batch = "batch"
+    define = "define"
+
+    all_ = (run, query, batch, define)
 
 
 def wrap_inputs(inputs: Dict[str, Any]) -> Dict[str, Ref]:
@@ -70,3 +79,20 @@ def format_as_outputs(
         return outputs[0]
     else:
         return tuple(outputs)
+
+
+def debug_call(
+    func_name: str,
+    memoized: bool,
+    wrapped_inputs: Dict[str, Ref],
+    wrapped_outputs: List[Ref],
+    io_truncate: Optional[int] = 20,
+):
+    shortener = lambda s: shorten(
+        repr(unwrap(s)), width=io_truncate, break_long_words=True
+    )
+    inputs_str = ", ".join(f"{k}={shortener(v)}" for k, v in wrapped_inputs.items())
+    outputs_str = ", ".join(shortener(v) for v in wrapped_outputs)
+    pprint(
+        f'mandala({"memoized" if memoized else time.ctime()}): {func_name}({inputs_str}) -> {outputs_str}'
+    )

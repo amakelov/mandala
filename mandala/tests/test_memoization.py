@@ -80,3 +80,56 @@ def test_nosuperops():
     # re-enable for isolation
     Config.autowrap_inputs = True
     Config.autounwrap_inputs = True
+
+
+def test_retracing():
+    storage = Storage()
+
+    @op
+    def inc(x: int) -> int:
+        return x + 1
+
+    @op
+    def add(x: int, y: int) -> int:
+        return x + y
+
+    with storage.run():
+        x = 23
+        y = inc(x)
+        z = add(x, y)
+
+    with storage.run(allow_calls=False):
+        x = 23
+        y = inc(x)
+        z = add(x, y)
+
+    try:
+        with storage.run(allow_calls=False):
+            x = 24
+            y = inc(x)
+            z = add(x, y)
+        assert False
+    except Exception as e:
+        assert True
+
+
+def test_debugging():
+    storage = Storage()
+
+    @op
+    def inc(x: int) -> int:
+        return x + 1
+
+    @op
+    def add(x: int, y: int) -> int:
+        return x + y
+
+    with storage.run(debug_calls=True):
+        x = 23
+        y = inc(x)
+        z = add(x, y)
+
+    with storage.run(debug_calls=True):
+        x = 23
+        y = inc(x)
+        z = add(x, y)

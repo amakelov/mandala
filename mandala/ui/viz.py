@@ -102,7 +102,7 @@ class Cell:
         port: Optional[str] = None,
         colspan: int = 1,
         bgcolor: Color = SOLARIZED_LIGHT["base3"],
-        border_color: Color = SOLARIZED_LIGHT["base03"], # border color
+        border_color: Color = SOLARIZED_LIGHT["base03"],  # border color
         font_color: Optional[Color] = None,
         bold: bool = False,
     ):
@@ -140,7 +140,7 @@ class HTMLBuilder:
             elt_colspan = lcm // len(row)
             for cell in row:
                 cell.colspan = elt_colspan
-        
+
         rows = []
         for row in self.rows:
             rows.append("<TR>")

@@ -22,6 +22,7 @@ from ..core.workflow import Workflow, CallStruct
 from ..core.utils import get_uid
 from ..core.deps import DependencyGraph, DepKey, OpKey, CallableNode, Tracer
 from .viz import _get_colorized_diff, write_output
+from .utils import MODES, debug_call
 
 from ..core.weaver import (
     ValQuery,
@@ -36,13 +37,6 @@ from ..utils import ask_user
 
 if Config.has_dask:
     from dask import delayed
-
-
-class MODES:
-    run = "run"
-    query = "query"
-    batch = "batch"
-    define = "define"
 
 
 class OnChange:
@@ -63,10 +57,16 @@ class Context:
         storage: "Storage" = None,
         mode: str = MODES.run,
         lazy: bool = False,
+        allow_calls: bool = True,
+        debug_calls: bool = False,
+        debug_truncate: Optional[int] = 20,
     ):
         self.storage = storage
         self.mode = self.OVERRIDES.get("mode", mode)
         self.lazy = self.OVERRIDES.get("lazy", lazy)
+        self.allow_calls = self.OVERRIDES.get("allow_calls", allow_calls)
+        self.debug_calls = self.OVERRIDES.get("debug_calls", debug_calls)
+        self.debug_truncate = debug_truncate
         self.updates = {}
         self._updates_stack = []
         self._call_structs = []
@@ -87,13 +87,12 @@ class Context:
             GlobalContext.current = self
         ### verify update keys
         updates = self.updates
-        if not all(k in ("storage", "mode", "lazy") for k in updates.keys()):
-            raise ValueError(updates.keys())
-        if "mode" in updates.keys() and updates["mode"] not in (
-            MODES.run,
-            MODES.query,
-            MODES.batch,
+        if not all(
+            k in ("storage", "mode", "lazy", "allow_calls", "debug_calls")
+            for k in updates.keys()
         ):
+            raise ValueError(updates.keys())
+        if "mode" in updates.keys() and updates["mode"] not in MODES.all_:
             raise ValueError(updates["mode"])
         ### backup state
         before_update = self._backup_state(keys=updates.keys())
@@ -166,8 +165,19 @@ class Context:
             raise exc_type(exc_value).with_traceback(exc_traceback)
         return None
 
-    def __call__(self, storage: Optional["Storage"] = None, **updates):
-        self.updates = {"storage": storage, **updates}
+    def __call__(
+        self,
+        storage: Optional["Storage"] = None,
+        allow_calls: bool = True,
+        debug_calls: bool = False,
+        **updates,
+    ):
+        self.updates = {
+            "storage": storage,
+            "allow_calls": allow_calls,
+            "debug_calls": debug_calls,
+            **updates,
+        }
         return self
 
     def get_table(
@@ -601,13 +611,17 @@ class Storage(Transactable):
     ############################################################################
     ### spawning contexts
     ############################################################################
-    def run(self, **kwargs) -> Context:
+    def run(
+        self, allow_calls: bool = True, debug_calls: bool = False, **updates
+    ) -> Context:
         # spawn context to execute or retrace calls
-        return FreeContexts.run(storage=self, **kwargs)
+        return FreeContexts.run(
+            storage=self, allow_calls=allow_calls, debug_calls=debug_calls, **updates
+        )
 
-    def query(self, **kwargs) -> Context:
+    def query(self, **updates) -> Context:
         # spawn a context to define a query
-        return FreeContexts.query(storage=self, **kwargs)
+        return FreeContexts.query(storage=self, **updates)
 
     def batch(self, **kwargs) -> Context:
         # spawn a context to execute calls in batch
@@ -842,7 +856,11 @@ class Storage(Transactable):
 
     @transaction()
     def visualize_query(
-        self, select_queries: List[ValQuery],  how: str = 'none', output_path: Optional[Path] = None, conn: Optional[Connection] = None
+        self,
+        select_queries: List[ValQuery],
+        how: str = "none",
+        output_path: Optional[Path] = None,
+        conn: Optional[Connection] = None,
     ) -> None:
         val_queries, func_queries = traverse_all(select_queries)
         memoization_tables = self._load_memoization_tables(evaluate=True, conn=conn)
@@ -857,8 +875,12 @@ class Storage(Transactable):
             memoization_tables=tables_by_fq,
         )
         output_ext = "svg" if how in ["browser"] else "png"
-        write_output(dot_string=dot_string, output_ext=output_ext, 
-                     output_path=output_path, show_how=how)
+        write_output(
+            dot_string=dot_string,
+            output_ext=output_ext,
+            output_path=output_path,
+            show_how=how,
+        )
 
     @transaction()
     def _process_call_found(
@@ -874,6 +896,8 @@ class Storage(Transactable):
         self,
         func_op: FuncOp,
         inputs: Dict[str, Union[Any, Ref]],
+        allow_calls: bool = True,
+        debug_calls: bool = False,
         conn: Optional[Connection] = None,
     ) -> Tuple[List[Ref], Call]:
         wrapped_inputs, input_calls = wrap_dict(
@@ -883,6 +907,7 @@ class Storage(Transactable):
         call_uid = func_op.get_call_uid(wrapped_inputs=wrapped_inputs)
         # check if call UID exists in call storage
         if self.call_exists(call_uid, conn=conn):
+            memoized = True
             if sys.gettrace() is not None and self.deps_root is not None:
                 data = Tracer.generate_terminal_data(
                     func=func_op.func,
@@ -890,9 +915,16 @@ class Storage(Transactable):
                     version=func_op.sig.version,
                 )
                 Tracer.break_signal(data=data)
-            return self._process_call_found(call_uid=call_uid, conn=conn)
+            wrapped_outputs, call = self._process_call_found(
+                call_uid=call_uid, conn=conn
+            )
         else:
+            memoized = False
             # compute op
+            if not allow_calls:
+                raise ValueError(
+                    f"Call to {func_op.sig.ui_name} not found in call storage."
+                )
             if Config.autounwrap_inputs and (not func_op.is_super):
                 raw_inputs = unwrap(obj=wrapped_inputs, through_collections=True)
             else:
@@ -917,7 +949,14 @@ class Storage(Transactable):
                 self.update_op_deps(
                     func_op=func_op, new_deps=dependency_state_option, conn=conn
                 )
-            return wrapped_outputs, call
+        if debug_calls:
+            debug_call(
+                func_name=func_op.sig.ui_name,
+                memoized=memoized,
+                wrapped_inputs=wrapped_inputs,
+                wrapped_outputs=wrapped_outputs,
+            )
+        return wrapped_outputs, call
 
     # async def call_run_async(
     #     self, func_op: FuncOp, inputs: Dict[str, Union[Any, Ref]]
@@ -1054,7 +1093,12 @@ class FuncInterface:
         inputs, mode, storage, context = self._preprocess_call(*args, **kwargs)
         if mode == MODES.run:
             if self.executor == "python":
-                outputs, call = storage.call_run(func_op=self.func_op, inputs=inputs)
+                outputs, call = storage.call_run(
+                    func_op=self.func_op,
+                    inputs=inputs,
+                    allow_calls=context.allow_calls,
+                    debug_calls=context.debug_calls,
+                )
                 return format_as_outputs(outputs=outputs)
             # elif self.executor == 'asyncio' or inspect.iscoroutinefunction(self.func_op.func):
             elif self.executor == "dask":
@@ -1071,7 +1115,7 @@ class FuncInterface:
                         func_op=self.func_op, args=args, kwargs=kwargs, mode=MODES.run
                     )
                     outputs, _ = temp_storage.call_run(
-                        func_op=self.func_op, inputs=inputs
+                        func_op=self.func_op, inputs=inputs, mode=mode
                     )
                     return format_as_outputs(outputs=outputs)
 

@@ -77,6 +77,13 @@ class Config:
     except ImportError:
         has_pil = False
 
+    try:
+        import rich
+
+        has_rich = True
+    except ImportError:
+        has_rich = False
+
     ### some module names needed by internals
     mandala_path = get_mandala_path()
     module_name = "mandala"

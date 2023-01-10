@@ -1,5 +1,5 @@
 from ..common_imports import *
-from .model import FuncOp
+from .model import FuncOp, Ref
 from .tps import Type, ListType, DictType, SetType, AnyType
 from .builtins_ import Builtins
 from .utils import Hashing, concat_lists
@@ -287,11 +287,12 @@ def qwrap(obj: Any, tp: Optional[Type] = None) -> ValQuery:
         if isinstance(obj, ValQuery):
             return obj
         else:
+            uid = obj.uid if isinstance(obj, Ref) else Hashing.get_content_hash(obj)
             return ValQuery(
                 tp=tp,
                 creator=None,
                 created_as=None,
-                constraint=[Hashing.get_content_hash(obj)],
+                constraint=[uid],
             )
     elif pattern_type == "list":
         return BuiltinQueries.parse_list_pattern(obj=obj)[0]
@@ -316,11 +317,12 @@ def _infer_type(val_query: ValQuery) -> Type:
         raise RuntimeError(f"Multiple types for {val_query}: {struct_tps}")
 
 
-
-def computational_graph_to_dot(val_queries: List[ValQuery],
-                               func_queries: List[FuncQuery],
-                               layout: Literal["computational", "bipartite"] = "computational",
-                               memoization_tables: Optional[Dict[FuncQuery, pd.DataFrame]] = None) -> str:
+def computational_graph_to_dot(
+    val_queries: List[ValQuery],
+    func_queries: List[FuncQuery],
+    layout: Literal["computational", "bipartite"] = "computational",
+    memoization_tables: Optional[Dict[FuncQuery, pd.DataFrame]] = None,
+) -> str:
     # if memoization_tables is not None:
     #     assert layout == "bipartite"
     nodes = {}  # val/op query -> Node obj
@@ -335,7 +337,17 @@ def computational_graph_to_dot(val_queries: List[ValQuery],
             counter += 1
     for val_query, col_name in zip(val_queries, col_names):
         html_label = HTMLBuilder()
-        html_label.add_row(cells=[Cell(text=str(col_name), port=None, bold=True, bgcolor=SOLARIZED_LIGHT["orange"], font_color=SOLARIZED_LIGHT["base3"])])
+        html_label.add_row(
+            cells=[
+                Cell(
+                    text=str(col_name),
+                    port=None,
+                    bold=True,
+                    bgcolor=SOLARIZED_LIGHT["orange"],
+                    font_color=SOLARIZED_LIGHT["base3"],
+                )
+            ]
+        )
         node = Node(
             internal_name=str(id(val_query)),
             # label=str(val_query.column_name),
@@ -346,7 +358,9 @@ def computational_graph_to_dot(val_queries: List[ValQuery],
         nodes[val_query] = node
     for func_query in func_queries:
         html_label = HTMLBuilder()
-        func_preview = f'{func_query.func_op.sig.ui_name}({", ".join(func_query.inputs.keys())})'
+        func_preview = (
+            f'{func_query.func_op.sig.ui_name}({", ".join(func_query.inputs.keys())})'
+        )
         title_cell = Cell(
             text=func_preview,
             port=None,
@@ -361,7 +375,9 @@ def computational_graph_to_dot(val_queries: List[ValQuery],
             # html_label.add_row(elts=[Cell(text=input_name, port=input_name)])
         for output_idx in range(len(func_query.outputs)):
             output_cells.append(
-                Cell(text=f"output_{output_idx}", port=f"output_{output_idx}", bold=True)
+                Cell(
+                    text=f"output_{output_idx}", port=f"output_{output_idx}", bold=True
+                )
             )
         if layout == "bipartite":
             html_label.add_row(cells=[title_cell])
@@ -376,7 +392,9 @@ def computational_graph_to_dot(val_queries: List[ValQuery],
                 df = memoization_tables[func_query][column_names]
                 rows = list(df.head().itertuples(index=False))
                 for tup in rows:
-                    html_label.add_row(cells=[Cell(text=str(x), bold=True) for x in tup])
+                    html_label.add_row(
+                        cells=[Cell(text=str(x), bold=True) for x in tup]
+                    )
                 # add port names to the cells in the *last* row
                 for cell, port_name in zip(html_label.rows[-1], port_names):
                     cell.port = port_name
@@ -428,6 +446,7 @@ def computational_graph_to_dot(val_queries: List[ValQuery],
                 )
             )
     return to_dot_string(nodes=list(nodes.values()), edges=edges, groups=[])
+
 
 def visualize_computational_graph(
     val_queries: List[ValQuery],
