@@ -33,7 +33,6 @@ def wrap_constructive(obj: Any, annotation: Any) -> Tuple[Ref, List[Call]]:
         elt_calls = [c for _, cs in elt_results.values() for c in cs]
         elt_vrefs = {k: v for k, (v, _) in elt_results.items()}
         calls.extend(elt_calls)
-        sess.d = locals()
         result, construction_calls = Builtins.construct_dict(elts=elt_vrefs)
         calls.extend(construction_calls)
         return result, calls

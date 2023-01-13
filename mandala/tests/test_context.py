@@ -2,24 +2,6 @@ from mandala.all import *
 from mandala.tests.utils import *
 
 
-def test_nesting_old_api():
-    storage = Storage()
-
-    with FreeContexts.run(storage) as c:
-        assert c.mode == MODES.run
-
-    with FreeContexts.query(storage) as q:
-        assert q.mode == MODES.query
-
-    with FreeContexts.run(storage) as c:
-        assert c.mode == MODES.run
-        assert c.storage is storage
-        with c(mode=MODES.query) as q:
-            assert q.storage is storage
-            assert q.mode == MODES.query
-        assert c.mode == MODES.run
-
-
 def test_nesting_new_api():
     storage = Storage()
 

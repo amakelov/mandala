@@ -71,6 +71,7 @@ class Context:
         self._updates_stack = []
         self._call_structs = []
         self._defined_funcs: List["FuncInterface"] = []
+        self._call_buffer: List[Call] = []
 
     def _backup_state(self, keys: Iterable[str]) -> Dict[str, Any]:
         res = {}
@@ -105,7 +106,11 @@ class Context:
         if self.storage is not None:
             # self.storage.sync_with_remote()
             self.storage.sync_from_remote()
-        if self.mode == MODES.run and self.storage.deps_root is not None:
+        if (
+            self.mode == MODES.run
+            and self.storage is not None
+            and self.storage.deps_root is not None
+        ):
             self.storage.refresh_deps()
         return self
 
@@ -126,10 +131,16 @@ class Context:
         exc = None
         try:
             if self.mode == MODES.run:
-                # commit calls from temp partition to main and tabulate them
-                if Config.autocommit:
-                    self.storage.commit()
-                self.storage.sync_to_remote()
+                if self.storage is not None:
+                    # commit calls from temp partition to main and tabulate them
+                    if Config.autocommit:
+                        self.storage.commit()
+                    self.storage.sync_to_remote()
+            elif self.mode == MODES.delete:
+                print(f"Deleting {len(self._call_buffer)} calls...")
+                self.storage.rel_adapter.delete_calls(calls=self._call_buffer)
+                self._call_buffer = []
+                self.storage.rel_adapter.cleanup()
             elif self.mode == MODES.query:
                 pass
             elif self.mode == MODES.batch:
@@ -197,35 +208,6 @@ class Context:
             filter_duplicates=filter_duplicates,
             visualize_steps_at=visualize_steps_at,
         )
-
-
-class RunContext(Context):
-    OVERRIDES = {"mode": MODES.run, "lazy": False}
-
-
-class QueryContext(Context):
-    OVERRIDES = {
-        "mode": MODES.query,
-    }
-
-
-class BatchContext(Context):
-    OVERRIDES = {
-        "mode": MODES.batch,
-    }
-
-
-class DefineContext(Context):
-    OVERRIDES = {
-        "mode": MODES.define,
-    }
-
-
-class FreeContexts:
-    run = RunContext()
-    query = QueryContext()
-    batch = BatchContext()
-    define = DefineContext()
 
 
 class Storage(Transactable):
@@ -397,6 +379,10 @@ class Storage(Transactable):
         # Remove dirty bits from cache.
         self.obj_cache.dirty_entries.clear()
         self.call_cache.dirty_entries.clear()
+
+    @transaction()
+    def cleanup(self, conn: Optional[Connection] = None):
+        self.rel_adapter.cleanup(conn=conn)
 
     ############################################################################
     ### func synchronization
@@ -611,25 +597,52 @@ class Storage(Transactable):
     ############################################################################
     ### spawning contexts
     ############################################################################
+    def _nest(self, **updates) -> Context:
+        if GlobalContext.current is not None:
+            return GlobalContext.current(**updates)
+        else:
+            result = Context(**updates)
+            GlobalContext.current = result
+            return result
+
     def run(
         self, allow_calls: bool = True, debug_calls: bool = False, **updates
     ) -> Context:
         # spawn context to execute or retrace calls
-        return FreeContexts.run(
-            storage=self, allow_calls=allow_calls, debug_calls=debug_calls, **updates
+        return self._nest(
+            storage=self,
+            allow_calls=allow_calls,
+            debug_calls=debug_calls,
+            mode=MODES.run,
+            **updates,
         )
+
+    def delete(self, **updates) -> Context:
+        return self._nest(storage=self, mode=MODES.delete, **updates)
 
     def query(self, **updates) -> Context:
         # spawn a context to define a query
-        return FreeContexts.query(storage=self, **updates)
+        return self._nest(
+            storage=self,
+            mode=MODES.query,
+            **updates,
+        )
 
-    def batch(self, **kwargs) -> Context:
+    def batch(self, **updates) -> Context:
         # spawn a context to execute calls in batch
-        return FreeContexts.batch(storage=self, **kwargs)
+        return self._nest(
+            storage=self,
+            mode=MODES.batch,
+            **updates,
+        )
 
-    def define(self, **kwargs) -> Context:
+    def define(self, **updates) -> Context:
         # spawn a context to define ops. Needed for dependency tracking.
-        return FreeContexts.define(storage=self, **kwargs)
+        return self._nest(
+            storage=self,
+            mode=MODES.define,
+            **updates,
+        )
 
     ############################################################################
     ### managing dependencies
@@ -644,7 +657,9 @@ class Storage(Transactable):
 
     @transaction()
     def get_table(
-        self, func_interface: "FuncInterface", conn: Optional[Connection] = None
+        self,
+        func_interface: Union["FuncInterface", Any],
+        conn: Optional[Connection] = None,
     ) -> pd.DataFrame:
         return self.rel_storage.get_data(
             table=func_interface.func_op.sig.versioned_ui_name, conn=conn
@@ -898,6 +913,9 @@ class Storage(Transactable):
         inputs: Dict[str, Union[Any, Ref]],
         allow_calls: bool = True,
         debug_calls: bool = False,
+        _collect_calls: bool = False,
+        _recurse: bool = False,
+        _call_buffer: Optional[List[Call]] = None,
         conn: Optional[Connection] = None,
     ) -> Tuple[List[Ref], Call]:
         wrapped_inputs, input_calls = wrap_dict(
@@ -905,9 +923,10 @@ class Storage(Transactable):
             annotations=func_op.input_annotations,
         )
         call_uid = func_op.get_call_uid(wrapped_inputs=wrapped_inputs)
+        call_exists = self.call_exists(call_uid, conn=conn)
+        memoized = call_exists
         # check if call UID exists in call storage
-        if self.call_exists(call_uid, conn=conn):
-            memoized = True
+        if call_exists and not _recurse:
             if sys.gettrace() is not None and self.deps_root is not None:
                 data = Tracer.generate_terminal_data(
                     func=func_op.func,
@@ -919,9 +938,8 @@ class Storage(Transactable):
                 call_uid=call_uid, conn=conn
             )
         else:
-            memoized = False
             # compute op
-            if not allow_calls:
+            if not allow_calls and not call_exists:
                 raise ValueError(
                     f"Call to {func_op.sig.ui_name} not found in call storage."
                 )
@@ -942,13 +960,16 @@ class Storage(Transactable):
                 outputs=wrapped_outputs,
                 func_op=func_op,
             )
-            for constituent_call in itertools.chain([call], input_calls, output_calls):
-                self.cache_call_and_objs(call=constituent_call)
-            # update dependencies only after the call has been stored
-            if dependency_state_option is not None:
-                self.update_op_deps(
-                    func_op=func_op, new_deps=dependency_state_option, conn=conn
-                )
+            if not memoized:
+                for constituent_call in itertools.chain(
+                    [call], input_calls, output_calls
+                ):
+                    self.cache_call_and_objs(call=constituent_call)
+                # update dependencies only after the call has been stored
+                if dependency_state_option is not None:
+                    self.update_op_deps(
+                        func_op=func_op, new_deps=dependency_state_option, conn=conn
+                    )
         if debug_calls:
             debug_call(
                 func_name=func_op.sig.ui_name,
@@ -956,6 +977,8 @@ class Storage(Transactable):
                 wrapped_inputs=wrapped_inputs,
                 wrapped_outputs=wrapped_outputs,
             )
+        if _collect_calls:
+            _call_buffer.append(call)
         return wrapped_outputs, call
 
     # async def call_run_async(
@@ -1124,6 +1147,17 @@ class FuncInterface:
                 return delayed(daskop_f, nout=nout)(*args, __data__=__data__, **kwargs)
             else:
                 raise NotImplementedError()
+        elif mode == MODES.delete:
+            outputs, call = storage.call_run(
+                func_op=self.func_op,
+                inputs=inputs,
+                allow_calls=False,
+                debug_calls=False,
+                _collect_calls=True,
+                _recurse=True,
+                _call_buffer=context._call_buffer,
+            )
+            return format_as_outputs(outputs=outputs)
         elif mode == MODES.query:
             return format_as_outputs(
                 outputs=storage.call_query(func_op=self.func_op, inputs=inputs)

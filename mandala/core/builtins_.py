@@ -249,3 +249,37 @@ class Builtins:
         st = SetRef(uid=uid, obj=elts, in_memory=True)
         wrapped_inputs_list = [{"st": st, "elt": elt} for elt in elts]
         return st, Builtins._make_calls("__set__", wrapped_inputs_list)
+
+
+def collect_uids(ref: Ref) -> Set[str]:
+    uids = {ref.uid}
+    if isinstance(ref, ListRef):
+        uids |= {elt.uid for elt in ref.obj}
+    elif isinstance(ref, DictRef):
+        uids |= {val.uid for val in ref.obj.values()}
+    elif isinstance(ref, SetRef):
+        uids |= {elt.uid for elt in ref.obj}
+    return uids
+
+
+def collect_calls(ref: Ref) -> List[Call]:
+    calls = []
+    if isinstance(ref, ListRef):
+        assert ref.in_memory
+        _, list_calls = Builtins.construct_list(elts=ref.obj)
+        calls.extend(list_calls)
+        for elt in ref.obj:
+            calls.extend(collect_calls(elt))
+    elif isinstance(ref, DictRef):
+        assert ref.in_memory
+        _, dict_calls = Builtins.construct_dict(elts=ref.obj)
+        calls.extend(dict_calls)
+        for val in ref.obj.values():
+            calls.extend(collect_calls(val))
+    elif isinstance(ref, SetRef):
+        assert ref.in_memory
+        _, set_calls = Builtins.construct_set(elts=ref.obj)
+        calls.extend(set_calls)
+        for elt in ref.obj:
+            calls.extend(collect_calls(elt))
+    return calls

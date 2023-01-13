@@ -109,6 +109,13 @@ class Signature:
         name, version_string = versioned_name.rsplit("_", 1)
         return name, int(version_string)
 
+    @staticmethod
+    def dump_versioned_name(name: str, version: int) -> str:
+        """
+        Return a version-qualified name from a name and version
+        """
+        return f"{name}_{version}"
+
     @property
     def ui_to_internal_input_map(self) -> Dict[str, str]:
         if self._ui_to_internal_input_map is None:

@@ -9,7 +9,7 @@ from duckdb import DuckDBPyConnection as Connection
 from ..common_imports import *
 from ..core.config import Config, dump_output_name
 from ..core.model import Call, FuncOp, Ref, ValueRef
-from ..core.builtins_ import ListRef, DictRef, SetRef
+from ..core.builtins_ import ListRef, DictRef, SetRef, Builtins, collect_uids
 from ..core.wrapping import unwrap
 from ..core.sig import Signature
 from ..core.deps import DependencyGraph, MandalaDependencies
@@ -571,6 +571,15 @@ class SigAdapter(Transactable):
         return result
 
 
+class ProvTable:
+    call_uid = "call_uid"
+    internal_name = "internal_name"
+    version = "version"
+    vref_uid = "vref_uid"
+    io_name = "io_name"
+    direction = "direction"
+
+
 class RelAdapter(Transactable):
     """
     Responsible for high-level RDBMS interactions, such as
@@ -585,12 +594,14 @@ class RelAdapter(Transactable):
     VREF_TABLE = Config.vref_table
     SIGNATURES_TABLE = Config.schema_table
     DEPS_TABLE = Config.deps_table
+    PROVENANCE_TABLE = Config.provenance_table
     # tables to be excluded from certain operations
     SPECIAL_TABLES = (
         EVENT_LOG_TABLE,
         DuckDBRelStorage.TEMP_ARROW_TABLE,
         SIGNATURES_TABLE,
         DEPS_TABLE,
+        PROVENANCE_TABLE,
     )
 
     def __init__(self, rel_storage: DuckDBRelStorage, deps_root: Optional[Path] = None):
@@ -651,6 +662,21 @@ class RelAdapter(Transactable):
             if_not_exists=True,
             conn=conn,
         )
+        self.rel_storage.create_relation(
+            name=self.PROVENANCE_TABLE,
+            columns=[
+                (ProvTable.call_uid, None),
+                (ProvTable.io_name, None),
+                (ProvTable.vref_uid, None),
+                (ProvTable.direction, None),
+                (ProvTable.internal_name, None),
+                (ProvTable.version, "int"),
+            ],
+            primary_key=None,
+            defaults={},
+            if_not_exists=True,
+            conn=conn,
+        )
 
     @transaction()
     def get_call_tables(self, conn: Optional[Connection] = None) -> List[str]:
@@ -688,8 +714,8 @@ class RelAdapter(Transactable):
         self, conn: Optional[Connection] = None
     ) -> Dict[str, pd.DataFrame]:
         """
-        Return a dictionary of all the memoization tables (labeled by function
-        and version name)
+        Return a dictionary of all the memoization tables (labeled by versioned
+        ui name)
         """
         result = {}
         for table in self.get_call_tables(conn=conn):
@@ -748,7 +774,7 @@ class RelAdapter(Transactable):
         self, calls: List[Call], conn: Optional[Connection] = None
     ) -> Dict[str, pa.Table]:
         """
-        Converts call objects to a dictionary of {relation name: table
+        Converts call objects to a dictionary of {op UI name: table
         to upsert} pairs.
 
         Note that the calls can involve functions in different stages of
@@ -826,6 +852,7 @@ class RelAdapter(Transactable):
                     ),
                     conn=conn,
                 )
+        self.upsert_provenance(calls=calls, conn=conn)
 
     @transaction()
     def _query_call(self, call_uid: str, conn: Optional[Connection] = None) -> pa.Table:
@@ -863,6 +890,143 @@ class RelAdapter(Transactable):
         sig = self.sig_adapter.load_ui_sigs(conn=conn)[ui_name, version]
         return Call.from_row(results, func_op=FuncOp._from_data(f=None, sig=sig))
 
+    @transaction()
+    def delete_calls(
+        self,
+        calls: Optional[List[Call]] = None,
+        _uids_by_table: Optional[Dict[str, List[str]]] = None,
+        conn: Optional[Connection] = None,
+    ):
+        """
+        Drops calls from the relational storage.
+        """
+        if (calls is not None and len(calls) > 0) or (
+            _uids_by_table is not None and len(_uids_by_table) > 0
+        ):
+            if _uids_by_table is None:
+                for table_name, ta in self.tabulate_calls(calls).items():
+                    self.rel_storage.delete(
+                        relation=table_name,
+                        index=ta[Config.uid_col].to_pylist(),
+                        conn=conn,
+                    )
+                call_uids = [c.uid for c in calls]
+            else:
+                for table_name, uids in _uids_by_table.items():
+                    self.rel_storage.delete(relation=table_name, index=uids, conn=conn)
+                call_uids = list(itertools.chain(*_uids_by_table.values()))
+            self.delete_provenance(call_uids=call_uids, conn=conn)
+
+    @transaction()
+    def delete_vrefs(self, uids: List[str], conn: Optional[Connection] = None):
+        """
+        Drops vrefs from the relational storage.
+        """
+        if len(uids) > 0:
+            self.rel_storage.delete(relation=self.VREF_TABLE, index=uids, conn=conn)
+
+    @transaction()
+    def cleanup(self, conn: Optional[Connection] = None):
+        """
+        Clean up unused refs and calls adjacent to them.
+
+        By definition, a ref is "needed" if
+            - it is the direct input/output of a non-structural op
+            - it is an element of a ref that is in use.
+
+        All other refs are unused.
+        """
+        prov_df = self.rel_storage.get_data(table=self.PROVENANCE_TABLE, conn=conn)
+        # find the used UIDs
+        directly_referenced_uids = set(
+            prov_df[~prov_df[ProvTable.internal_name].isin(list(Builtins.OPS.keys()))][
+                ProvTable.vref_uid
+            ].values.tolist()
+        )
+        all_needed_vrefs = self.obj_gets(
+            uids=list(directly_referenced_uids),
+            shallow=False,
+            _load_atoms=False,
+            conn=conn,
+        )
+        if len(all_needed_vrefs) > 0:
+            all_needed_uids = set.union(
+                *[collect_uids(ref=ref) for ref in all_needed_vrefs]
+            )
+        else:
+            all_needed_uids = set()
+        all_vref_uids = self.rel_storage.execute_df(
+            query=Query.from_(self.VREF_TABLE).select(Config.uid_col), conn=conn
+        )[Config.uid_col].values
+        orphan_vref_uids = set(all_vref_uids) - all_needed_uids
+
+        ### get the calls adjacent to the orphaned vrefs
+        if len(orphan_vref_uids) > 0:
+            adjacent_calls_df = prov_df[
+                prov_df[ProvTable.vref_uid].isin(orphan_vref_uids)
+            ][[ProvTable.call_uid, ProvTable.internal_name, ProvTable.version]]
+            uids_by_ui_table = defaultdict(list)
+            sigs = self.sig_adapter.load_state(conn=conn)
+            for call_uid, internal_name, version in adjacent_calls_df.itertuples(
+                index=False
+            ):
+                ui_name = sigs[internal_name, version].ui_name
+                table_name = Signature.dump_versioned_name(
+                    name=ui_name, version=version
+                )
+                uids_by_ui_table[table_name].append(call_uid)
+            self.delete_vrefs(list(orphan_vref_uids), conn=conn)
+            self.delete_calls(_uids_by_table=uids_by_ui_table, conn=conn)
+
+    ############################################################################
+    ### provenance methods
+    ############################################################################
+    @transaction()
+    def upsert_provenance(self, calls: List[Call], conn: Optional[Connection] = None):
+        rows = []
+        for call in calls:
+            call_uid = call.uid
+            internal_name = call.func_op.sig.internal_name
+            version = call.func_op.sig.version
+            call_rows = []
+            for input_name, input in call.inputs.items():
+                call_rows.append(
+                    {"io_name": input_name, "vref_uid": input.uid, "direction": "in"}
+                )
+            for i, output in enumerate(call.outputs):
+                call_rows.append(
+                    {
+                        "io_name": dump_output_name(index=i),
+                        "vref_uid": output.uid,
+                        "direction": "out",
+                    }
+                )
+            for row in call_rows:
+                row.update(
+                    {
+                        "call_uid": call_uid,
+                        "internal_name": internal_name,
+                        "version": version,
+                    }
+                )
+            rows.extend(call_rows)
+        df = pd.DataFrame(rows)
+        if len(df) > 0:
+            self.rel_storage.upsert(
+                relation=self.PROVENANCE_TABLE,
+                ta=pa.Table.from_pandas(df),
+                key_cols=[ProvTable.call_uid, ProvTable.io_name],
+                conn=conn,
+            )
+
+    @transaction()
+    def delete_provenance(
+        self, call_uids: List[str], conn: Optional[Connection] = None
+    ):
+        in_str = ", ".join([f"'{i}'" for i in call_uids])
+        query = f'DELETE FROM "{self.PROVENANCE_TABLE}" WHERE {ProvTable.call_uid} IN ({in_str})'
+        conn.execute(query)
+
     ############################################################################
     ### object methods
     ############################################################################
@@ -885,23 +1049,49 @@ class RelAdapter(Transactable):
 
     @transaction()
     def obj_gets(
-        self, uids: List[str], shallow: bool = False, conn: Optional[Connection] = None
+        self,
+        uids: List[str],
+        shallow: bool = False,
+        _load_atoms: bool = True,
+        conn: Optional[Connection] = None,
     ) -> List[Ref]:
         if len(uids) == 0:
             return []
         if shallow:
             table = Table(Config.vref_table)
-            query = (
-                Query.from_(table)
-                .where(table[Config.uid_col].isin(uids))
-                .select(table[Config.uid_col], table.value)
-            )
-            output = self.rel_storage.execute_arrow(query, conn=conn).to_pandas()
-            output["value"] = output["value"].map(lambda x: deserialize(bytes(x)))
+            if not _load_atoms:
+                query_uids = [uid for uid in uids if Builtins.is_builtin_uid(uid=uid)]
+            else:
+                query_uids = uids
+            if len(query_uids) > 0:
+                query = (
+                    Query.from_(table)
+                    .where(table[Config.uid_col].isin(query_uids))
+                    .select(table[Config.uid_col], table["value"])
+                )
+                output = self.rel_storage.execute_df(query, conn=conn)
+                output["value"] = output["value"].map(lambda x: deserialize(bytes(x)))
+            else:
+                output = pd.DataFrame(columns=[Config.uid_col, "value"])
+            if not _load_atoms:
+                atoms_df = pd.DataFrame(
+                    {
+                        Config.uid_col: [
+                            uid for uid in uids if not Builtins.is_builtin_uid(uid=uid)
+                        ],
+                        "value": None,
+                    }
+                )
+                atoms_df["value"] = atoms_df[Config.uid_col].map(
+                    lambda x: Ref.from_uid(uid=x)
+                )
+                output = pd.concat([output, atoms_df])
             return output.set_index(Config.uid_col).loc[uids, "value"].tolist()
         else:
             results = [Ref.from_uid(uid=uid) for uid in uids]
-            self.mattach(vrefs=results, shallow=False, conn=conn)
+            self.mattach(
+                vrefs=results, shallow=False, _load_atoms=_load_atoms, conn=conn
+            )
             return results
 
     @transaction()
@@ -950,7 +1140,11 @@ class RelAdapter(Transactable):
 
     @transaction()
     def mattach(
-        self, vrefs: List[Ref], shallow: bool = False, conn: Optional[Connection] = None
+        self,
+        vrefs: List[Ref],
+        shallow: bool = False,
+        _load_atoms: bool = True,
+        conn: Optional[Connection] = None,
     ) -> None:
         """
         In-place attach objects. If `shallow`, only attach the next level;
@@ -984,7 +1178,7 @@ class RelAdapter(Transactable):
                 vrefs_by_uid[uid].append(vref)
         ### load one level of the unique vrefs
         vals = self.obj_gets(
-            uids=uids, shallow=True, conn=conn
+            uids=uids, shallow=True, _load_atoms=_load_atoms, conn=conn
         )  #! this can be optimized
         for i, uid in enumerate(uids):
             objs_with_this_uid = vrefs_by_uid[uid]
@@ -992,7 +1186,10 @@ class RelAdapter(Transactable):
                 obj.attach(reference=vals[i])
         if not shallow:
             residues = [
-                elt for vref in vals if isinstance(vref, ListRef) for elt in vref.obj
+                elt
+                for vref in vals
+                if isinstance(vref, (ListRef, DictRef, SetRef))
+                for elt in vref.obj
             ]
             if len(residues) > 0:
                 self.mattach(vrefs=residues, shallow=False, conn=conn)

@@ -7,6 +7,7 @@ from mandala.core.config import Config
 from mandala.core.model import Ref
 from mandala.storages.remote_impls.mongo_impl import MongoRemoteStorage
 from mandala.storages.remote_impls.mongo_mock import MongoMockRemoteStorage
+from mandala.storages.rels import RelAdapter
 
 
 def signatures_are_equal(storage_1: Storage, storage_2: Storage) -> bool:
@@ -67,8 +68,10 @@ def data_is_equal(
 ) -> Union[bool, Tuple[bool, str]]:
     data_1 = storage_1.rel_storage.get_all_data()
     data_2 = storage_2.rel_storage.get_all_data()
-    data_1.pop(storage_1.rel_adapter.DEPS_TABLE)
-    data_2.pop(storage_2.rel_adapter.DEPS_TABLE)
+    #! remove some internal tables from the comparison
+    for _internal_table in [RelAdapter.DEPS_TABLE, RelAdapter.PROVENANCE_TABLE]:
+        data_1.pop(_internal_table)
+        data_2.pop(_internal_table)
     # compare the keys
     if data_1.keys() != data_2.keys():
         result, reason = False, f"Tables differ: {data_1.keys()} vs {data_2.keys()}"

@@ -17,8 +17,9 @@ class MODES:
     query = "query"
     batch = "batch"
     define = "define"
+    delete = "delete"
 
-    all_ = (run, query, batch, define)
+    all_ = (run, query, batch, define, delete)
 
 
 def wrap_inputs(inputs: Dict[str, Any]) -> Dict[str, Ref]:

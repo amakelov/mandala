@@ -216,7 +216,13 @@ class DuckDBRelStorage(RelStorage, Transactable):
         conn.unregister(view_name=self.TEMP_ARROW_TABLE)
 
     @transaction()
-    def upsert(self, relation: str, ta: pa.Table, conn: Optional[Connection] = None):
+    def upsert(
+        self,
+        relation: str,
+        ta: pa.Table,
+        key_cols: Optional[List[str]] = None,
+        conn: Optional[Connection] = None,
+    ):
         """
         Upsert rows in a table based on primary key.
 
@@ -227,12 +233,17 @@ class DuckDBRelStorage(RelStorage, Transactable):
         if not self.table_exists(relation, conn=conn):
             raise RuntimeError()
         cols_string = ", ".join([f'"{column_name}"' for column_name in ta.column_names])
-        primary_keys = self._get_primary_keys(relation=relation, conn=conn)
-        if len(primary_keys) != 1:
-            raise NotImplementedError()
-        primary_key = primary_keys[0]
         conn.register(view_name=self.TEMP_ARROW_TABLE, python_object=ta)
-        query = f'INSERT INTO "{relation}" ({cols_string}) SELECT * FROM {self.TEMP_ARROW_TABLE} WHERE "{primary_key}" NOT IN (SELECT "{primary_key}" FROM "{relation}")'
+        if key_cols is None:
+            primary_keys = self._get_primary_keys(relation=relation, conn=conn)
+            if len(primary_keys) != 1:
+                raise NotImplementedError()
+            primary_key = primary_keys[0]
+            query = f'INSERT INTO "{relation}" ({cols_string}) SELECT * FROM {self.TEMP_ARROW_TABLE} WHERE "{primary_key}" NOT IN (SELECT "{primary_key}" FROM "{relation}")'
+        else:
+            key_cols_str = ", ".join([f'"{column_name}"' for column_name in key_cols])
+            key_cols_str = f"({key_cols_str})"
+            query = f'INSERT INTO "{relation}" ({cols_string}) SELECT * FROM {self.TEMP_ARROW_TABLE} WHERE {key_cols_str} NOT IN (SELECT {key_cols_str} FROM "{relation}")'
         conn.execute(query)
         conn.unregister(view_name=self.TEMP_ARROW_TABLE)
 
@@ -248,7 +259,8 @@ class DuckDBRelStorage(RelStorage, Transactable):
             raise NotImplementedError()
         primary_key = primary_keys[0]
         in_str = ", ".join([f"'{i}'" for i in index])
-        conn.execute(f'DELETE FROM "{relation}" WHERE {primary_key} IN ({in_str})')
+        query = f'DELETE FROM "{relation}" WHERE {primary_key} IN ({in_str})'
+        conn.execute(query)
 
     ############################################################################
     ### queries

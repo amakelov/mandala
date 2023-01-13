@@ -44,6 +44,7 @@ class Config:
     schema_table = "__schema__"
     # table for keeping track of function dependencies
     deps_table = "__deps__"
+    provenance_table = "__provenance__"
     # all output names begin with this string
     # todo: prevent creating inputs with this name
     output_name_prefix = "output_"
