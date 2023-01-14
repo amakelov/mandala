@@ -50,8 +50,6 @@ class GlobalContext:
 
 
 class Context:
-    OVERRIDES = {}
-
     def __init__(
         self,
         storage: "Storage" = None,
@@ -62,10 +60,10 @@ class Context:
         debug_truncate: Optional[int] = 20,
     ):
         self.storage = storage
-        self.mode = self.OVERRIDES.get("mode", mode)
-        self.lazy = self.OVERRIDES.get("lazy", lazy)
-        self.allow_calls = self.OVERRIDES.get("allow_calls", allow_calls)
-        self.debug_calls = self.OVERRIDES.get("debug_calls", debug_calls)
+        self.mode = mode
+        self.lazy = lazy
+        self.allow_calls = allow_calls
+        self.debug_calls = debug_calls
         self.debug_truncate = debug_truncate
         self.updates = {}
         self._updates_stack = []
@@ -284,6 +282,10 @@ class Storage(Transactable):
         for func_op in Builtins.OPS.values():
             self.synchronize_op(func_op=func_op)
 
+    @property
+    def in_memory(self) -> bool:
+        return self.db_path is None
+
     ############################################################################
     ### `Transactable` interface
     ############################################################################
@@ -303,19 +305,25 @@ class Storage(Transactable):
         )
 
     @transaction()
-    def call_get(self, call_uid: str, conn: Optional[Connection] = None) -> Call:
+    def call_get(
+        self, call_uid: str, lazy: bool, conn: Optional[Connection] = None
+    ) -> Call:
         if self.call_cache.exists(call_uid):
             return self.call_cache.get(call_uid)
         else:
             lazy_call = self.rel_adapter.call_get_lazy(call_uid, conn=conn)
-            # load the values of the inputs and outputs
-            inputs = {
-                k: self.obj_get(v.uid, conn=conn) for k, v in lazy_call.inputs.items()
-            }
-            outputs = [self.obj_get(v.uid, conn=conn) for v in lazy_call.outputs]
-            call_without_outputs = lazy_call.set_input_values(inputs=inputs)
-            call = call_without_outputs.set_output_values(outputs=outputs)
-            return call
+            if not lazy:
+                # load the values of the inputs and outputs
+                inputs = {
+                    k: self.obj_get(v.uid, conn=conn)
+                    for k, v in lazy_call.inputs.items()
+                }
+                outputs = [self.obj_get(v.uid, conn=conn) for v in lazy_call.outputs]
+                call_without_outputs = lazy_call.set_input_values(inputs=inputs)
+                call = call_without_outputs.set_output_values(outputs=outputs)
+                return call
+            else:
+                return lazy_call
 
     def cache_call_and_objs(self, call: Call) -> None:
         for vref in itertools.chain(call.inputs.values(), call.outputs):
@@ -606,14 +614,20 @@ class Storage(Transactable):
             return result
 
     def run(
-        self, allow_calls: bool = True, debug_calls: bool = False, **updates
+        self,
+        allow_calls: bool = True,
+        debug_calls: bool = False,
+        lazy: Optional[bool] = None,
+        **updates,
     ) -> Context:
         # spawn context to execute or retrace calls
+        lazy = not self.in_memory if lazy is None else lazy
         return self._nest(
             storage=self,
             allow_calls=allow_calls,
             debug_calls=debug_calls,
             mode=MODES.run,
+            lazy=lazy,
             **updates,
         )
 
@@ -899,11 +913,14 @@ class Storage(Transactable):
 
     @transaction()
     def _process_call_found(
-        self, call_uid: str, conn: Connection
+        self, call_uid: str, lazy: bool, conn: Connection
     ) -> Tuple[List[Ref], Call]:
-        call = self.call_get(call_uid, conn=conn)
-        self.preload_objs([v.uid for v in call.outputs], conn=conn)
-        wrapped_outputs = [self.obj_get(v.uid, conn=conn) for v in call.outputs]
+        call = self.call_get(call_uid, lazy=lazy, conn=conn)
+        if not lazy:
+            self.preload_objs([v.uid for v in call.outputs], conn=conn)
+            wrapped_outputs = [self.obj_get(v.uid, conn=conn) for v in call.outputs]
+        else:
+            wrapped_outputs = [v for v in call.outputs]
         return wrapped_outputs, call
 
     @transaction()
@@ -913,6 +930,7 @@ class Storage(Transactable):
         inputs: Dict[str, Union[Any, Ref]],
         allow_calls: bool = True,
         debug_calls: bool = False,
+        lazy: bool = False,
         _collect_calls: bool = False,
         _recurse: bool = False,
         _call_buffer: Optional[List[Call]] = None,
@@ -935,7 +953,7 @@ class Storage(Transactable):
                 )
                 Tracer.break_signal(data=data)
             wrapped_outputs, call = self._process_call_found(
-                call_uid=call_uid, conn=conn
+                call_uid=call_uid, lazy=lazy, conn=conn
             )
         else:
             # compute op
@@ -943,6 +961,8 @@ class Storage(Transactable):
                 raise ValueError(
                     f"Call to {func_op.sig.ui_name} not found in call storage."
                 )
+            if not self.in_memory and not memoized and not func_op.is_super:
+                self.rel_adapter.mattach(vrefs=list(wrapped_inputs.values()), conn=conn)
             if Config.autounwrap_inputs and (not func_op.is_super):
                 raw_inputs = unwrap(obj=wrapped_inputs, through_collections=True)
             else:
@@ -1121,6 +1141,7 @@ class FuncInterface:
                     inputs=inputs,
                     allow_calls=context.allow_calls,
                     debug_calls=context.debug_calls,
+                    lazy=context.lazy,
                 )
                 return format_as_outputs(outputs=outputs)
             # elif self.executor == 'asyncio' or inspect.iscoroutinefunction(self.func_op.func):

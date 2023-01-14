@@ -677,7 +677,7 @@ class SingleClientSimulator(RuleBasedStateMachine):
             # check invariants on the workflows
             for w in client.workflows:
                 w.check_invariants()
-                w.print_shape()
+                # w.print_shape()
             # check the individual signatures
             for func_op in client.func_ops:
                 func_op.sig.check_invariants()

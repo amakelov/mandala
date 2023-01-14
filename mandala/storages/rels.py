@@ -945,8 +945,8 @@ class RelAdapter(Transactable):
         )
         all_needed_vrefs = self.obj_gets(
             uids=list(directly_referenced_uids),
-            shallow=False,
-            _load_atoms=False,
+            depth=None,
+            _attach_atoms=False,
             conn=conn,
         )
         if len(all_needed_vrefs) > 0:
@@ -1048,60 +1048,6 @@ class RelAdapter(Transactable):
         return [uid in existing_uids for uid in uids]
 
     @transaction()
-    def obj_gets(
-        self,
-        uids: List[str],
-        shallow: bool = False,
-        _load_atoms: bool = True,
-        conn: Optional[Connection] = None,
-    ) -> List[Ref]:
-        if len(uids) == 0:
-            return []
-        if shallow:
-            table = Table(Config.vref_table)
-            if not _load_atoms:
-                query_uids = [uid for uid in uids if Builtins.is_builtin_uid(uid=uid)]
-            else:
-                query_uids = uids
-            if len(query_uids) > 0:
-                query = (
-                    Query.from_(table)
-                    .where(table[Config.uid_col].isin(query_uids))
-                    .select(table[Config.uid_col], table["value"])
-                )
-                output = self.rel_storage.execute_df(query, conn=conn)
-                output["value"] = output["value"].map(lambda x: deserialize(bytes(x)))
-            else:
-                output = pd.DataFrame(columns=[Config.uid_col, "value"])
-            if not _load_atoms:
-                atoms_df = pd.DataFrame(
-                    {
-                        Config.uid_col: [
-                            uid for uid in uids if not Builtins.is_builtin_uid(uid=uid)
-                        ],
-                        "value": None,
-                    }
-                )
-                atoms_df["value"] = atoms_df[Config.uid_col].map(
-                    lambda x: Ref.from_uid(uid=x)
-                )
-                output = pd.concat([output, atoms_df])
-            return output.set_index(Config.uid_col).loc[uids, "value"].tolist()
-        else:
-            results = [Ref.from_uid(uid=uid) for uid in uids]
-            self.mattach(
-                vrefs=results, shallow=False, _load_atoms=_load_atoms, conn=conn
-            )
-            return results
-
-    @transaction()
-    def obj_get(self, uid: str, conn: Optional[Connection] = None) -> Ref:
-        vref_option = self.obj_gets(uids=[uid], conn=conn)[0]
-        if vref_option is None:
-            raise ValueError(f"Ref with uid {uid} does not exist")
-        return vref_option
-
-    @transaction()
     def obj_set(
         self,
         uid: str,
@@ -1125,7 +1071,7 @@ class RelAdapter(Transactable):
         new_uids = [uid for uid, indicator in zip(uids, indicators) if not indicator]
         ta = pa.Table.from_pylist(
             [
-                {Config.uid_col: new_uid, "value": serialize(vrefs[new_uid])}
+                {Config.uid_col: new_uid, "value": serialize(vrefs[new_uid].dump())}
                 for new_uid in new_uids
             ]
         )
@@ -1139,11 +1085,75 @@ class RelAdapter(Transactable):
         self.rel_storage.upsert(relation=self.EVENT_LOG_TABLE, ta=log_ta, conn=conn)
 
     @transaction()
+    def obj_gets(
+        self,
+        uids: List[str],
+        depth: Optional[int] = None,
+        _attach_atoms: bool = True,
+        conn: Optional[Connection] = None,
+    ) -> List[Ref]:
+        if len(uids) == 0:
+            return []
+        if depth == 0:
+            return [Ref.from_uid(uid=uid) for uid in uids]
+        elif depth == 1:
+            table = Table(Config.vref_table)
+            if not _attach_atoms:
+                query_uids = [uid for uid in uids if Builtins.is_builtin_uid(uid=uid)]
+            else:
+                query_uids = uids
+            if len(query_uids) > 0:
+                query = (
+                    Query.from_(table)
+                    .where(table[Config.uid_col].isin(query_uids))
+                    .select(table[Config.uid_col], table["value"])
+                )
+                output = self.rel_storage.execute_df(query, conn=conn)
+                output["value"] = output["value"].map(lambda x: deserialize(bytes(x)))
+            else:
+                output = pd.DataFrame(columns=[Config.uid_col, "value"])
+            if not _attach_atoms:
+                atoms_df = pd.DataFrame(
+                    {
+                        Config.uid_col: [
+                            uid for uid in uids if not Builtins.is_builtin_uid(uid=uid)
+                        ],
+                        "value": None,
+                    }
+                )
+                atoms_df["value"] = atoms_df[Config.uid_col].map(
+                    lambda x: Ref.from_uid(uid=x)
+                )
+                output = pd.concat([output, atoms_df])
+            return output.set_index(Config.uid_col).loc[uids, "value"].tolist()
+        elif depth is None:
+            results = [Ref.from_uid(uid=uid) for uid in uids]
+            self.mattach(
+                vrefs=results, shallow=False, _attach_atoms=_attach_atoms, conn=conn
+            )
+            return results
+
+    @transaction()
+    def obj_get(
+        self,
+        uid: str,
+        depth: Optional[int] = None,
+        _attach_atoms: bool = True,
+        conn: Optional[Connection] = None,
+    ) -> Ref:
+        vref_option = self.obj_gets(
+            uids=[uid], depth=depth, _attach_atoms=_attach_atoms, conn=conn
+        )[0]
+        if vref_option is None:
+            raise ValueError(f"Ref with uid {uid} does not exist")
+        return vref_option
+
+    @transaction()
     def mattach(
         self,
         vrefs: List[Ref],
         shallow: bool = False,
-        _load_atoms: bool = True,
+        _attach_atoms: bool = True,
         conn: Optional[Connection] = None,
     ) -> None:
         """
@@ -1178,12 +1188,12 @@ class RelAdapter(Transactable):
                 vrefs_by_uid[uid].append(vref)
         ### load one level of the unique vrefs
         vals = self.obj_gets(
-            uids=uids, shallow=True, _load_atoms=_load_atoms, conn=conn
+            uids=uids, depth=1, _attach_atoms=_attach_atoms, conn=conn
         )  #! this can be optimized
         for i, uid in enumerate(uids):
-            objs_with_this_uid = vrefs_by_uid[uid]
-            for obj in objs_with_this_uid:
-                obj.attach(reference=vals[i])
+            for obj in vrefs_by_uid[uid]:
+                if vals[i].in_memory:
+                    obj.attach(reference=vals[i])
         if not shallow:
             residues = [
                 elt

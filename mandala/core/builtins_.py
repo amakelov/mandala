@@ -16,20 +16,6 @@ class ListRef(Ref, Sequence):
         self.obj = obj
         self.in_memory = in_memory
 
-    def __repr__(self) -> str:
-        if self.in_memory:
-            return f"ListRef({self.obj}, uid={self.uid})"
-        else:
-            return f"ListRef(in_memory=False, uid={self.uid})"
-
-    def detached(self) -> "ListRef":
-        return ListRef(uid=self.uid, obj=None, in_memory=False)
-
-    def attach(self, reference: "ListRef"):
-        assert self.uid == reference.uid
-        self.obj = reference.obj
-        self.in_memory = True
-
     def dump(self) -> "ListRef":
         return ListRef(
             uid=self.uid, obj=[vref.detached() for vref in self.obj], in_memory=True
@@ -39,21 +25,21 @@ class ListRef(Ref, Sequence):
     ### list interface
     ############################################################################
     def __getitem__(self, idx: int) -> Ref:
-        assert self.in_memory
+        self._auto_attach()
         return self.obj[idx]
 
     def __iter__(self):
-        assert self.in_memory
+        self._auto_attach()
         return iter(self.obj)
 
     def __len__(self) -> int:
-        assert self.in_memory
+        self._auto_attach()
         return len(self.obj)
 
 
 class DictRef(Ref, Mapping):
     """
-    Immutable dict of Refs.
+    Immutable string-keyed dict of Refs.
     """
 
     def __init__(self, uid: str, obj: Optional[Dict[str, Ref]], in_memory: bool):
@@ -61,20 +47,6 @@ class DictRef(Ref, Mapping):
         self.uid = uid
         self.obj = obj
         self.in_memory = in_memory
-
-    def __repr__(self) -> str:
-        if self.in_memory:
-            return f"DictRef({self.obj}, uid={self.uid})"
-        else:
-            return f"DictRef(in_memory=False, uid={self.uid})"
-
-    def detached(self) -> "DictRef":
-        return DictRef(uid=self.uid, obj=None, in_memory=False)
-
-    def attach(self, reference: "DictRef"):
-        assert self.uid == reference.uid
-        self.obj = reference.obj
-        self.in_memory = True
 
     def dump(self) -> "DictRef":
         assert self.in_memory
@@ -88,15 +60,15 @@ class DictRef(Ref, Mapping):
     ### dict interface
     ############################################################################
     def __getitem__(self, key: str) -> Ref:
-        assert self.in_memory
+        self._auto_attach()
         return self.obj[key]
 
     def __iter__(self):
-        assert self.in_memory
+        self._auto_attach()
         return iter(self.obj)
 
     def __len__(self) -> int:
-        assert self.in_memory
+        self._auto_attach()
         return len(self.obj)
 
 
@@ -111,20 +83,6 @@ class SetRef(Ref, SetABC):
         self.obj = obj
         self.in_memory = in_memory
 
-    def __repr__(self) -> str:
-        if self.in_memory:
-            return f"SetRef({self.obj}, uid={self.uid})"
-        else:
-            return f"SetRef(in_memory=False, uid={self.uid})"
-
-    def detached(self) -> "SetRef":
-        return SetRef(uid=self.uid, obj=None, in_memory=False)
-
-    def attach(self, reference: "SetRef"):
-        assert self.uid == reference.uid
-        self.obj = reference.obj
-        self.in_memory = True
-
     def dump(self) -> "SetRef":
         assert self.in_memory
         return SetRef(
@@ -135,15 +93,23 @@ class SetRef(Ref, SetABC):
     ### set interface
     ############################################################################
     def __contains__(self, item: Ref) -> bool:
-        assert self.in_memory
-        return item in self.obj
+        from .wrapping import unwrap
+
+        if not self.in_memory:
+            logging.warning(
+                "Checking membership in a lazy SetRef requires loading the entire set into memory."
+            )
+            self._auto_attach(shallow=False)
+            return item in unwrap(self.obj)
+        else:
+            return item in unwrap(self.obj)
 
     def __iter__(self):
-        assert self.in_memory
+        self._auto_attach()
         return iter(self.obj)
 
     def __len__(self) -> int:
-        assert self.in_memory
+        self._auto_attach()
         return len(self.obj)
 
 

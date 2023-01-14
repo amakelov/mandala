@@ -45,6 +45,38 @@ class Ref:
     def make_delayed(RefCls: type["Ref"]) -> "Ref":
         return RefCls(uid="", obj=Delayed(), in_memory=False)
 
+    def attach(self, reference: "Ref"):
+        assert self.uid == reference.uid and reference.in_memory
+        self.obj = reference.obj
+        self.in_memory = True
+
+    def _auto_attach(self, shallow: bool = True):
+        if not self.in_memory:
+            from ..ui.main import GlobalContext
+
+            context = GlobalContext.current
+            assert context is not None
+            assert context.storage is not None
+            storage = context.storage
+            storage.rel_adapter.mattach(vrefs=[self], shallow=shallow)
+
+    def detached(self) -> "Ref":
+        return self.__class__(uid=self.uid, obj=None, in_memory=False)
+
+    @property
+    def _uid_suffix(self) -> str:
+        return self.uid.split(".")[-1]
+
+    @property
+    def _short_uid(self) -> str:
+        return self._uid_suffix[:3] + "..."
+
+    def __repr__(self) -> str:
+        if self.in_memory:
+            return f"{self.__class__.__name__}({self.obj}, uid={self._short_uid})"
+        else:
+            return f"{self.__class__.__name__}(in_memory=False, uid={self._short_uid})"
+
 
 class ValueRef(Ref):
     """
@@ -57,20 +89,6 @@ class ValueRef(Ref):
         self.uid = uid
         self.obj = obj
         self.in_memory = in_memory
-
-    def __repr__(self) -> str:
-        if self.in_memory:
-            return f"ValueRef({self.obj}, uid={self.uid})"
-        else:
-            return f"ValueRef(in_memory=False, uid={self.uid})"
-
-    def detached(self) -> "ValueRef":
-        return ValueRef(uid=self.uid, obj=None, in_memory=False)
-
-    def attach(self, reference: "ValueRef"):
-        assert self.uid == reference.uid
-        self.obj = reference.obj
-        self.in_memory = True
 
     def dump(self) -> "ValueRef":
         return ValueRef(uid=self.uid, obj=self.obj, in_memory=True)
