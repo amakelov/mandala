@@ -169,3 +169,44 @@ def test_persistent():
         raise e
     finally:
         db_path.unlink()
+
+
+def test_magics():
+    db_path = OUTPUT_ROOT / "test_magics.db"
+    if db_path.exists():
+        db_path.unlink()
+    storage = Storage(db_path=db_path)
+
+    try:
+        Config.enable_ref_magics = True
+
+        @op
+        def inc(x: int) -> int:
+            return x + 1
+
+        with storage.run():
+            x = inc(23)
+
+        with storage.run():
+            x = inc(23)
+            assert not x.in_memory
+            if x > 0:
+                y = inc(x)
+            assert x.in_memory
+
+        with storage.run():
+            x = inc(23)
+            y = inc(x)
+            if x + y > 0:
+                z = inc(x)
+
+        with storage.run():
+            x = inc(23)
+            y = inc(x)
+            if x:
+                z = inc(x)
+
+    except Exception as e:
+        raise e
+    finally:
+        db_path.unlink()

@@ -78,6 +78,16 @@ def test_basics():
         df = q.get_table(i, j, final)
         assert set(df["i"]) == {i for i in range(20, 25)}
         assert all(df["j"] == df["i"] + 1)
+        df_refs = q.get_table(i, j, final, values="refs")
+        df_uids = q.get_table(i, j, final, values="uids")
+        df_lazy = q.get_table(i, j, final, values="lazy")
+        assert compare_dfs_as_relations(df_refs.applymap(lambda x: x.uid), df_uids)
+        assert compare_dfs_as_relations(
+            df_refs.applymap(lambda x: x.detached()), df_lazy
+        )
+        assert compare_dfs_as_relations(df_refs.applymap(unwrap), df)
+        assert compare_dfs_as_relations(df_lazy.applymap(unwrap), df)
+
     check_invariants(storage)
     vqs, fqs = traverse_all([i, j, final])
     visualize_computational_graph(
@@ -89,7 +99,7 @@ def test_basics():
         j = inc(i).named("j")
         final = add(i, j).named("final")
         df_naive = q.get_table(
-            i, j, final, engine="naive", visualize_steps_at=OUTPUT_ROOT
+            i, j, final, _engine="naive", _visualize_steps_at=OUTPUT_ROOT
         )
         assert compare_dfs_as_relations(df, df_naive)
 
@@ -132,17 +142,21 @@ def test_filter_duplicates():
         y = Q().named("y")
         z = inc(x).named("z")
         w = add(z, y).named("w")
-        df_1 = q.get_table(x, z, filter_duplicates=True)
-        df_2 = q.get_table(x, z, filter_duplicates=False)
+        df_1 = q.get_table(x, z, _filter_duplicates=True)
+        df_2 = q.get_table(x, z, _filter_duplicates=False)
         df_3 = q.get_table(
-            x, z, filter_duplicates=True, engine="naive", visualize_steps_at=OUTPUT_ROOT
+            x,
+            z,
+            _filter_duplicates=True,
+            _engine="naive",
+            _visualize_steps_at=OUTPUT_ROOT,
         )
         df_4 = q.get_table(
             x,
             z,
-            filter_duplicates=False,
-            engine="naive",
-            visualize_steps_at=OUTPUT_ROOT,
+            _filter_duplicates=False,
+            _engine="naive",
+            _visualize_steps_at=OUTPUT_ROOT,
         )
 
     assert len(df_1) == 5
@@ -189,7 +203,7 @@ def test_superops_basic():
         z = Q().named("z")
         a = inc_n_times(x=z, n=n).named("a")
         df_naive = q.get_table(
-            x, y, n, a, z, engine="naive", visualize_steps_at=OUTPUT_ROOT
+            x, y, n, a, z, _engine="naive", _visualize_steps_at=OUTPUT_ROOT
         )
         assert compare_dfs_as_relations(df, df_naive)
 
@@ -240,7 +254,7 @@ def test_superops_multilevel():
         xs, ys = Q().named("xs"), Q().named("ys")
         result = add_many(xs=xs, ys=ys).named("result")
         df_naive = q.get_table(
-            xs, ys, result, engine="naive", visualize_steps_at=OUTPUT_ROOT
+            xs, ys, result, _engine="naive", _visualize_steps_at=OUTPUT_ROOT
         )
         assert compare_dfs_as_relations(df, df_naive)
 
@@ -269,7 +283,12 @@ def test_superops_multilevel():
         intermediate = add_many(xs, ys).named("intermediate")
         final = add_many(intermediate, zs).named("final")
         df_naive = q.get_table(
-            xs, ys, intermediate, final, engine="naive", visualize_steps_at=OUTPUT_ROOT
+            xs,
+            ys,
+            intermediate,
+            final,
+            _engine="naive",
+            _visualize_steps_at=OUTPUT_ROOT,
         )
         assert compare_dfs_as_relations(df, df_naive)
 
@@ -347,8 +366,8 @@ def test_weird():
             var_4,
             var_5,
             var_6,
-            engine="naive",
-            visualize_steps_at=OUTPUT_ROOT,
+            _engine="naive",
+            _visualize_steps_at=OUTPUT_ROOT,
         )
         assert compare_dfs_as_relations(df, df_naive)
 

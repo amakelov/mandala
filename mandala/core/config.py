@@ -30,6 +30,7 @@ class Config:
     _persistent_storage_testing = False
     # hashing method
     content_hasher: Literal["cityhash", "blake2b"] = "blake2b"
+    enable_ref_magics = False
 
     ### constants
     # used for columns containing UIDs of value references or calls

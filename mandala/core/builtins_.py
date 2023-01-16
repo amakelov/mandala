@@ -13,7 +13,7 @@ class ListRef(Ref, Sequence):
     def __init__(self, uid: str, obj: Optional[List[Ref]], in_memory: bool):
         assert uid.startswith("__list__.")
         self.uid = uid
-        self.obj = obj
+        self._obj = obj
         self.in_memory = in_memory
 
     def dump(self) -> "ListRef":
@@ -45,7 +45,7 @@ class DictRef(Ref, Mapping):
     def __init__(self, uid: str, obj: Optional[Dict[str, Ref]], in_memory: bool):
         assert uid.startswith("__dict__.")
         self.uid = uid
-        self.obj = obj
+        self._obj = obj
         self.in_memory = in_memory
 
     def dump(self) -> "DictRef":
@@ -80,7 +80,7 @@ class SetRef(Ref, SetABC):
     def __init__(self, uid: str, obj: Optional[Set[Ref]], in_memory: bool):
         assert uid.startswith("__set__.")
         self.uid = uid
-        self.obj = obj
+        self._obj = obj
         self.in_memory = in_memory
 
     def dump(self) -> "SetRef":

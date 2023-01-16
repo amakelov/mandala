@@ -89,6 +89,15 @@ def unwrap(obj: Union[T, Ref], through_collections: bool = True) -> T:
     If `through_collections` is True, recursively unwraps objects in lists,
     tuples, sets, and dict values.
     """
+    if isinstance(obj, Ref) and not obj.in_memory:
+        from ..ui.main import GlobalContext
+
+        if GlobalContext.current is None:
+            raise ValueError(
+                "Cannot unwrap a Ref with `in_memory=False` outside a context"
+            )
+        storage = GlobalContext.current.storage
+        storage.rel_adapter.mattach(vrefs=[obj])
     if isinstance(obj, ValueRef):
         return unwrap(obj.obj, through_collections=through_collections)
     elif isinstance(obj, ListRef):

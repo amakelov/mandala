@@ -25,8 +25,12 @@ class Delayed:
 class Ref:
     def __init__(self, uid: str, obj: Any, in_memory: bool):
         self.uid = uid
-        self.obj = obj
+        self._obj = obj
         self.in_memory = in_memory
+
+    @property
+    def obj(self) -> Any:
+        return self._obj
 
     @staticmethod
     def from_uid(uid: str) -> "Ref":
@@ -47,7 +51,7 @@ class Ref:
 
     def attach(self, reference: "Ref"):
         assert self.uid == reference.uid and reference.in_memory
-        self.obj = reference.obj
+        self._obj = reference.obj
         self.in_memory = True
 
     def _auto_attach(self, shallow: bool = True):
@@ -87,11 +91,105 @@ class ValueRef(Ref):
 
     def __init__(self, uid: str, obj: Any, in_memory: bool):
         self.uid = uid
-        self.obj = obj
+        self._obj = obj
         self.in_memory = in_memory
 
     def dump(self) -> "ValueRef":
         return ValueRef(uid=self.uid, obj=self.obj, in_memory=True)
+
+    ############################################################################
+    ### magic methods forwarding
+    ############################################################################
+    def _init_magic(self) -> Callable:
+        if not Config.enable_ref_magics:
+            raise RuntimeError(
+                "Ref magic methods (typecasting/comparison operators/binary operators) are disabled; enable with Config.enable_ref_magics = True"
+            )
+        logging.warning(
+            f"Automatically unwrapping `Ref` to run magic method (typecasting/comparison operators/binary operators)."
+        )
+        from .wrapping import unwrap
+
+        self._auto_attach(shallow=True)
+        return unwrap
+
+    ### typecasting
+    def __bool__(self) -> bool:
+        self._init_magic()
+        return self.obj.__bool__()
+
+    def __int__(self) -> int:
+        self._init_magic()
+        return self.obj.__int__()
+
+    def __index__(self) -> int:
+        self._init_magic()
+        return self.obj.__index__()
+
+    ### comparison
+    def __lt__(self, other: Any) -> bool:
+        unwrap = self._init_magic()
+        return self.obj.__lt__(unwrap(other))
+
+    def __le__(self, other: Any) -> bool:
+        unwrap = self._init_magic()
+        return self.obj.__le__(unwrap(other))
+
+    def __eq__(self, other: Any) -> bool:
+        unwrap = self._init_magic()
+        return self.obj.__eq__(unwrap(other))
+
+    def __hash__(self) -> int:
+        return id(self)
+
+    def __ne__(self, other: Any) -> bool:
+        unwrap = self._init_magic()
+        return self.obj.__ne__(unwrap(other))
+
+    def __gt__(self, other: Any) -> bool:
+        unwrap = self._init_magic()
+        return self.obj.__gt__(unwrap(other))
+
+    def __ge__(self, other: Any) -> bool:
+        unwrap = self._init_magic()
+        return self.obj.__ge__(unwrap(other))
+
+    ### binary operations
+    def __add__(self, other: Any) -> Any:
+        unwrap = self._init_magic()
+        return self.obj.__add__(unwrap(other))
+
+    def __sub__(self, other: Any) -> Any:
+        unwrap = self._init_magic()
+        return self.obj.__sub__(unwrap(other))
+
+    def __mul__(self, other: Any) -> Any:
+        unwrap = self._init_magic()
+        return self.obj.__mul__(unwrap(other))
+
+    def __floordiv__(self, other: Any) -> Any:
+        unwrap = self._init_magic()
+        return self.obj.__floordiv__(unwrap(other))
+
+    def __truediv__(self, other: Any) -> Any:
+        unwrap = self._init_magic()
+        return self.obj.__truediv__(unwrap(other))
+
+    def __mod__(self, other: Any) -> Any:
+        unwrap = self._init_magic()
+        return self.obj.__mod__(unwrap(other))
+
+    def __or__(self, other: Any) -> Any:
+        unwrap = self._init_magic()
+        return self.obj.__or__(unwrap(other))
+
+    def __and__(self, other: Any) -> Any:
+        unwrap = self._init_magic()
+        return self.obj.__and__(unwrap(other))
+
+    def __xor__(self, other: Any) -> Any:
+        unwrap = self._init_magic()
+        return self.obj.__xor__(unwrap(other))
 
 
 ################################################################################
@@ -159,7 +257,7 @@ class Call:
         for k, v in inputs.items():
             current = res.inputs[k]
             assert v.in_memory and not current.in_memory
-            current.obj = v.obj
+            current._obj = v.obj
             current.in_memory = True
         return res
 
@@ -169,7 +267,7 @@ class Call:
         for i, v in enumerate(outputs):
             current = res.outputs[i]
             assert v.in_memory and not current.in_memory
-            current.obj = v.obj
+            current._obj = v.obj
             current.in_memory = True
         return res
 

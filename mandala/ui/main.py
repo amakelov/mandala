@@ -4,6 +4,7 @@ import datetime
 from pypika import Query, Table
 import pyarrow.parquet as pq
 from textwrap import indent
+from typing import Literal
 
 from ..storages.rel_impls.utils import Transactable, transaction
 from ..storages.kv import InMemoryStorage, MultiProcInMemoryStorage, KVStore
@@ -192,9 +193,10 @@ class Context:
     def get_table(
         self,
         *queries: ValQuery,
-        engine: str = "sql",
-        filter_duplicates: bool = True,
-        visualize_steps_at: Optional[Path] = None,
+        values: Literal["objs", "refs", "uids", "lazy"] = "objs",
+        _engine: str = "sql",
+        _filter_duplicates: bool = True,
+        _visualize_steps_at: Optional[Path] = None,
     ) -> pd.DataFrame:
         #! important
         # We must sync any dirty cache elements to the DuckDB store before performing a query.
@@ -202,9 +204,10 @@ class Context:
         self.storage.commit()
         return self.storage.execute_query(
             select_queries=list(queries),
-            engine=engine,
-            filter_duplicates=filter_duplicates,
-            visualize_steps_at=visualize_steps_at,
+            engine=_engine,
+            values=values,
+            filter_duplicates=_filter_duplicates,
+            visualize_steps_at=_visualize_steps_at,
         )
 
 
@@ -827,6 +830,7 @@ class Storage(Transactable):
     def execute_query(
         self,
         select_queries: List[ValQuery],
+        values: Literal["objs", "refs", "uids", "lazy"] = "objs",
         engine: str = "sql",
         filter_duplicates: bool = True,
         visualize_steps_at: Optional[Path] = None,
@@ -869,12 +873,24 @@ class Storage(Transactable):
         else:
             raise NotImplementedError()
         # now, evaluate the table
-        uids_to_collect = [
-            item for _, column in df.items() for _, item in column.items()
-        ]
-        self.preload_objs(uids_to_collect, conn=conn)
-        result = df.applymap(lambda key: unwrap(self.obj_get(key, conn=conn)))
-
+        if values in ("objs", "refs"):
+            uids_to_collect = [
+                item for _, column in df.items() for _, item in column.items()
+            ]
+            self.preload_objs(uids_to_collect, conn=conn)
+            if values == "objs":
+                result = df.applymap(lambda uid: unwrap(self.obj_get(uid, conn=conn)))
+            else:
+                result = df.applymap(lambda uid: self.obj_get(uid, conn=conn))
+        elif values == "uids":
+            result = df
+        elif values == "lazy":
+            result = df.applymap(lambda uid: Ref.from_uid(uid=uid))
+        else:
+            raise ValueError(
+                f"Invalid value for `values`: {values}. Must be one of "
+                "['objs', 'refs', 'uids', 'lazy']"
+            )
         # finally, name the columns
         cols = [
             f"unnamed_{i}" if query.column_name is None else query.column_name
@@ -1063,7 +1079,7 @@ class SimpleWorkflowExecutor(WorkflowExecutor):
                 )
                 # overwrite things
                 for output, vref_output in zip(outputs, vref_outputs):
-                    output.obj = vref_output.obj
+                    output._obj = vref_output.obj
                     output.uid = vref_output.uid
                     output.in_memory = True
                 result.append(call)

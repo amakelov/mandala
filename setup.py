@@ -19,6 +19,9 @@ extras_require = {
     "integrations": [
         "dask[complete]",
     ],
+    "terminal_ui": [
+        "rich",
+    ],
     "test": [
         "pytest >= 6.0.0",
         "hypothesis >= 6.0.0",
