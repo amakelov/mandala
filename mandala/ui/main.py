@@ -30,6 +30,7 @@ from ..core.weaver import (
     FuncQuery,
     traverse_all,
     computational_graph_to_dot,
+    qwrap,
 )
 from ..core.compiler import Compiler, QueryGraph
 
@@ -192,7 +193,7 @@ class Context:
 
     def get_table(
         self,
-        *queries: ValQuery,
+        *queries: Any,
         values: Literal["objs", "refs", "uids", "lazy"] = "objs",
         _engine: str = "sql",
         _filter_duplicates: bool = True,
@@ -201,9 +202,10 @@ class Context:
         #! important
         # We must sync any dirty cache elements to the DuckDB store before performing a query.
         # If we don't, we'll query a store that might be missing calls and objs.
+        wrapped_queries = [qwrap(q) for q in queries]
         self.storage.commit()
         return self.storage.execute_query(
-            select_queries=list(queries),
+            select_queries=wrapped_queries,
             engine=_engine,
             values=values,
             filter_duplicates=_filter_duplicates,
@@ -849,6 +851,7 @@ class Storage(Transactable):
             query = compiler.compile(
                 select_queries=select_queries, filter_duplicates=filter_duplicates
             )
+            print(query)
             df = self.rel_storage.execute_df(query=str(query), conn=conn)
         elif engine == "naive":
             val_copies, func_copies, select_copies = QueryGraph._copy_graph(

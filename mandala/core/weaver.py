@@ -58,7 +58,7 @@ class ValQuery:
             res.append(cons)
         return res
 
-    def named(self, name: str) -> "ValQuery":
+    def named(self, name: str) -> Any:
         self.column_name = name
         return self
 

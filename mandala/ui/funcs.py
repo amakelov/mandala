@@ -4,7 +4,7 @@ from ..core.weaver import ValQuery, BuiltinQueries, qwrap
 from .main import FuncInterface, AsyncioFuncInterface, OnChange
 
 
-def Q(pattern: Optional[Any] = None) -> ValQuery:
+def Q(pattern: Optional[Any] = None) -> "pattern":
     """
     Create a `ValQuery` instance to be used as a placeholder in a query
     """
@@ -45,7 +45,7 @@ def op(
     nout: Optional[int] = None,
     ui_name: Optional[str] = None,
     executor: str = "python",
-) -> Callable:
+) -> "version":  # a hack to make mypy/autocomplete happy
     if callable(version):
         # a hack to handle the @op case
         func = version

@@ -35,17 +35,24 @@ class Compiler:
         for input_name, val_query in op_query.inputs.items():
             val_alias = self.val_aliases[val_query]
             constraints.append(val_alias[Config.uid_col] == func_alias[input_name])
-            if val_query.constraint is not None:
-                sess.d = locals()
-                constraints.append(val_alias[Config.uid_col].isin(val_query.constraint))
-            select_fields.append(val_alias[Config.uid_col])
         for output_idx, val_query in enumerate(op_query.outputs):
             val_alias = self.val_aliases[val_query]
             constraints.append(
                 val_alias[Config.uid_col]
                 == func_alias[dump_output_name(index=output_idx)]
             )
-            select_fields.append(val_alias[Config.uid_col])
+        return constraints, select_fields
+
+    def compile_val(self, val_query: ValQuery) -> Tuple[list, list]:
+        """
+        Compile the query corresponding to a variable
+        """
+        constraints = []
+        select_fields = []
+        val_alias = self.val_aliases[val_query]
+        if val_query.constraint is not None:
+            constraints.append(val_alias[Config.uid_col].isin(val_query.constraint))
+        select_fields.append(val_alias[Config.uid_col])
         return constraints, select_fields
 
     def compile(self, select_queries: List[ValQuery], filter_duplicates: bool = False):
@@ -60,6 +67,7 @@ class Compiler:
             - The list of columns, partitioned into sublists per value query, is
             also returned.
         """
+        assert all([vq in self.val_queries for vq in select_queries])
         from_tables = []
         all_constraints = []
         select_cols = [self.val_aliases[vq][Config.uid_col] for vq in select_queries]
@@ -67,10 +75,12 @@ class Compiler:
             constraints, select_fields = self.compile_func(func_query)
             func_alias = self.func_aliases[func_query]
             from_tables.append(func_alias)
-            all_constraints += constraints
+            all_constraints.extend(constraints)
         for val_query in self.val_queries:
             val_alias = self.val_aliases[val_query]
+            constraints, select_fields = self.compile_val(val_query)
             from_tables.append(val_alias)
+            all_constraints.extend(constraints)
         query = Query
         for table in from_tables:
             query = query.from_(table)

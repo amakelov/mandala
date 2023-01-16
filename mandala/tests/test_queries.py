@@ -64,7 +64,7 @@ def test_basics():
     with storage.run():
         for i in range(20, 25):
             j = inc(i)
-            final = add(i, j)
+            final = add(i, y=j)
 
     with storage.query() as q:
         vref = Q().named("vref")
@@ -74,7 +74,7 @@ def test_basics():
     with storage.query() as q:
         i = Q().named("i")
         j = inc(i).named("j")
-        final = add(i, j).named("final")
+        final = add(i, y=j).named("final")
         df = q.get_table(i, j, final)
         assert set(df["i"]) == {i for i in range(20, 25)}
         assert all(df["j"] == df["i"] + 1)

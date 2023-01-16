@@ -33,7 +33,7 @@ def test_computation():
         with storage.run():
             x = 23
             y = inc(x)
-            z = add(x, y)
+            z = add(x, y=y)
         check_invariants(storage)
         # run it again
         with storage.run():
