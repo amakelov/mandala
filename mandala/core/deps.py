@@ -360,7 +360,11 @@ class Tracer:
             return self.CONTINUE
         try:
             # case 1: module is a file
-            module = importlib.import_module(module_name)
+            try:
+                module = importlib.import_module(module_name)
+            except ModuleNotFoundError:
+                logger.warning(f"Dependency tracer: module {module_name} not found")
+                return self.BREAK
             module_path = Path(inspect.getfile(module))
             assert module_path.is_absolute()
             if len(self.paths) != 0:
@@ -403,6 +407,7 @@ class Tracer:
             module_name = frame.f_globals.get("__name__")
             if module_name is None:
                 # this is known to happen in a colab environment
+                logger.warning("Dependency tracer: found a frame with no module name. Skipping.")
                 return
             # code object of function being called
             code = frame.f_code
