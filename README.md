@@ -7,6 +7,7 @@
 <a href="#video-walkthroughs">Videos</a> |
 <a href="#usage">Usage</a> |
 <a href="#tutorials">Tutorials</a> |
+<a href="https://amakelov.github.io/blog/pl/">Blog post</a> |
 <a href="#why-mandala">Why mandala?</a> 
 </div>
 
