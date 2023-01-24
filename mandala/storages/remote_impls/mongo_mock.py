@@ -39,7 +39,7 @@ class MongoMockRemoteStorage(RemoteStorage):
 
     def get_log_entries_since(
         self, timestamp: datetime.datetime
-    ) -> tuple[list[RemoteEventLogEntry], datetime.datetime]:
+    ) -> Tuple[List[RemoteEventLogEntry], datetime.datetime]:
         logger.debug(f"Getting log entries since {timestamp}")
         entries = []
         last_timestamp = datetime.datetime.fromtimestamp(0)

@@ -19,7 +19,7 @@ class RelStorage(ABC):
     def create_relation(
         self,
         name: str,
-        columns: List[tuple[str, Optional[str]]],
+        columns: List[Tuple[str, Optional[str]]],
         defaults: Dict[str, Any],
     ):
         """

@@ -19,7 +19,7 @@ from .rel_impls.utils import Transactable, transaction
 
 
 # {internal table name -> serialized (internally named) table}
-RemoteEventLogEntry = dict[str, bytes]
+RemoteEventLogEntry = Dict[str, bytes]
 
 
 class DependencyAdapter(Transactable):
@@ -1061,7 +1061,7 @@ class RelAdapter(Transactable):
     @transaction()
     def obj_sets(
         self,
-        vrefs: dict[str, Ref],
+        vrefs: Dict[str, Ref],
         shallow: bool = True,
         conn: Optional[Connection] = None,
     ) -> None:

@@ -348,7 +348,7 @@ class Storage(Transactable):
         self.obj_cache.set(obj_uid, vref)
 
     @transaction()
-    def preload_objs(self, uids: list[str], conn: Optional[Connection] = None):
+    def preload_objs(self, uids: List[str], conn: Optional[Connection] = None):
         """
         Put the objects with the given UIDs in the cache.
         """
@@ -367,7 +367,7 @@ class Storage(Transactable):
 
     @transaction()
     def commit(
-        self, calls: Optional[list[Call]] = None, conn: Optional[Connection] = None
+        self, calls: Optional[List[Call]] = None, conn: Optional[Connection] = None
     ):
         """
         Flush calls and objs from the cache that haven't yet been written to DuckDB.
@@ -525,7 +525,7 @@ class Storage(Transactable):
 
     @transaction()
     def apply_from_remote(
-        self, changes: list[RemoteEventLogEntry], conn: Optional[Connection] = None
+        self, changes: List[RemoteEventLogEntry], conn: Optional[Connection] = None
     ):
         """
         Apply new calls from the remote server.

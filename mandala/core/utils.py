@@ -112,13 +112,18 @@ def remove_func_signature_and_comments(source: str) -> str:
     through an ast parse->unparse cycle.
     """
     # using dedent is necessary here to handle decorators
-    tree = ast.parse(textwrap.dedent(source))
-    assert isinstance(tree, ast.Module)
-    body = tree.body
-    assert len(body) == 1
-    assert isinstance(body[0], ast.FunctionDef)
-    func_body = body[0].body
-    return ast.unparse(func_body)
+    if hasattr(ast, "unparse"):
+        tree = ast.parse(textwrap.dedent(source))
+        assert isinstance(tree, ast.Module)
+        body = tree.body
+        assert len(body) == 1
+        assert isinstance(body[0], ast.FunctionDef)
+        func_body = body[0].body
+        return ast.unparse(func_body)
+    else:
+        # ast.unparse was introduced in python 3.9
+        # https://docs.python.org/3/library/ast.html#ast.unparse
+        return source
 
 
 class UIDCache:

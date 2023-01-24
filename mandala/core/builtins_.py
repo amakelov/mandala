@@ -128,9 +128,15 @@ class Builtins:
     def set_func(st: Set[Any], elt: Any):
         assert elt in st
 
-    list_op = FuncOp(func=list_func, _is_builtin=True, version=0, ui_name="__list__")
-    dict_op = FuncOp(func=dict_func, _is_builtin=True, version=0, ui_name="__dict__")
-    set_op = FuncOp(func=set_func, _is_builtin=True, version=0, ui_name="__set__")
+    list_op = FuncOp(
+        func=list_func.__func__, _is_builtin=True, version=0, ui_name="__list__"
+    )
+    dict_op = FuncOp(
+        func=dict_func.__func__, _is_builtin=True, version=0, ui_name="__dict__"
+    )
+    set_op = FuncOp(
+        func=set_func.__func__, _is_builtin=True, version=0, ui_name="__set__"
+    )
 
     OPS = {
         "__list__": list_op,

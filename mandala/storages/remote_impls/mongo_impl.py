@@ -1,4 +1,5 @@
 import datetime
+from typing import Tuple, List
 
 import pymongo
 
@@ -23,7 +24,7 @@ class MongoRemoteStorage(RemoteStorage):
 
     def get_log_entries_since(
         self, timestamp: datetime.datetime
-    ) -> tuple[list[RemoteEventLogEntry], datetime.datetime]:
+    ) -> Tuple[List[RemoteEventLogEntry], datetime.datetime]:
         entries = []
         last_timestamp = datetime.datetime.fromtimestamp(0)
         for entry in self.log.find({"timestamp": {"$gt": timestamp}}):

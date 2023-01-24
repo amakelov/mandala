@@ -17,7 +17,7 @@ class RemoteStorage(abc.ABC):
     @abstractmethod
     def get_log_entries_since(
         self, timestamp: datetime.datetime
-    ) -> tuple[list[RemoteEventLogEntry], datetime.datetime]:
+    ) -> Tuple[List[RemoteEventLogEntry], datetime.datetime]:
         raise NotImplementedError()
 
     @abstractmethod

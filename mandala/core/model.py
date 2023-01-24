@@ -1,3 +1,4 @@
+from typing import Type
 from .config import Config, dump_output_name, parse_output_idx
 from ..common_imports import *
 from .utils import Hashing
@@ -46,7 +47,7 @@ class Ref:
         return isinstance(self.obj, Delayed)
 
     @staticmethod
-    def make_delayed(RefCls: type["Ref"]) -> "Ref":
+    def make_delayed(RefCls) -> "Ref":
         return RefCls(uid="", obj=Delayed(), in_memory=False)
 
     def attach(self, reference: "Ref"):

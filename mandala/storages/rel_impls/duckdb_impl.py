@@ -72,7 +72,7 @@ class DuckDBRelStorage(RelStorage, Transactable):
     def create_relation(
         self,
         name: str,
-        columns: List[tuple[str, Optional[str]]],  # [(col name, type), ...]
+        columns: List[Tuple[str, Optional[str]]],  # [(col name, type), ...]
         defaults: Dict[str, Any],  # {col name: default value, ...}
         primary_key: Optional[str] = None,
         if_not_exists: bool = True,
@@ -269,7 +269,7 @@ class DuckDBRelStorage(RelStorage, Transactable):
     def execute_arrow(
         self,
         query: Union[str, Query],
-        parameters: list[Any] = None,
+        parameters: List[Any] = None,
         conn: Optional[Connection] = None,
     ) -> pa.Table:
         if parameters is None:
@@ -282,7 +282,7 @@ class DuckDBRelStorage(RelStorage, Transactable):
     def execute_no_results(
         self,
         query: Union[str, Query],
-        parameters: list[Any] = None,
+        parameters: List[Any] = None,
         conn: Optional[Connection] = None,
     ) -> None:
         if parameters is None:
@@ -295,7 +295,7 @@ class DuckDBRelStorage(RelStorage, Transactable):
     def execute_df(
         self,
         query: Union[str, Query],
-        parameters: list[Any] = None,
+        parameters: List[Any] = None,
         conn: Optional[Connection] = None,
     ) -> pd.DataFrame:
         if parameters is None:
