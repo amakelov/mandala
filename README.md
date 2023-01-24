@@ -13,12 +13,6 @@
 
 # Mandala
 
-<div align="left">
-<a href="https://colab.research.google.com/github/amakelov/mandala/blob/master/mandala/tutorials/00_hello.ipynb">
-  <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/>
-</a>
-</div>
-
 Mandala is a
 [`functools.lru_cache`](https://docs.python.org/3/library/functools.html#functools.lru_cache)
 on steroids, applied to elegantly solve experiment data management.
