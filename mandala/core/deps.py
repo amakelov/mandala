@@ -400,7 +400,7 @@ class Tracer:
                 return
 
             # qualified name of the module where the function/method is defined.
-            module_name = frame.f_globals.get("__name__")
+            module_name = frame.f_globals.get("__name__", "__main__")
             # code object of function being called
             code = frame.f_code
             # function's name
