@@ -3,13 +3,7 @@
   xmlns:xhtml="http://www.w3.org/1999/xhtml">
   <url>
     <loc>https://amakelov.github.io/mandala/</loc>
-    <lastmod>2022-12-15T16:09:58+02:00</lastmod>
-  </url><url>
-    <loc>https://amakelov.github.io/mandala/posts/</loc>
-    <lastmod>2022-12-15T16:09:58+02:00</lastmod>
-  </url><url>
-    <loc>https://amakelov.github.io/mandala/posts/test/</loc>
-    <lastmod>2022-12-15T16:09:58+02:00</lastmod>
+    <priority>0</priority>
   </url><url>
     <loc>https://amakelov.github.io/mandala/categories/</loc>
   </url><url>

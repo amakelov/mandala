@@ -1,6 +1,6 @@
 baseURL = "https://amakelov.github.io/mandala"
 languageCode = 'en-us'
-title = "Mandala documentation"
+title = "Mandala website (under construction)"
 paginate = 5
 theme = "PaperMod"
 enableRobotsTXT = true
@@ -48,7 +48,7 @@ tocopen = false
   # safari_pinned_tab = "<link / abs url>"
 
   [params.label]
-  text = "Mandala documentation"
+  text = "Mandala website (under construction)"
   # icon = "/apple-touch-icon.png"
   # iconHeight = 35
 
