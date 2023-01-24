@@ -94,6 +94,6 @@ def debug_call(
     )
     inputs_str = ", ".join(f"{k}={shortener(v)}" for k, v in wrapped_inputs.items())
     outputs_str = ", ".join(shortener(v) for v in wrapped_outputs)
-    pprint(
-        f'mandala({"memoized" if memoized else time.ctime()}): {func_name}({inputs_str}) -> {outputs_str}'
+    logging.info(
+        f'{"(memoized)" if memoized else ""}: {func_name}({inputs_str}) ---> {outputs_str}'
     )

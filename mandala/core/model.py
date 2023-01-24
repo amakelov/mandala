@@ -105,9 +105,10 @@ class ValueRef(Ref):
             raise RuntimeError(
                 "Ref magic methods (typecasting/comparison operators/binary operators) are disabled; enable with Config.enable_ref_magics = True"
             )
-        logging.warning(
-            f"Automatically unwrapping `Ref` to run magic method (typecasting/comparison operators/binary operators)."
-        )
+        if Config.warnings:
+            logging.warning(
+                f"Automatically unwrapping `Ref` to run magic method (typecasting/comparison operators/binary operators)."
+            )
         from .wrapping import unwrap
 
         self._auto_attach(shallow=True)

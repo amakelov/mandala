@@ -904,6 +904,7 @@ class RelAdapter(Transactable):
             _uids_by_table is not None and len(_uids_by_table) > 0
         ):
             if _uids_by_table is None:
+                calls = list({c.uid: c for c in calls}.values())
                 for table_name, ta in self.tabulate_calls(calls).items():
                     self.rel_storage.delete(
                         relation=table_name,
@@ -1168,11 +1169,13 @@ class RelAdapter(Transactable):
             if isinstance(vref, Ref) and not vref.in_memory:
                 detached_vrefs.append(vref)
             elif isinstance(vref, ListRef) and vref.in_memory:
-                detached_vrefs.extend(vref.obj)
+                detached_vrefs.extend([elt for elt in vref.obj if not elt.in_memory])
             elif isinstance(vref, DictRef) and vref.in_memory:
-                detached_vrefs.extend(vref.obj.values())
+                detached_vrefs.extend(
+                    [elt for elt in vref.obj.values() if not elt.in_memory]
+                )
             elif isinstance(vref, SetRef) and vref.in_memory:
-                detached_vrefs.extend(vref.obj)
+                detached_vrefs.extend([elt for elt in vref.obj if not elt.in_memory])
             else:
                 continue
         vrefs = detached_vrefs

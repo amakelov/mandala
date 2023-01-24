@@ -41,7 +41,7 @@ def test_visualization():
         h(z=a, w=b)
         x, y, z = f(x=d, y=e)
         x.named("x"), y.named("y"), z.named("z")
-        storage.visualize_query([a, b, c, d, e])
+        storage.visualize_query(a, b, c, d, e)
         # vqs, fqs = traverse_all([a, b, c, d, e])
         # visualize_computational_graph(
         #     val_queries=vqs,

@@ -70,6 +70,7 @@ scratchpad/
 # ignore persistent storages
 temp_dbs/*
 mandala/tests/output/*
+*.db
 
 ## PyCharm stuff
 .idea/**

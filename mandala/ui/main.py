@@ -678,11 +678,16 @@ class Storage(Transactable):
     def get_table(
         self,
         func_interface: Union["FuncInterface", Any],
+        include_call_uid: bool = False,
         conn: Optional[Connection] = None,
     ) -> pd.DataFrame:
-        return self.rel_storage.get_data(
+        df = self.rel_storage.get_data(
             table=func_interface.func_op.sig.versioned_ui_name, conn=conn
         )
+        df = self.rel_adapter.evaluate_call_table(ta=df, conn=conn)
+        if not include_call_uid:
+            df = df.drop(columns=[Config.uid_col])
+        return df
 
     @transaction()
     def update_op_deps(
@@ -851,7 +856,6 @@ class Storage(Transactable):
             query = compiler.compile(
                 select_queries=select_queries, filter_duplicates=filter_duplicates
             )
-            print(query)
             df = self.rel_storage.execute_df(query=str(query), conn=conn)
         elif engine == "naive":
             val_copies, func_copies, select_copies = QueryGraph._copy_graph(
@@ -905,7 +909,7 @@ class Storage(Transactable):
     @transaction()
     def visualize_query(
         self,
-        select_queries: List[ValQuery],
+        *select_queries: List[ValQuery],
         how: str = "none",
         output_path: Optional[Path] = None,
         conn: Optional[Connection] = None,
@@ -963,18 +967,7 @@ class Storage(Transactable):
         call_exists = self.call_exists(call_uid, conn=conn)
         memoized = call_exists
         # check if call UID exists in call storage
-        if call_exists and not _recurse:
-            if sys.gettrace() is not None and self.deps_root is not None:
-                data = Tracer.generate_terminal_data(
-                    func=func_op.func,
-                    internal_name=func_op.sig.internal_name,
-                    version=func_op.sig.version,
-                )
-                Tracer.break_signal(data=data)
-            wrapped_outputs, call = self._process_call_found(
-                call_uid=call_uid, lazy=lazy, conn=conn
-            )
-        else:
+        if not call_exists or (_recurse and func_op.is_super):
             # compute op
             if not allow_calls and not call_exists:
                 raise ValueError(
@@ -1009,6 +1002,17 @@ class Storage(Transactable):
                     self.update_op_deps(
                         func_op=func_op, new_deps=dependency_state_option, conn=conn
                     )
+        else:
+            if sys.gettrace() is not None and self.deps_root is not None:
+                data = Tracer.generate_terminal_data(
+                    func=func_op.func,
+                    internal_name=func_op.sig.internal_name,
+                    version=func_op.sig.version,
+                )
+                Tracer.break_signal(data=data)
+            wrapped_outputs, call = self._process_call_found(
+                call_uid=call_uid, lazy=lazy, conn=conn
+            )
         if debug_calls:
             debug_call(
                 func_name=func_op.sig.ui_name,

@@ -140,7 +140,10 @@ class QueryGraph:
         functions along the way.
         """
         assert all(select_query in val_queries for select_query in select_queries)
-        val_copies = {v: ValQuery(creator=None, created_as=None) for v in val_queries}
+        val_copies = {
+            v: ValQuery(creator=None, created_as=None).named(v.column_name)
+            for v in val_queries
+        }
         select_copies = [val_copies[v] for v in select_queries]
         func_copies = []
         for func_query in func_queries:

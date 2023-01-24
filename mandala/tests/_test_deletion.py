@@ -89,7 +89,7 @@ def test_structs():
         get_prime_factors(15)
 
     set_df = storage.get_table(set_op)
-    assert len(set_df["st"].unique()) == 1
+    assert len(set_df["st"].apply(lambda x: tuple(sorted((x)))).unique()) == 1
     assert len(set_df["elt"]) == 3
     for elt in factors_105:
         storage.obj_get(obj_uid=elt.uid)

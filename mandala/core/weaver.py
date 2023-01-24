@@ -12,6 +12,7 @@ from ..ui.viz import (
     HTMLBuilder,
     Cell,
 )
+import textwrap
 from typing import Literal
 
 
@@ -248,9 +249,11 @@ class BuiltinQueries:
     def parse_list_pattern(obj: list) -> Tuple[ValQuery, List[Any]]:
         # parse a pattern of the form [x, ...]
         children = [obj[0]]
+        if isinstance(obj[0], Ref):
+            children[0] = qwrap(obj[0])
         if not all([isinstance(x, ValQuery) for x in children]):
             raise NotImplementedError()
-        return BuiltinQueries.ListQuery(elt=obj[0]), children
+        return BuiltinQueries.ListQuery(elt=children[0]), children
 
     @staticmethod
     def parse_dict_pattern(obj: dict) -> Tuple[ValQuery, List[Any]]:
@@ -393,7 +396,10 @@ def computational_graph_to_dot(
                 rows = list(df.head().itertuples(index=False))
                 for tup in rows:
                     html_label.add_row(
-                        cells=[Cell(text=str(x), bold=True) for x in tup]
+                        cells=[
+                            Cell(text=textwrap.shorten(str(x), 25), bold=True)
+                            for x in tup
+                        ]
                     )
                 # add port names to the cells in the *last* row
                 for cell, port_name in zip(html_label.rows[-1], port_names):

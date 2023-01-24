@@ -19,7 +19,7 @@ def test_add_input():
         x = inc(23)
 
     @op
-    def inc(x: int, y=42) -> int:
+    def inc(x: int, y=1) -> int:
         return x + y
 
     with storage.run():
@@ -27,7 +27,7 @@ def test_add_input():
 
     assert inc.func_op.sig.input_names == {"x", "y"}
     df = storage.get_table(inc)
-    assert df.shape == (1, 4)
+    assert df.shape == (1, 3)
 
     ############################################################################
     ### check that defaults can be overridden
@@ -169,7 +169,7 @@ def test_func_renaming():
 
     df = storage.get_table(inc_new)
     # make sure the call was not new
-    assert df.shape == (1, 3)
+    assert df.shape == (1, 2)
     # make sure we did not create a new function
     sigs = [v for k, v in storage.sig_adapter.load_state().items() if not v.is_builtin]
     assert len(sigs) == 1
@@ -255,7 +255,7 @@ def test_arg_renaming():
 
     df = storage.get_table(inc)
     # make sure the call was not new
-    assert df.shape == (1, 3)
+    assert df.shape == (1, 2)
     # make sure we did not create a new function
     sigs = [v for k, v in storage.sig_adapter.load_state().items() if not v.is_builtin]
     assert len(sigs) == 1

@@ -68,7 +68,7 @@ def superop(
     version: Union[Callable, Optional[int]] = None,
     ui_name: Optional[str] = None,
     executor: str = "python",
-) -> Callable:
+) -> "version":
     if callable(version):
         # a hack to handle the @op case
         func = version

@@ -183,6 +183,7 @@ class SigSyncer(Transactable):
         if not sig.version == new_version:
             raise ValueError(f"New version must be {new_version}, not {sig.version}")
         new_sig = sig._generate_internal(internal_name=latest_sig.internal_name)
+        new_sig.check_invariants()
         self.validate_transaction(
             new_sig=new_sig, all_sigs=self.sig_adapter.load_state(conn=conn)
         )

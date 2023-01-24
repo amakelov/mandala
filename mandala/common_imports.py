@@ -41,11 +41,29 @@ class Session:
         self.items = []
 
 
-logger = logging.getLogger("mandala")
-# logger.addHandler(logging.StreamHandler())
-FORMAT = "[%(filename)s:%(lineno)s - %(funcName)20s() ] %(message)s"
-logging.basicConfig(format=FORMAT)
-logger.setLevel(logging.INFO)
+try:
+    import rich
+
+    has_rich = True
+except ImportError:
+    has_rich = False
+
+if has_rich:
+    from rich.logging import RichHandler
+
+    logger = logging.getLogger("mandala")
+    logging_handler = RichHandler(enable_link_path=False)
+    FORMAT = "%(message)s"
+    logging.basicConfig(
+        level="INFO", format=FORMAT, datefmt="[%X]", handlers=[logging_handler]
+    )
+else:
+    logger = logging.getLogger("mandala")
+    # logger.addHandler(logging.StreamHandler())
+    FORMAT = "[%(filename)s:%(lineno)s - %(funcName)20s() ] %(message)s"
+    logging.basicConfig(format=FORMAT)
+    logger.setLevel(logging.INFO)
+
 sess = Session()
 
 TableType = TypeVar("TableType", pa.Table, pd.DataFrame)

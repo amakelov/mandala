@@ -31,6 +31,7 @@ class Config:
     # hashing method
     content_hasher: Literal["cityhash", "blake2b"] = "blake2b"
     enable_ref_magics = False
+    warnings = True
 
     ### constants
     # used for columns containing UIDs of value references or calls
@@ -85,6 +86,11 @@ class Config:
         has_rich = True
     except ImportError:
         has_rich = False
+
+    if has_rich:
+        from rich import pretty
+
+        pretty.install()
 
     ### some module names needed by internals
     mandala_path = get_mandala_path()

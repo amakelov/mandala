@@ -183,6 +183,13 @@ class Signature:
                 internal_name,
                 ui_to_internal_map,
             )
+            if len(self._new_input_defaults_uids) > 0:
+                assert self.has_internal_data
+                res._new_input_defaults_uids = {
+                    ui_to_internal_map[self.internal_to_ui_input_map[k]]: v
+                    for k, v in self._new_input_defaults_uids.items()
+                }
+        res.check_invariants()
         return res
 
     def is_compatible(self, new: "Signature") -> Tuple[bool, Optional[str]]:
@@ -266,6 +273,7 @@ class Signature:
                 updates[k] = new_defaults[k]
         if new.n_outputs != self.n_outputs:
             new_sig.n_outputs = new.n_outputs
+        new_sig.check_invariants()
         return new_sig, updates
 
     def create_input(
@@ -289,6 +297,7 @@ class Signature:
         res.defaults[name] = default
         default_uid = Hashing.get_content_hash(obj=default)
         res._new_input_defaults_uids[internal_name] = default_uid
+        res.check_invariants()
         return res
 
     def rename(self, new_name: str) -> "Signature":
@@ -297,6 +306,7 @@ class Signature:
         """
         res = copy.deepcopy(self)
         res.ui_name = new_name
+        res.check_invariants()
         return res
 
     def rename_inputs(self, mapping: Dict[str, str]) -> "Signature":
@@ -324,11 +334,13 @@ class Signature:
             res.ui_to_internal_input_map[new_name] = res.ui_to_internal_input_map.pop(
                 current_name
             )
+        res.check_invariants()
         return res
 
     def bump_version(self) -> "Signature":
         res = copy.deepcopy(self)
         res.version += 1
+        res.check_invariants()
         return res
 
     @staticmethod
@@ -369,7 +381,7 @@ class Signature:
             for param in sig.parameters.values()
             if param.default is not inspect.Parameter.empty
         }
-        return Signature(
+        res = Signature(
             ui_name=name,
             input_names=input_names,
             n_outputs=n_outputs,
@@ -377,6 +389,8 @@ class Signature:
             version=version,
             _is_builtin=_is_builtin,
         )
+        res.check_invariants()
+        return res
 
 
 def _postprocess_outputs(sig: Signature, result) -> List[Any]:
