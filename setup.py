@@ -59,10 +59,12 @@ setup(
         "Operating System :: POSIX :: Linux",
         "Programming Language :: Python :: 3",
         "Programming Language :: Python :: 3.10",
+        "Programming Language :: Python :: 3.9",
+        "Programming Language :: Python :: 3.8",
     ],
     packages=packages,
     long_description=open("README.md").read() if os.path.exists("README.md") else "",
-    python_requires=">=3.10",
+    python_requires=">=3.8",
     install_requires=install_requires,
     extras_require=extras_require,
 )
