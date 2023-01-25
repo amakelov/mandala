@@ -7,6 +7,7 @@ import copy
 import hashlib
 import io
 import os
+import shutil
 import sys
 import joblib
 import inspect

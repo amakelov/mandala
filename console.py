@@ -16,6 +16,6 @@ args = parser.parse_args()
 
 if __name__ == "__main__":
     from mandala.all import *
-    from mandala.tests.test_stateful import *
+    from mandala.tests.test_stateful_slow import *
 
     # setup_logging(level='info')

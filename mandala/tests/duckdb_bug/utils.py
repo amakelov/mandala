@@ -1,4 +1,4 @@
-from ..test_stateful import *
+from ..test_stateful_slow import *
 
 
 def load_bug() -> Tuple[Storage, List[FuncOp]]:

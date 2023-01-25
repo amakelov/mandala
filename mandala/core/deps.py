@@ -409,7 +409,9 @@ class Tracer:
             if module_name is None:
                 # this is known to happen in a colab environment
                 if Config.warnings:
-                    logger.warning("Dependency tracer: found a frame with no module name. Skipping.")
+                    logger.warning(
+                        "Dependency tracer: found a frame with no module name. Skipping."
+                    )
                 return
             # code object of function being called
             code = frame.f_code

@@ -1,4 +1,4 @@
-from .test_stateful import SingleClientSimulator, MultiClientSimulator
+from .test_stateful_slow import SingleClientSimulator, MultiClientSimulator
 
 
 def test_1():

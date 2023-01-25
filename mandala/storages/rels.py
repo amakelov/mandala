@@ -22,6 +22,10 @@ from .rel_impls.utils import Transactable, transaction
 RemoteEventLogEntry = Dict[str, bytes]
 
 
+class SpilledRef:
+    pass
+
+
 class DependencyAdapter(Transactable):
     # todo: this is too similar to SignatureAdapter, refactor
     # like SignatureAdapter, but for dependency state.
@@ -604,9 +608,19 @@ class RelAdapter(Transactable):
         PROVENANCE_TABLE,
     )
 
-    def __init__(self, rel_storage: DuckDBRelStorage, deps_root: Optional[Path] = None):
+    def __init__(
+        self,
+        rel_storage: DuckDBRelStorage,
+        deps_root: Optional[Path] = None,
+        spillover_dir: Optional[Path] = None,
+        spillover_threshold_mb: int = Config.spillover_threshold_mb,
+    ):
         self.rel_storage = rel_storage
         self.deps_root = deps_root
+        self.spillover_dir = spillover_dir
+        self.spillover_threshold_mb = spillover_threshold_mb
+        if self.spillover_dir is not None:
+            self.spillover_dir.mkdir(parents=True, exist_ok=True)
         self.sig_adapter = SigAdapter(rel_adapter=self)
         self.init()
         # check if we are connecting to an existing instance
@@ -1031,6 +1045,49 @@ class RelAdapter(Transactable):
     ############################################################################
     ### object methods
     ############################################################################
+    def _spillover_criterion(self, serialized: bytes) -> bool:
+        return len(serialized) / 1024**2 > self.spillover_threshold_mb
+
+    def _mset_spillover(self, uids: List[str], refs: List[Ref]):
+        assert self.spillover_dir is not None
+        for uid, ref in zip(uids, refs):
+            dump_path = self.spillover_dir / f"{uid}.joblib"
+            with open(dump_path, "wb") as f:
+                joblib.dump(ref, f)
+            if Config.warnings:
+                size_in_mb = round(os.path.getsize(dump_path) / 10**6, 2)
+                logger.warning(f"Spill over {ref} of size {size_in_mb}MB")
+
+    def _mget_spillover(self, uids: List[str]) -> List[Ref]:
+        assert self.spillover_dir is not None
+        values = []
+        for uid in uids:
+            try:
+                with open(self.spillover_dir / f"{uid}.joblib", "rb") as f:
+                    values.append(joblib.load(f))
+            except FileNotFoundError:
+                if Config.warnings:
+                    logger.warning(f"Could not find spillover file for uid {uid}")
+                values.append(Ref.from_uid(uid=uid))
+        return values
+
+    def _serialize_spillover(self, ref: Ref) -> bytes:
+        s = serialize(ref)
+        if self._spillover_criterion(s):
+            substitute = Ref.from_uid(uid=ref.uid)
+            substitute._obj = SpilledRef()
+            self._mset_spillover([ref.uid], [ref])
+            return serialize(substitute)
+        else:
+            return s
+
+    def _deserialize_spillover(self, serialized: bytes) -> Ref:
+        value = deserialize(serialized)
+        if isinstance(value._obj, SpilledRef):
+            return self._mget_spillover([value.uid])[0]
+        else:
+            return value
+
     @transaction()
     def obj_exists(
         self, uids: List[str], conn: Optional[Connection] = None
@@ -1070,10 +1127,15 @@ class RelAdapter(Transactable):
         uids = list(vrefs.keys())
         indicators = self.obj_exists(uids, conn=conn)
         new_uids = [uid for uid, indicator in zip(uids, indicators) if not indicator]
+        if self.spillover_dir is not None:
+            serializer = self._serialize_spillover
+        else:
+            serializer = serialize
+        serialized_refs = [serializer(vrefs[new_uid].dump()) for new_uid in new_uids]
         ta = pa.Table.from_pylist(
             [
-                {Config.uid_col: new_uid, "value": serialize(vrefs[new_uid].dump())}
-                for new_uid in new_uids
+                {Config.uid_col: new_uid, "value": value}
+                for new_uid, value in zip(new_uids, serialized_refs)
             ]
         )
         self.rel_storage.upsert(relation=Config.vref_table, ta=ta, conn=conn)
@@ -1110,7 +1172,11 @@ class RelAdapter(Transactable):
                     .select(table[Config.uid_col], table["value"])
                 )
                 output = self.rel_storage.execute_df(query, conn=conn)
-                output["value"] = output["value"].map(lambda x: deserialize(bytes(x)))
+                if self.spillover_dir is not None:
+                    deserializer = self._deserialize_spillover
+                else:
+                    deserializer = deserialize
+                output["value"] = output["value"].map(lambda x: deserializer(bytes(x)))
             else:
                 output = pd.DataFrame(columns=[Config.uid_col, "value"])
             if not _attach_atoms:

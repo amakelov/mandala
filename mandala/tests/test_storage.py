@@ -210,3 +210,40 @@ def test_magics():
         raise e
     finally:
         db_path.unlink()
+
+
+def test_spillover():
+    db_path = OUTPUT_ROOT / "test_spillover.db"
+    if db_path.exists():
+        db_path.unlink()
+    spillover_dir = OUTPUT_ROOT / "test_spillover/"
+    if spillover_dir.exists():
+        shutil.rmtree(spillover_dir)
+    storage = Storage(db_path=db_path, spillover_dir=spillover_dir)
+
+    try:
+        import numpy as np
+
+        @op
+        def create_large_array() -> np.ndarray:
+            return np.random.rand(10_000_000)
+
+        with storage.run():
+            x = create_large_array()
+
+        assert len(os.listdir(spillover_dir)) == 1
+        path = spillover_dir / os.listdir(spillover_dir)[0]
+        with open(path, "rb") as f:
+            data = unwrap(joblib.load(f))
+        assert np.allclose(data, unwrap(x))
+
+        with storage.run():
+            x = create_large_array()
+            assert not x.in_memory
+            x = unwrap(x)
+
+    except Exception as e:
+        raise e
+    finally:
+        db_path.unlink()
+        shutil.rmtree(spillover_dir)

@@ -28,10 +28,9 @@ class Config:
     check_signature_on_each_call = False
     # always create storage with a persistent database
     _persistent_storage_testing = False
-    # hashing method
-    content_hasher: Literal["cityhash", "blake2b"] = "blake2b"
     enable_ref_magics = False
     warnings = True
+    spillover_threshold_mb = 50
 
     ### constants
     # used for columns containing UIDs of value references or calls
@@ -96,6 +95,11 @@ class Config:
     mandala_path = get_mandala_path()
     module_name = "mandala"
     tests_module_name = "mandala.tests"
+
+    # hashing method
+    content_hasher: Literal["cityhash", "blake2b"] = (
+        "cityhash" if has_cityhash else "blake2b"
+    )
 
 
 def dump_output_name(index: int) -> str:
