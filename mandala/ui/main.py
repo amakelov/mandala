@@ -229,6 +229,7 @@ class Storage(Transactable):
         self,
         db_path: Optional[Union[str, Path]] = None,
         spillover_dir: Optional[Union[str, Path]] = None,
+        spillover_threshold_mb: Optional[float] = None,
         root: Optional[Union[Path, RemoteStorage]] = None,
         timestamp: Optional[datetime.datetime] = None,
         multiproc: bool = False,
@@ -277,6 +278,7 @@ class Storage(Transactable):
             rel_storage=self.rel_storage,
             deps_root=self.deps_root,
             spillover_dir=Path(spillover_dir) if spillover_dir is not None else None,
+            spillover_threshold_mb=spillover_threshold_mb,
         )
         self.sig_adapter = self.rel_adapter.sig_adapter
         self.sig_syncer = SigSyncer(sig_adapter=self.sig_adapter, root=self.root)

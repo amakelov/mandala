@@ -4,6 +4,7 @@ from duckdb import DuckDBPyConnection as Connection
 from pypika import Query, Column
 
 from .bases import RelStorage
+from ...core.config import Config
 from .utils import Transactable, transaction
 from ...core.utils import get_uid
 from ...common_imports import *
@@ -232,7 +233,8 @@ class DuckDBRelStorage(RelStorage, Transactable):
             return
         if not self.table_exists(relation, conn=conn):
             raise RuntimeError()
-        cols_string = ", ".join([f'"{column_name}"' for column_name in ta.column_names])
+        col_names = ta.column_names if isinstance(ta, pa.Table) else ta.columns
+        cols_string = ", ".join([f'"{column_name}"' for column_name in col_names])
         conn.register(view_name=self.TEMP_ARROW_TABLE, python_object=ta)
         if key_cols is None:
             primary_keys = self._get_primary_keys(relation=relation, conn=conn)

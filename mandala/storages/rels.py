@@ -613,12 +613,16 @@ class RelAdapter(Transactable):
         rel_storage: DuckDBRelStorage,
         deps_root: Optional[Path] = None,
         spillover_dir: Optional[Path] = None,
-        spillover_threshold_mb: int = Config.spillover_threshold_mb,
+        spillover_threshold_mb: Optional[float] = None,
     ):
         self.rel_storage = rel_storage
         self.deps_root = deps_root
         self.spillover_dir = spillover_dir
-        self.spillover_threshold_mb = spillover_threshold_mb
+        self.spillover_threshold_mb = (
+            Config.spillover_threshold_mb
+            if spillover_threshold_mb is None
+            else spillover_threshold_mb
+        )
         if self.spillover_dir is not None:
             self.spillover_dir.mkdir(parents=True, exist_ok=True)
         self.sig_adapter = SigAdapter(rel_adapter=self)
@@ -1132,11 +1136,18 @@ class RelAdapter(Transactable):
         else:
             serializer = serialize
         serialized_refs = [serializer(vrefs[new_uid].dump()) for new_uid in new_uids]
-        ta = pa.Table.from_pylist(
-            [
-                {Config.uid_col: new_uid, "value": value}
-                for new_uid, value in zip(new_uids, serialized_refs)
-            ]
+        # ta = pa.Table.from_pylist(
+        #     [
+        #         {Config.uid_col: new_uid, "value": value}
+        #         for new_uid, value in zip(new_uids, serialized_refs)
+        #     ]
+        # )
+        # to get around the 2GB limit of pyarrow
+        ta = pd.DataFrame(
+            {
+                Config.uid_col: new_uids,
+                "value": serialized_refs,
+            }
         )
         self.rel_storage.upsert(relation=Config.vref_table, ta=ta, conn=conn)
         log_ta = pa.Table.from_pylist(
