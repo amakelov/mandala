@@ -165,6 +165,7 @@ from mandala.all import Storage, op
 storage = Storage(
   db_path='my_persistent_storage.db', # omit for an in-memory storage
   deps_root='codebase_root_folder/', # omit to disable automatic dependency tracking
+  spillover_dir='spillover_dir/', # for better storage performance
 )
 ```
 The `@op` decorator marks a function `f` as memoizable. Some notes apply:

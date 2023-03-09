@@ -3,9 +3,8 @@ from mandala.tests.utils import *
 from mandala.core.weaver import *
 
 
-def test_unit():
-    storage = Storage()
-
+@pytest.mark.parametrize("storage", generate_storages())
+def test_unit(storage):
     @op
     def f(x: int, y: int) -> int:
         return x + y

@@ -1,13 +1,50 @@
 import mongomock
+import uuid
+import pytest
 
 from ..common_imports import *
 from mandala.all import *
-from mandala.ui.main import MODES
+from mandala.ui.storage import Storage
+from mandala.ui.storage import MODES
 from mandala.core.config import Config
 from mandala.core.model import Ref
 from mandala.storages.remote_impls.mongo_impl import MongoRemoteStorage
 from mandala.storages.remote_impls.mongo_mock import MongoMockRemoteStorage
 from mandala.storages.rels import RelAdapter
+
+
+def generate_db_path() -> Path:
+    output_dir = Path(os.path.dirname(os.path.abspath(__file__)) + "/output")
+    fname = str(uuid.uuid4()) + ".db"
+    return output_dir / fname
+
+
+def generate_spillover_dir() -> Path:
+    output_dir = Path(os.path.dirname(os.path.abspath(__file__)) + "/output")
+    fname = str(uuid.uuid4())
+    return output_dir / fname
+
+
+def generate_path(ext: str) -> Path:
+    output_dir = Path(os.path.dirname(os.path.abspath(__file__)) + "/output")
+    fname = str(uuid.uuid4()) + ext
+    return output_dir / fname
+
+
+def generate_storages() -> List[Storage]:
+    results = []
+    for db_backend in ("sqlite",):
+        for persistent in (True, False):
+            for spillover in (True, False):
+                results.append(
+                    Storage(
+                        db_backend=db_backend,
+                        db_path=generate_db_path() if persistent else None,
+                        spillover_dir=generate_spillover_dir() if spillover else None,
+                        spillover_threshold_mb=0,
+                    )
+                )
+    return results
 
 
 def signatures_are_equal(storage_1: Storage, storage_2: Storage) -> bool:
@@ -70,8 +107,9 @@ def data_is_equal(
     data_2 = storage_2.rel_storage.get_all_data()
     #! remove some internal tables from the comparison
     for _internal_table in [RelAdapter.DEPS_TABLE, RelAdapter.PROVENANCE_TABLE]:
-        data_1.pop(_internal_table)
-        data_2.pop(_internal_table)
+        if _internal_table in data_1:
+            data_1.pop(_internal_table)
+            data_2.pop(_internal_table)
     # compare the keys
     if data_1.keys() != data_2.keys():
         result, reason = False, f"Tables differ: {data_1.keys()} vs {data_2.keys()}"
@@ -124,43 +162,8 @@ def check_invariants(storage: Storage):
         input_cols = [
             col
             for col in columns
-            if not col.startswith(Config.output_name_prefix) and col != Config.uid_col
+            if not col.startswith(Config.output_name_prefix)
+            and col not in Config.special_call_cols
         ]
         ui_name, version = Signature.parse_versioned_name(versioned_name=call_table)
         assert set(input_cols).issubset(ui_sigs[ui_name, version].input_names)
-
-
-def call_matches_signature(call: Call, sig: Signature) -> bool:
-    return (
-        call.op.sig.ui_name == sig.ui_name
-        and set(call.inputs.keys()).issubset(sig.input_names)
-        and len(call.outputs) == sig.n_outputs
-    )
-
-
-def _check_invariants(storage: Storage):
-    return
-    obj_uids = storage.objs.keys()
-    call_uids = storage.all_calls()
-    calls = [storage.calls.get(uid=uid) for uid in call_uids]
-    committed_calls = [storage.calls.get(uid=uid) for uid in storage.calls.main.keys()]
-    input_uids = [vref.uid for call in calls for vref in call.inputs.values()]
-    output_uids = [vref.uid for call in calls for vref in call.outputs]
-    io_uids = input_uids + output_uids
-
-    # check that all calls reference valid objects
-    # default values may exist in obj_uids, but not in calls, hence the subset
-    # instead of equality
-    assert set(io_uids).issubset(obj_uids)
-
-    # check that the signatures stored are consistent with the calls
-    for call in calls:
-        sig = call.op.sig
-        ui_name, version = sig.external_name, sig.version
-        stored_sig = storage.sigs[ui_name, version]
-        assert call_matches_signature(call, stored_sig)
-
-    # check that the committed calls are accounted for in the relational storage
-    committed_tables = storage.rel_adapter.tabulate_calls(calls=committed_calls)
-    # TODO: this is complicated by the fact that there may be calls for an old
-    # signature of a function (missing some new inputs)

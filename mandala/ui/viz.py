@@ -58,7 +58,29 @@ def _colorize(text: str, color: str) -> str:
     return f"\033[{colors[color]}m{text}\033[0m"
 
 
-def _get_colorized_diff(current: str, new: str, style: str = "multiline") -> str:
+def _get_diff(current: str, new: str) -> str:
+    """
+    Return a line-by-line diff of the changes between `current` and `new`. each
+    line removed from `current` is prefixed with a '-', and each line added to
+    `new` is prefixed with a '+'.
+    """
+    lines = []
+    for line in difflib.unified_diff(
+        current.splitlines(),
+        new.splitlines(),
+        n=2,  # number of lines of context around changes to show
+        # fromfile="current", tofile="new"
+        lineterm="",
+    ):
+        if line.startswith("@@") or line.startswith("+++") or line.startswith("---"):
+            continue
+        lines.append(line)
+    return "\n".join(lines)
+
+
+def _get_colorized_diff(
+    current: str, new: str, style: str = "multiline", context_lines: int = 2
+) -> str:
     """
     Return a line-by-line colorized diff of the changes between `current` and
     `new`. each line removed from `current` is colored red, and each line added
@@ -68,7 +90,7 @@ def _get_colorized_diff(current: str, new: str, style: str = "multiline") -> str
     for line in difflib.unified_diff(
         current.splitlines(),
         new.splitlines(),
-        n=2,  # number of lines of context around changes to show
+        n=context_lines,  # number of lines of context around changes to show
         # fromfile="current", tofile="new"
         lineterm="",
     ):

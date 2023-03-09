@@ -270,6 +270,14 @@ def test_remote_lots_of_stuff():
     assert data_is_equal(storage_1=storage_1, storage_2=storage_2)
 
     # check we can do work with the renamed function in storage_2
+    @op
+    def inc_new(x_new: int) -> int:
+        return x_new + 1
+
+    @op
+    def add(x: int, y: int) -> int:
+        return x + y
+
     with storage_2.run():
         for i in range(20, 40):
             j = inc_new(x_new=i)

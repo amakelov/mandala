@@ -9,10 +9,10 @@ from duckdb import DuckDBPyConnection as Connection
 from ..common_imports import *
 from ..core.config import Config, dump_output_name
 from ..core.model import Call, FuncOp, Ref, ValueRef
-from ..core.builtins_ import ListRef, DictRef, SetRef, Builtins, collect_uids
+from ..core.builtins_ import ListRef, DictRef, SetRef, Builtins
 from ..core.wrapping import unwrap
 from ..core.sig import Signature
-from ..core.deps import DependencyGraph, MandalaDependencies
+from ..deps.versioner import Versioner
 from ..utils import serialize, deserialize, _rename_cols
 from .rel_impls.duckdb_impl import DuckDBRelStorage
 from .rel_impls.utils import Transactable, transaction
@@ -26,7 +26,7 @@ class SpilledRef:
     pass
 
 
-class DependencyAdapter(Transactable):
+class VersionAdapter(Transactable):
     # todo: this is too similar to SignatureAdapter, refactor
     # like SignatureAdapter, but for dependency state.
     # encapsulates methods to load and write the dependency table
@@ -47,7 +47,7 @@ class DependencyAdapter(Transactable):
     @transaction()
     def dump_state(
         self,
-        state: MandalaDependencies,
+        state: Versioner,
         conn: Optional[Connection] = None,
     ):
         """
@@ -56,7 +56,7 @@ class DependencyAdapter(Transactable):
         """
         # delete existing, if any
         index_col = "index"
-        query = f"DELETE FROM {self.rel_adapter.DEPS_TABLE} WHERE {index_col} = 0"
+        query = f'DELETE FROM {self.rel_adapter.DEPS_TABLE} WHERE "{index_col}" = 0'
         conn.execute(query)
         # insert new
         serialized = serialize(obj=state)
@@ -71,21 +71,21 @@ class DependencyAdapter(Transactable):
 
     @transaction()
     def has_state(self, conn: Optional[Connection] = None) -> bool:
-        query = f"SELECT * FROM {self.rel_adapter.DEPS_TABLE} WHERE index = 0"
+        query = f'SELECT * FROM {self.rel_adapter.DEPS_TABLE} WHERE "index" = 0'
         df = self.rel_storage.execute_df(query=query, conn=conn)
         return len(df) != 0
 
     @transaction()
-    def load_state(self, conn: Optional[Connection] = None) -> MandalaDependencies:
+    def load_state(self, conn: Optional[Connection] = None) -> Optional[Versioner]:
         """
         Load the state of the signatures from the database. All interactions
         with the state of the signatures are done transactionally through this
         method.
         """
-        query = f"SELECT * FROM {self.rel_adapter.DEPS_TABLE} WHERE index = 0"
+        query = f'SELECT * FROM {self.rel_adapter.DEPS_TABLE} WHERE "index" = 0'
         df = self.rel_storage.execute_df(query=query, conn=conn)
         if len(df) == 0:
-            return MandalaDependencies()
+            return None
         else:
             return deserialize(df["deps"][0])
 
@@ -102,7 +102,6 @@ class SigAdapter(Transactable):
     ):
         self.rel_adapter = rel_adapter
         self.rel_storage = self.rel_adapter.rel_storage
-        self.deps_adapter = DependencyAdapter(rel_adapter=rel_adapter)
 
     @transaction()
     def dump_state(
@@ -114,7 +113,9 @@ class SigAdapter(Transactable):
         """
         # delete existing, if any
         index_col = "index"
-        query = f"DELETE FROM {self.rel_adapter.SIGNATURES_TABLE} WHERE {index_col} = 0"
+        query = (
+            f'DELETE FROM {self.rel_adapter.SIGNATURES_TABLE} WHERE "{index_col}" = 0'
+        )
         conn.execute(query)
         # insert new
         serialized = serialize(obj=state)
@@ -131,7 +132,7 @@ class SigAdapter(Transactable):
 
     @transaction()
     def has_state(self, conn: Optional[Connection] = None) -> bool:
-        query = f"SELECT * FROM {self.rel_adapter.SIGNATURES_TABLE} WHERE index = 0"
+        query = f'SELECT * FROM {self.rel_adapter.SIGNATURES_TABLE} WHERE "index" = 0'
         df = self.rel_storage.execute_df(query=query, conn=conn)
         return len(df) != 0
 
@@ -144,7 +145,7 @@ class SigAdapter(Transactable):
         with the state of the signatures are done transactionally through this
         method.
         """
-        query = f"SELECT * FROM {self.rel_adapter.SIGNATURES_TABLE} WHERE index = 0"
+        query = f'SELECT * FROM {self.rel_adapter.SIGNATURES_TABLE} WHERE "index" = 0'
         df = self.rel_storage.execute_df(query=query, conn=conn)
         if len(df) == 0:
             return {}
@@ -335,9 +336,27 @@ class SigAdapter(Transactable):
     ############################################################################
     @transaction()
     def _init_deps(self, sig: Signature, conn: Optional[Connection] = None):
-        deps = self.deps_adapter.load_state(conn=conn)
-        deps.op_graphs[(sig.internal_name, sig.version)] = DependencyGraph()
-        self.deps_adapter.dump_state(state=deps, conn=conn)
+        pass
+        # deps = self.deps_adapter.load_state(conn=conn)
+        # deps.op_graphs[(sig.internal_name, sig.version)] = DependencyGraph()
+        # self.deps_adapter.dump_state(state=deps, conn=conn)
+
+    @transaction()
+    def _create_relation(self, sig: Signature, conn: Optional[Connection] = None):
+        io_colnames = list(sig.input_names) + [
+            dump_output_name(index=i) for i in range(sig.n_outputs)
+        ]
+        all_cols = [(col, None) for col in Config.special_call_cols] + [
+            (column, None) for column in io_colnames
+        ]
+        self.rel_storage.create_relation(
+            name=sig.versioned_ui_name,
+            columns=all_cols,
+            primary_key=Config.uid_col,
+            defaults=sig.new_ui_input_default_uids,
+            conn=conn,
+        )
+        self._init_deps(sig=sig, conn=conn)
 
     @transaction()
     def create_sig(self, sig: Signature, conn: Optional[Connection] = None):
@@ -353,18 +372,7 @@ class SigAdapter(Transactable):
         # write signatures
         self.dump_state(state=sigs, conn=conn)
         # create relation
-        columns = list(sig.input_names) + [
-            dump_output_name(index=i) for i in range(sig.n_outputs)
-        ]
-        columns = [(Config.uid_col, None)] + [(column, None) for column in columns]
-        self.rel_storage.create_relation(
-            name=sig.versioned_ui_name,
-            columns=columns,
-            primary_key=Config.uid_col,
-            defaults=sig.new_ui_input_default_uids,
-            conn=conn,
-        )
-        self._init_deps(sig=sig, conn=conn)
+        self._create_relation(sig=sig, conn=conn)
         logger.debug(f"Created signature:\n{sig}")
 
     @transaction()
@@ -382,18 +390,7 @@ class SigAdapter(Transactable):
         sigs[(sig.internal_name, sig.version)] = sig
         self.dump_state(state=sigs, conn=conn)
         # create relation
-        columns = list(sig.input_names) + [
-            dump_output_name(index=i) for i in range(sig.n_outputs)
-        ]
-        columns = [(Config.uid_col, None)] + [(column, None) for column in columns]
-        self.rel_storage.create_relation(
-            name=sig.versioned_ui_name,
-            columns=columns,
-            primary_key=Config.uid_col,
-            defaults=sig.new_ui_input_default_uids,
-            conn=conn,
-        )
-        self._init_deps(sig=sig, conn=conn)
+        self._create_relation(sig=sig, conn=conn)
         logger.debug(f"Created new version:\n{sig}")
 
     @transaction()
@@ -575,25 +572,16 @@ class SigAdapter(Transactable):
         return result
 
 
-class ProvTable:
-    call_uid = "call_uid"
-    internal_name = "internal_name"
-    version = "version"
-    vref_uid = "vref_uid"
-    io_name = "io_name"
-    direction = "direction"
+# class ProvTable:
+#     call_uid = "call_uid"
+#     internal_name = "internal_name"
+#     version = "version"
+#     vref_uid = "vref_uid"
+#     io_name = "io_name"
+#     direction = "direction"
 
 
 class RelAdapter(Transactable):
-    """
-    Responsible for high-level RDBMS interactions, such as
-        - taking a bunch of calls and putting their data inside the database;
-        - keeping track of data provenance (i.e., putting calls in a table that
-          makes it easier to derive the history of a value reference)
-
-    Uses `RelStorage` to do the actual work.
-    """
-
     EVENT_LOG_TABLE = Config.event_log_table
     VREF_TABLE = Config.vref_table
     SIGNATURES_TABLE = Config.schema_table
@@ -611,12 +599,10 @@ class RelAdapter(Transactable):
     def __init__(
         self,
         rel_storage: DuckDBRelStorage,
-        deps_root: Optional[Path] = None,
         spillover_dir: Optional[Path] = None,
         spillover_threshold_mb: Optional[float] = None,
     ):
         self.rel_storage = rel_storage
-        self.deps_root = deps_root
         self.spillover_dir = spillover_dir
         self.spillover_threshold_mb = (
             Config.spillover_threshold_mb
@@ -680,21 +666,21 @@ class RelAdapter(Transactable):
             if_not_exists=True,
             conn=conn,
         )
-        self.rel_storage.create_relation(
-            name=self.PROVENANCE_TABLE,
-            columns=[
-                (ProvTable.call_uid, None),
-                (ProvTable.io_name, None),
-                (ProvTable.vref_uid, None),
-                (ProvTable.direction, None),
-                (ProvTable.internal_name, None),
-                (ProvTable.version, "int"),
-            ],
-            primary_key=None,
-            defaults={},
-            if_not_exists=True,
-            conn=conn,
-        )
+        # self.rel_storage.create_relation(
+        #     name=self.PROVENANCE_TABLE,
+        #     columns=[
+        #         (ProvTable.call_uid, None),
+        #         (ProvTable.io_name, None),
+        #         (ProvTable.vref_uid, None),
+        #         (ProvTable.direction, None),
+        #         (ProvTable.internal_name, None),
+        #         (ProvTable.version, "int"),
+        #     ],
+        #     primary_key=None,
+        #     defaults={},
+        #     if_not_exists=True,
+        #     conn=conn,
+        # )
 
     @transaction()
     def get_call_tables(self, conn: Optional[Connection] = None) -> List[str]:
@@ -711,7 +697,7 @@ class RelAdapter(Transactable):
         #     ta = pa.Table.to_pandas(ta)
         ta = ta.copy()
         for col in ta.columns:
-            if col != Config.uid_col:
+            if col not in Config.special_call_cols:
                 ta[col] = ta[col].apply(
                     lambda uid: unwrap(self.obj_get(uid, conn=conn))
                 )
@@ -752,9 +738,8 @@ class RelAdapter(Transactable):
     @transaction()
     def clear_event_log(self, conn: Optional[Connection] = None):
         event_log_table = Table(self.EVENT_LOG_TABLE)
-        self.rel_storage.execute_no_results(
-            query=Query.from_(event_log_table).delete(), conn=conn
-        )
+        query = Query.from_(event_log_table).delete()
+        self.rel_storage.execute_no_results(query=query, conn=conn)
 
     ############################################################################
     ### `Transactable` interface
@@ -839,6 +824,9 @@ class RelAdapter(Transactable):
                         input_uids[k] = v
                 row = {
                     Config.uid_col: call.uid,
+                    Config.content_version_col: call.content_version,
+                    Config.semantic_version_col: call.semantic_version,
+                    Config.transient_col: call.transient,
                     **input_uids,
                     **{
                         dump_output_name(index=i): v.uid
@@ -870,17 +858,18 @@ class RelAdapter(Transactable):
                     ),
                     conn=conn,
                 )
-        self.upsert_provenance(calls=calls, conn=conn)
 
     @transaction()
     def _query_call(self, call_uid: str, conn: Optional[Connection] = None) -> pa.Table:
+        # TODO: replace this by something more efficient
         all_tables = [
             Query.from_(table_name)
             .where(Table(table_name)[Config.uid_col] == Parameter("$1"))
             .select(Table(table_name)[Config.uid_col], LiteralValue(f"'{table_name}'"))
             for table_name in self.get_call_tables()
         ]
-        query = sum(all_tables[1:], start=all_tables[0])
+        query = "\nUNION\n".join([str(q) for q in all_tables])
+        # query = sum(all_tables[1:], start=all_tables[0])
         return self.rel_storage.execute_arrow(query, [call_uid], conn=conn)
 
     @transaction()
@@ -908,144 +897,6 @@ class RelAdapter(Transactable):
         sig = self.sig_adapter.load_ui_sigs(conn=conn)[ui_name, version]
         return Call.from_row(results, func_op=FuncOp._from_data(f=None, sig=sig))
 
-    @transaction()
-    def delete_calls(
-        self,
-        calls: Optional[List[Call]] = None,
-        _uids_by_table: Optional[Dict[str, List[str]]] = None,
-        conn: Optional[Connection] = None,
-    ):
-        """
-        Drops calls from the relational storage.
-        """
-        if (calls is not None and len(calls) > 0) or (
-            _uids_by_table is not None and len(_uids_by_table) > 0
-        ):
-            if _uids_by_table is None:
-                calls = list({c.uid: c for c in calls}.values())
-                for table_name, ta in self.tabulate_calls(calls).items():
-                    self.rel_storage.delete(
-                        relation=table_name,
-                        index=ta[Config.uid_col].to_pylist(),
-                        conn=conn,
-                    )
-                call_uids = [c.uid for c in calls]
-            else:
-                for table_name, uids in _uids_by_table.items():
-                    self.rel_storage.delete(relation=table_name, index=uids, conn=conn)
-                call_uids = list(itertools.chain(*_uids_by_table.values()))
-            self.delete_provenance(call_uids=call_uids, conn=conn)
-
-    @transaction()
-    def delete_vrefs(self, uids: List[str], conn: Optional[Connection] = None):
-        """
-        Drops vrefs from the relational storage.
-        """
-        if len(uids) > 0:
-            self.rel_storage.delete(relation=self.VREF_TABLE, index=uids, conn=conn)
-
-    @transaction()
-    def cleanup(self, conn: Optional[Connection] = None):
-        """
-        Clean up unused refs and calls adjacent to them.
-
-        By definition, a ref is "needed" if
-            - it is the direct input/output of a non-structural op
-            - it is an element of a ref that is in use.
-
-        All other refs are unused.
-        """
-        prov_df = self.rel_storage.get_data(table=self.PROVENANCE_TABLE, conn=conn)
-        # find the used UIDs
-        directly_referenced_uids = set(
-            prov_df[~prov_df[ProvTable.internal_name].isin(list(Builtins.OPS.keys()))][
-                ProvTable.vref_uid
-            ].values.tolist()
-        )
-        all_needed_vrefs = self.obj_gets(
-            uids=list(directly_referenced_uids),
-            depth=None,
-            _attach_atoms=False,
-            conn=conn,
-        )
-        if len(all_needed_vrefs) > 0:
-            all_needed_uids = set.union(
-                *[collect_uids(ref=ref) for ref in all_needed_vrefs]
-            )
-        else:
-            all_needed_uids = set()
-        all_vref_uids = self.rel_storage.execute_df(
-            query=Query.from_(self.VREF_TABLE).select(Config.uid_col), conn=conn
-        )[Config.uid_col].values
-        orphan_vref_uids = set(all_vref_uids) - all_needed_uids
-
-        ### get the calls adjacent to the orphaned vrefs
-        if len(orphan_vref_uids) > 0:
-            adjacent_calls_df = prov_df[
-                prov_df[ProvTable.vref_uid].isin(orphan_vref_uids)
-            ][[ProvTable.call_uid, ProvTable.internal_name, ProvTable.version]]
-            uids_by_ui_table = defaultdict(list)
-            sigs = self.sig_adapter.load_state(conn=conn)
-            for call_uid, internal_name, version in adjacent_calls_df.itertuples(
-                index=False
-            ):
-                ui_name = sigs[internal_name, version].ui_name
-                table_name = Signature.dump_versioned_name(
-                    name=ui_name, version=version
-                )
-                uids_by_ui_table[table_name].append(call_uid)
-            self.delete_vrefs(list(orphan_vref_uids), conn=conn)
-            self.delete_calls(_uids_by_table=uids_by_ui_table, conn=conn)
-
-    ############################################################################
-    ### provenance methods
-    ############################################################################
-    @transaction()
-    def upsert_provenance(self, calls: List[Call], conn: Optional[Connection] = None):
-        rows = []
-        for call in calls:
-            call_uid = call.uid
-            internal_name = call.func_op.sig.internal_name
-            version = call.func_op.sig.version
-            call_rows = []
-            for input_name, input in call.inputs.items():
-                call_rows.append(
-                    {"io_name": input_name, "vref_uid": input.uid, "direction": "in"}
-                )
-            for i, output in enumerate(call.outputs):
-                call_rows.append(
-                    {
-                        "io_name": dump_output_name(index=i),
-                        "vref_uid": output.uid,
-                        "direction": "out",
-                    }
-                )
-            for row in call_rows:
-                row.update(
-                    {
-                        "call_uid": call_uid,
-                        "internal_name": internal_name,
-                        "version": version,
-                    }
-                )
-            rows.extend(call_rows)
-        df = pd.DataFrame(rows)
-        if len(df) > 0:
-            self.rel_storage.upsert(
-                relation=self.PROVENANCE_TABLE,
-                ta=pa.Table.from_pandas(df),
-                key_cols=[ProvTable.call_uid, ProvTable.io_name],
-                conn=conn,
-            )
-
-    @transaction()
-    def delete_provenance(
-        self, call_uids: List[str], conn: Optional[Connection] = None
-    ):
-        in_str = ", ".join([f"'{i}'" for i in call_uids])
-        query = f'DELETE FROM "{self.PROVENANCE_TABLE}" WHERE {ProvTable.call_uid} IN ({in_str})'
-        conn.execute(query)
-
     ############################################################################
     ### object methods
     ############################################################################
@@ -1060,7 +911,9 @@ class RelAdapter(Transactable):
                 joblib.dump(ref, f)
             if Config.warnings:
                 size_in_mb = round(os.path.getsize(dump_path) / 10**6, 2)
-                logger.warning(f"Spill over {ref} of size {size_in_mb}MB")
+                logger.warning(
+                    f"Spill over {ref.__repr__(shorten=True)} of size {size_in_mb}MB"
+                )
 
     def _mget_spillover(self, uids: List[str]) -> List[Ref]:
         assert self.spillover_dir is not None

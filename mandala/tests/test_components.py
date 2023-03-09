@@ -40,7 +40,6 @@ def test_wrapping():
     assert wrap(vref) is vref
     try:
         wrap(vref, uid="aaaaaa")
-        assert False
     except:
         assert True
 
@@ -71,3 +70,542 @@ def test_unwrapping():
 def test_reprs():
     x = wrap(23)
     repr(x), str(x)
+
+
+################################################################################
+### contexts
+################################################################################
+def test_nesting_new_api():
+    storage = Storage()
+
+    with storage.run() as c:
+        assert c.mode == MODES.run
+
+    with storage.query() as q:
+        assert q.mode == MODES.query
+
+    with storage.run() as c:
+        assert c.mode == MODES.run
+        assert c.storage is storage
+        with storage.query() as q:
+            assert q.storage is storage
+            assert q.mode == MODES.query
+        assert c.mode == MODES.run
+
+
+def test_nesting_more():
+    storage = Storage()
+
+    @op
+    def inc(x: int) -> int:
+        return x + 1
+
+    @op
+    def add(x: int, y: int) -> int:
+        return x + y
+
+    @op
+    def mul(x: int, y: int) -> int:
+        return x * y
+
+    with storage.run():
+        for i in range(10):
+            j = inc(i)
+            k = add(i, j)
+            l = mul(i, k)
+
+    ### run -> query -> run composition
+    with storage.run():
+        i = 7
+        with storage.query() as q:
+            j = inc(i)
+            k = add(i, j)
+            df = q.get_table(i, j, k, values="objs")
+            assert len(df) == 1
+            with storage.run():
+                for i, j, k in df.itertuples(index=False):
+                    l = mul(i, k)
+    assert unwrap(l) == 7 * (7 + 8)
+
+
+def test_noop():
+    # check that ops are noops when not in a context
+
+    @op
+    def inc(x: int) -> int:
+        return x + 1
+
+    assert inc(23) == 24
+
+
+def test_failures():
+    storage = Storage()
+
+    try:
+        with storage.run(bla=23):
+            pass
+    except:
+        assert True
+
+
+################################################################################
+### test ops
+################################################################################
+def test_signatures():
+    sig = Signature(
+        ui_name="f",
+        input_names={"x", "y"},
+        n_outputs=1,
+        defaults={"y": 42},
+        version=0,
+    )
+
+    # if internal data has not been set, it should not be accessible
+    try:
+        sig.internal_name
+    except ValueError:
+        assert True
+
+    try:
+        sig.ui_to_internal_input_map
+    except ValueError:
+        assert True
+
+    with_internal = sig._generate_internal()
+    assert not sig.has_internal_data
+    assert with_internal.has_internal_data
+
+    ### invalid signature changes
+    # remove input
+    new = Signature(
+        ui_name="f",
+        input_names={"x", "z"},
+        n_outputs=1,
+        defaults={"y": 42},
+        version=0,
+    )
+    try:
+        sig.update(new=new)
+    except ValueError:
+        assert True
+    new = Signature(
+        ui_name="f",
+        input_names={"x", "y"},
+        n_outputs=1,
+        defaults={},
+        version=0,
+    )
+    try:
+        sig.update(new=new)
+    except ValueError:
+        assert True
+    # change version
+    new = Signature(
+        ui_name="f",
+        input_names={"x", "y"},
+        n_outputs=1,
+        defaults={"y": 42},
+        version=1,
+    )
+    try:
+        sig.update(new=new)
+    except ValueError:
+        assert True
+
+    # add input
+    sig = sig._generate_internal()
+    try:
+        sig.create_input(name="y", default=23)
+    except ValueError:
+        assert True
+    new = sig.create_input(name="z", default=23)
+    assert new.input_names == {"x", "y", "z"}
+
+
+def test_output_name_failure():
+
+    try:
+
+        @op
+        def f(output_0: int) -> int:
+            return output_0
+
+    except:
+        assert True
+
+
+def test_changing_num_outputs():
+
+    storage = Storage()
+
+    @op
+    def f(x: int):
+        return x
+
+    try:
+        with storage.run():
+            f(1)
+    except AssertionError:
+        assert True
+
+    @op
+    def f(x: int) -> int:
+        return x
+
+    with storage.run():
+        f(1)
+
+    @op
+    def f(x: int) -> Tuple[int, int]:
+        return x
+
+    try:
+        with storage.run():
+            f(1)
+    except ValueError:
+        assert True
+
+    @op
+    def f(x: int) -> int:
+        return x
+
+    with storage.run():
+        f(1)
+
+
+def test_nout():
+    storage = Storage()
+
+    @op(nout=2)
+    def f(x: int):
+        return x, x
+
+    with storage.run():
+        a, b = f(1)
+        assert unwrap(a) == 1 and unwrap(b) == 1
+
+    @op(nout=0)
+    def g(x: int) -> Tuple[int, int]:
+        pass
+
+    with storage.run():
+        c = g(1)
+        assert c is None
+
+
+################################################################################
+### test storage
+################################################################################
+OUTPUT_ROOT = Path(__file__).parent / "output"
+
+
+def test_get():
+    storage = Storage()
+
+    @op
+    def inc(x: int) -> int:
+        return x + 1
+
+    with storage.run():
+        y = inc(23)
+
+    y_full = storage.rel_adapter.obj_get(uid=y.uid)
+    assert y_full.in_memory
+    assert unwrap(y_full) == 24
+
+    y_lazy = storage.rel_adapter.obj_get(uid=y.uid, _attach_atoms=False)
+    assert not y_lazy.in_memory
+    assert y_lazy.obj is None
+
+    @op
+    def get_prime_factors(n: int) -> Set[int]:
+        factors = set()
+        d = 2
+        while d * d <= n:
+            while (n % d) == 0:
+                factors.add(d)
+                n //= d
+            d += 1
+        if n > 1:
+            factors.add(n)
+        return factors
+
+    with storage.run():
+        factors = get_prime_factors(42)
+
+    factors_full = storage.rel_adapter.obj_get(uid=factors.uid)
+    assert factors_full.in_memory
+    assert all([x.in_memory for x in factors_full])
+
+    factors_shallow = storage.rel_adapter.obj_get(uid=factors.uid, depth=1)
+    assert factors_shallow.in_memory
+    assert all([not x.in_memory for x in factors_shallow])
+
+    storage.rel_adapter.mattach(vrefs=[factors_shallow])
+    assert all([x.in_memory for x in factors_shallow])
+
+    @superop
+    def get_factorizations(n: int) -> List[List[int]]:
+        # get all factorizations of a number into factors
+        n = unwrap(n)
+        divisors = [i for i in range(2, n + 1) if n % i == 0]
+        result = [[n]]
+        for divisor in divisors:
+            sub_solutions = unwrap(get_factorizations(n // divisor))
+            result.extend(
+                [
+                    [divisor] + sub_solution
+                    for sub_solution in sub_solutions
+                    if min(sub_solution) >= divisor
+                ]
+            )
+        return result
+
+    with storage.run():
+        factorizations = get_factorizations(42)
+
+    factorizations_full = storage.rel_adapter.obj_get(uid=factorizations.uid)
+    assert unwrap(factorizations_full) == [[42], [2, 21], [2, 3, 7], [3, 14], [6, 7]]
+    factorizations_shallow = storage.rel_adapter.obj_get(
+        uid=factorizations.uid, depth=1
+    )
+    assert factorizations_shallow.in_memory
+    storage.rel_adapter.mattach(vrefs=[factorizations_shallow[0]])
+    assert unwrap(factorizations_shallow[0]) == [42]
+
+    result, call = storage.call_run(
+        func_op=get_factorizations.func_op,
+        inputs={"n": 42},
+    )
+
+
+def test_persistent():
+    db_path = OUTPUT_ROOT / "test_persistent.db"
+    if db_path.exists():
+        db_path.unlink()
+    storage = Storage(db_path=db_path)
+
+    try:
+
+        @op
+        def inc(x: int) -> int:
+            return x + 1
+
+        @op
+        def get_prime_factors(n: int) -> Set[int]:
+            factors = set()
+            d = 2
+            while d * d <= n:
+                while (n % d) == 0:
+                    factors.add(d)
+                    n //= d
+                d += 1
+            if n > 1:
+                factors.add(n)
+            return factors
+
+        @superop
+        def get_factorizations(n: int) -> List[List[int]]:
+            # get all factorizations of a number into factors
+            n = unwrap(n)
+            divisors = [i for i in range(2, n + 1) if n % i == 0]
+            result = [[n]]
+            for divisor in divisors:
+                sub_solutions = unwrap(get_factorizations(n // divisor))
+                result.extend(
+                    [
+                        [divisor] + sub_solution
+                        for sub_solution in sub_solutions
+                        if min(sub_solution) >= divisor
+                    ]
+                )
+            return result
+
+        with storage.run():
+            y = inc(23)
+            factors = get_prime_factors(42)
+            factorizations = get_factorizations(42)
+            assert all([x.in_memory for x in (y, factors, factorizations)])
+
+        with storage.run():
+            y = inc(23)
+            factors = get_prime_factors(42)
+            factorizations = get_factorizations(42)
+            assert all([not x.in_memory for x in (y, factors, factorizations)])
+
+        with storage.run(lazy=False):
+            y = inc(23)
+            factors = get_prime_factors(42)
+            factorizations = get_factorizations(42)
+            assert all([x.in_memory for x in (y, factors, factorizations)])
+
+        with storage.run():
+            y = inc(23)
+            assert not y.in_memory
+            y._auto_attach()
+            assert y.in_memory
+            factors = get_prime_factors(42)
+            assert not factors.in_memory
+            7 in factors
+            assert factors.in_memory
+
+            factorizations = get_factorizations(42)
+            assert not factorizations.in_memory
+            n = len(factorizations)
+            assert factorizations.in_memory
+            assert not factorizations[0].in_memory
+            factorizations[0][0]
+            assert factorizations[0].in_memory
+
+            for elt in factorizations[1]:
+                assert not elt.in_memory
+
+    except Exception as e:
+        raise e
+    finally:
+        db_path.unlink()
+
+
+def test_magics():
+    db_path = OUTPUT_ROOT / "test_magics.db"
+    if db_path.exists():
+        db_path.unlink()
+    storage = Storage(db_path=db_path)
+
+    try:
+        Config.enable_ref_magics = True
+
+        @op
+        def inc(x: int) -> int:
+            return x + 1
+
+        with storage.run():
+            x = inc(23)
+
+        with storage.run():
+            x = inc(23)
+            assert not x.in_memory
+            if x > 0:
+                y = inc(x)
+            assert x.in_memory
+
+        with storage.run():
+            x = inc(23)
+            y = inc(x)
+            if x + y > 0:
+                z = inc(x)
+
+        with storage.run():
+            x = inc(23)
+            y = inc(x)
+            if x:
+                z = inc(x)
+
+    except Exception as e:
+        raise e
+    finally:
+        db_path.unlink()
+
+
+def test_spillover():
+    db_path = OUTPUT_ROOT / "test_spillover.db"
+    if db_path.exists():
+        db_path.unlink()
+    spillover_dir = OUTPUT_ROOT / "test_spillover/"
+    if spillover_dir.exists():
+        shutil.rmtree(spillover_dir)
+    storage = Storage(db_path=db_path, spillover_dir=spillover_dir)
+
+    try:
+        import numpy as np
+
+        @op
+        def create_large_array() -> np.ndarray:
+            return np.random.rand(10_000_000)
+
+        with storage.run():
+            x = create_large_array()
+
+        assert len(os.listdir(spillover_dir)) == 1
+        path = spillover_dir / os.listdir(spillover_dir)[0]
+        with open(path, "rb") as f:
+            data = unwrap(joblib.load(f))
+        assert np.allclose(data, unwrap(x))
+
+        with storage.run():
+            x = create_large_array()
+            assert not x.in_memory
+            x = unwrap(x)
+
+    except Exception as e:
+        raise e
+    finally:
+        db_path.unlink()
+        shutil.rmtree(spillover_dir)
+
+
+################################################################################
+### test components for integrations
+################################################################################
+if Config.has_torch:
+    import torch
+
+    def test_jit_script():
+        storage = Storage()
+
+        @op
+        @torch.jit.script
+        def f(x: torch.Tensor, y: bool = False) -> Tuple[torch.Tensor, torch.Tensor]:
+            # a function with multiple outputs
+            if y:
+                return x, x
+            else:
+                return 2 * x, x
+
+        with storage.run():
+            x = torch.ones(1)
+            y = f(x)
+
+        @op
+        @torch.jit.script
+        def g(x: torch.Tensor) -> torch.Tensor:
+            # a function with a single output
+            return x
+
+        with storage.run():
+            x = torch.ones(1)
+            y = g(x)
+
+        @op
+        @torch.jit.script
+        def h(x: torch.Tensor):
+            # a function with no outputs
+            return
+
+        with storage.run():
+            x = torch.ones(1)
+            h(x)
+
+        data = storage.rel_adapter.get_all_call_data()
+        func_names = {"f_0", "g_0", "h_0"}
+        assert func_names <= set(data.keys())
+        for k in func_names:
+            assert data[k].shape[0] == 1
+
+
+def test_batching_unit():
+
+    storage = Storage()
+
+    @op
+    def inc(x: int) -> int:
+        return x + 1
+
+    with storage.batch():
+        y = inc(23)
+
+    assert unwrap(y) == 24
+    assert y.uid is not None
+    all_data = storage.rel_storage.get_all_data()
+    assert all_data[Config.vref_table].shape[0] == 2
+    assert all_data[inc.func_op.sig.versioned_ui_name].shape[0] == 1

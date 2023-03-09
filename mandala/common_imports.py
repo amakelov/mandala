@@ -14,6 +14,7 @@ import inspect
 import binascii
 import asyncio
 import ast
+import types
 import tempfile
 from collections import defaultdict, OrderedDict
 from typing import (

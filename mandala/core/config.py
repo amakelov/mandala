@@ -31,10 +31,23 @@ class Config:
     enable_ref_magics = False
     warnings = True
     spillover_threshold_mb = 50
+    db_backend = "sqlite"
+    query_engine = "sql"
+    func_interface_cls_name = "FuncInterface"
 
     ### constants
     # used for columns containing UIDs of value references or calls
     uid_col = "__uid__"
+    content_version_col = "__content_version__"
+    semantic_version_col = "__semantic_version__"
+    transient_col = "__transient__"
+    # columns that are not inputs or outputs in a memoization table
+    special_call_cols = [
+        uid_col,
+        content_version_col,
+        semantic_version_col,
+        transient_col,
+    ]
     # name for the table that holds the value reference UIDs
     vref_table = "__vrefs__"
     vref_value_col = "value"
@@ -97,8 +110,9 @@ class Config:
     tests_module_name = "mandala.tests"
 
     # hashing method
-    content_hasher: Literal["cityhash", "blake2b"] = (
-        "cityhash" if has_cityhash else "blake2b"
+    content_hasher: Literal["cityhash", "blake2b", "joblib"] = (
+        # "cityhash" if has_cityhash else "blake2b"
+        "joblib"
     )
 
 

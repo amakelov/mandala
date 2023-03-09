@@ -1,15 +1,9 @@
 from ..common_imports import *
-from ..core.model import FuncOp, Ref, Call, wrap
+from ..core.model import FuncOp, Ref, wrap
 from ..core.wrapping import unwrap
-from ..core.utils import Hashing
 from ..core.config import Config
 from ..core.weaver import ValQuery, qwrap
 from textwrap import shorten
-
-if Config.has_rich:
-    from rich import print as pprint
-else:
-    from pprint import pprint
 
 
 class MODES:
@@ -29,28 +23,6 @@ def wrap_inputs(inputs: Dict[str, Any]) -> Dict[str, Ref]:
     else:
         assert all(isinstance(v, Ref) for v in inputs.values())
         return inputs
-
-
-def wrap_outputs(outputs: List[Any], call_uid: str) -> List[Ref]:
-    """
-    Wrap the outputs of a call as value references.
-
-    If the function happens to return value references, they are returned as
-    they are. Otherwise, a UID is assigned depending on the configuration
-    settings of the library.
-    """
-    wrapped_outputs = []
-    if Config.output_wrap_method == "content":
-        uid_generator = lambda i, x: Hashing.get_content_hash(x)
-    elif Config.output_wrap_method == "causal":
-        uid_generator = lambda i, x: Hashing.get_content_hash(obj=(call_uid, i))
-    else:
-        raise ValueError()
-    wrapped_outputs = [
-        wrap(obj=x, uid=uid_generator(i, x)) if not isinstance(x, Ref) else x
-        for i, x in enumerate(outputs)
-    ]
-    return wrapped_outputs
 
 
 def bind_inputs(args, kwargs, mode: str, func_op: FuncOp) -> Dict[str, Any]:

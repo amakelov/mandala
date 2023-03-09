@@ -75,6 +75,7 @@ scratchpad/
 temp_dbs/*
 mandala/tests/output/*
 *.db
+*.parquet
 
 ## PyCharm stuff
 .idea/**

@@ -1,7 +1,8 @@
 from typing import Type
-from .config import Config, dump_output_name, parse_output_idx
+import textwrap
+from .config import Config, parse_output_idx
 from ..common_imports import *
-from .utils import Hashing
+from .utils import Hashing, get_uid
 from .sig import (
     Signature,
     _postprocess_outputs,
@@ -9,7 +10,8 @@ from .sig import (
     _get_return_annotations,
 )
 from .tps import Type, AnyType, ListType, DictType, SetType
-from .deps import DependencyGraph, Tracer, TerminalData
+
+from ..deps.tracers import TracerABC, DecTracer
 
 if Config.has_torch:
     import torch
@@ -18,6 +20,20 @@ if Config.has_torch:
 
 class Delayed:
     pass
+
+
+class TransientObj:
+    def __init__(self, obj: Any, unhashable: bool = False):
+        self.obj = obj
+        self.unhashable = unhashable
+
+
+def get_transient_uid(content_hash: str) -> str:
+    return f"__transient__.{content_hash}"
+
+
+def is_transient_uid(uid: str) -> bool:
+    return uid.startswith("__transient__")
 
 
 ################################################################################
@@ -40,6 +56,8 @@ class Ref:
         if Builtins.is_builtin_uid(uid=uid):
             builtin_id, uid = Builtins.parse_builtin_uid(uid=uid)
             return Builtins.spawn_builtin(builtin_id=builtin_id, uid=uid)
+        elif is_transient_uid(uid=uid):
+            return ValueRef(uid=uid, obj=None, in_memory=False, transient=True)
         else:
             return ValueRef(uid=uid, obj=None, in_memory=False)
 
@@ -57,7 +75,7 @@ class Ref:
 
     def _auto_attach(self, shallow: bool = True):
         if not self.in_memory:
-            from ..ui.main import GlobalContext
+            from ..ui.contexts import GlobalContext
 
             context = GlobalContext.current
             assert context is not None
@@ -76,9 +94,14 @@ class Ref:
     def _short_uid(self) -> str:
         return self._uid_suffix[:3] + "..."
 
-    def __repr__(self) -> str:
+    def __repr__(self, shorten: bool = False) -> str:
         if self.in_memory:
-            return f"{self.__class__.__name__}({self.obj}, uid={self._short_uid})"
+            obj_repr = repr(self.obj)
+            if shorten:
+                obj_repr = textwrap.shorten(obj_repr, width=50, placeholder="...")
+            if "\n" in obj_repr:
+                obj_repr = f'\n{textwrap.indent(obj_repr, "    ")}'
+            return f"{self.__class__.__name__}({obj_repr}, uid={self._short_uid})"
         else:
             return f"{self.__class__.__name__}(in_memory=False, uid={self._short_uid})"
 
@@ -90,13 +113,18 @@ class ValueRef(Ref):
     This is the object passed between memoized functions (ops).
     """
 
-    def __init__(self, uid: str, obj: Any, in_memory: bool):
+    def __init__(self, uid: str, obj: Any, in_memory: bool, transient: bool = False):
         self.uid = uid
         self._obj = obj
         self.in_memory = in_memory
+        self.transient = transient
 
     def dump(self) -> "ValueRef":
-        return ValueRef(uid=self.uid, obj=self.obj, in_memory=True)
+        if not self.transient:
+            return ValueRef(uid=self.uid, obj=self.obj, in_memory=True)
+        return ValueRef(
+            uid=self.uid, obj=TransientObj(obj=None), in_memory=False, transient=True
+        )
 
     ############################################################################
     ### magic methods forwarding
@@ -217,12 +245,36 @@ class Call:
         inputs: Dict[str, Ref],
         outputs: List[Ref],
         func_op: "FuncOp",
+        transient: bool,
+        semantic_version: Optional[str] = None,
+        content_version: Optional[str] = None,
     ):
         self.uid = uid
+        self.semantic_version = semantic_version
+        self.content_version = content_version
         self.inputs = inputs
         self.outputs = outputs
+        self.transient = transient  # if outputs contain transient objects
         self.func_op = FuncOp._from_data(sig=func_op.sig, f=func_op.func)
         self.func_op.func = None
+
+    def __repr__(self) -> str:
+        tuples: List[Tuple[str, str]] = [
+            ("uid", self.uid),
+        ]
+        if self.semantic_version is not None:
+            tuples.append(("semantic_version", self.semantic_version))
+        if self.content_version is not None:
+            tuples.append(("content_version", self.content_version))
+        tuples.extend(
+            [
+                ("inputs", textwrap.shorten(str(self.inputs), width=80)),
+                ("outputs", textwrap.shorten(str(self.outputs), width=80)),
+                ("func_op", self.func_op),
+            ]
+        )
+        data_str = ",\n".join([f"    {k}={v}" for k, v in tuples])
+        return f"Call(\n{data_str}\n)"
 
     @staticmethod
     def from_row(row: pa.Table, func_op: "FuncOp") -> "Call":
@@ -239,10 +291,14 @@ class Call:
         input_columns = [
             column
             for column in columns
-            if column not in output_columns and column != Config.uid_col
+            if column not in output_columns and column not in Config.special_call_cols
         ]
+        process_boolean = lambda x: True if x == "1" else False
         return Call(
             uid=row.column(Config.uid_col)[0].as_py(),
+            semantic_version=row.column(Config.semantic_version_col)[0].as_py(),
+            content_version=row.column(Config.content_version_col)[0].as_py(),
+            transient=process_boolean(row.column(Config.transient_col)[0].as_py()),
             inputs={
                 k: Ref.from_uid(uid=row.column(k)[0].as_py()) for k in input_columns
             },
@@ -258,7 +314,6 @@ class Call:
         assert set(inputs.keys()) == set(res.inputs.keys())
         for k, v in inputs.items():
             current = res.inputs[k]
-            assert v.in_memory and not current.in_memory
             current._obj = v.obj
             current.in_memory = True
         return res
@@ -268,10 +323,20 @@ class Call:
         assert len(outputs) == len(res.outputs)
         for i, v in enumerate(outputs):
             current = res.outputs[i]
-            assert v.in_memory and not current.in_memory
             current._obj = v.obj
             current.in_memory = True
         return res
+
+    def detached(self) -> "Call":
+        return Call(
+            uid=self.uid,
+            inputs={k: v.detached() for k, v in self.inputs.items()},
+            outputs=[v.detached() for v in self.outputs],
+            func_op=self.func_op,
+            semantic_version=self.semantic_version,
+            content_version=self.content_version,
+            transient=self.transient,
+        )
 
 
 ################################################################################
@@ -303,6 +368,7 @@ class FuncOp:
         _is_builtin: bool = False,
     ):
         self.is_super = is_super
+        self._is_builtin = _is_builtin
         if func is None:
             self.sig = sig
             self.py_sig = None
@@ -346,64 +412,18 @@ class FuncOp:
     def compute(
         self,
         inputs: Dict[str, Any],
-        deps_root: Optional[Path] = None,
-    ) -> Tuple[List[Any], Optional[DependencyGraph]]:
-        """
-        Computes the function on the given *unwrapped* inputs. Returns a list of
-        `self.sig.n_outputs` outputs (after checking they are the number
-        expected by the interface).
-
-        This expects the inputs to be named using *internal* input names.
-        """
-        if deps_root is not None:
-            graph = DependencyGraph()
-            # ds = DependencyState(roots=[deps_root, Config.mandala_path], origin=(self.sig.internal_name, self.sig.version))
-            tracer = Tracer(
-                graph=graph, strict=True, paths=[deps_root, Config.mandala_path]
-            )
-            if sys.gettrace() is None:
-                with tracer:
-                    result = self.func(**inputs)
-            else:
-                current_trace = sys.gettrace()
-                Tracer.break_signal(
-                    data=Tracer.generate_terminal_data(
-                        func=self.func,
-                        internal_name=self.sig.internal_name,
-                        version=self.sig.version,
-                    )
-                )
-                sys.settrace(None)
-                with tracer:
-                    result = self.func(**inputs)
-                sys.settrace(current_trace)
+        tracer: Optional[TracerABC] = None,
+    ) -> Tuple[List[Any], Optional[TracerABC]]:
+        if tracer is not None:
+            with tracer:
+                if isinstance(tracer, DecTracer):
+                    node = tracer.register_call(func=self.func)
+                result = self.func(**inputs)
+                if isinstance(tracer, DecTracer):
+                    tracer.register_return(node=node)
         else:
             result = self.func(**inputs)
-            graph = None
-        return _postprocess_outputs(sig=self.sig, result=result), graph
-
-    # async def compute_async(
-    #     self,
-    #     inputs: Dict[str, Any],
-    #     deps_root: Optional[Path] = None,
-    #     ignore_dependency_tracking_errors: bool = False,
-    # ) -> Tuple[List[Any], Optional[DependencyState]]:
-    #     """
-    #     Computes the function on the given *unwrapped* inputs. Returns a list of
-    #     `self.sig.n_outputs` outputs (after checking they are the number
-    #     expected by the interface).
-
-    #     This expects the inputs to be named using *internal* input names.
-    #     """
-    #     if deps_root is not None:
-    #         raise NotImplementedError()
-    #     result = (
-    #         await self.func(**inputs)
-    #         if inspect.iscoroutinefunction(self.func)
-    #         else self.func(**inputs)
-    #     )
-    #     ds = None
-    #     return _postprocess_outputs(sig=self.sig, result=result), ds
+        return _postprocess_outputs(sig=self.sig, result=result), tracer
 
     @staticmethod
     def _from_data(sig: Signature, f: Optional[Callable] = None) -> "Op":
@@ -458,9 +478,16 @@ def wrap(obj: Any, uid: Optional[str] = None) -> ValueRef:
             # protect against accidental misuse
             raise ValueError(f"Cannot change uid of ValueRef: {obj}")
         return obj
-    else:
+    elif not isinstance(obj, TransientObj):
         uid = Hashing.get_content_hash(obj) if uid is None else uid
         return ValueRef(uid=uid, obj=obj, in_memory=True)
+    else:
+        if obj.unhashable:
+            uid = get_uid()
+        else:
+            uid = Hashing.get_content_hash(obj.obj) if uid is None else uid
+        uid = get_transient_uid(content_hash=uid)
+        return ValueRef(uid=uid, obj=obj.obj, in_memory=True, transient=True)
 
 
 from .builtins_ import ListRef, DictRef, SetRef

@@ -1,7 +1,6 @@
 from abc import ABC, abstractmethod
 from ...common_imports import *
 import pyarrow as pa
-import pyarrow.parquet as pq
 
 
 class RelStorage(ABC):

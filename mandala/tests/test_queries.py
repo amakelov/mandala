@@ -50,9 +50,8 @@ def test_visualization():
         # )
 
 
-def test_basics():
-    storage = Storage()
-
+@pytest.mark.parametrize("storage", generate_storages())
+def test_basics(storage):
     @op
     def inc(x: int) -> int:
         return x + 1

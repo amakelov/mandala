@@ -1,6 +1,6 @@
 from ..common_imports import *
 from .tps import Type, ListType, DictType, SetType, AnyType
-from .model import Ref, FuncOp, Call, wrap, ValueRef
+from .model import Ref, Call, wrap, ValueRef
 from .builtins_ import ListRef, DictRef, SetRef, Builtins
 
 
@@ -89,8 +89,10 @@ def unwrap(obj: Union[T, Ref], through_collections: bool = True) -> T:
     If `through_collections` is True, recursively unwraps objects in lists,
     tuples, sets, and dict values.
     """
+    if isinstance(obj, ValueRef) and obj.transient:
+        return obj.obj
     if isinstance(obj, Ref) and not obj.in_memory:
-        from ..ui.main import GlobalContext
+        from ..ui.contexts import GlobalContext
 
         if GlobalContext.current is None:
             raise ValueError(
@@ -99,7 +101,8 @@ def unwrap(obj: Union[T, Ref], through_collections: bool = True) -> T:
         storage = GlobalContext.current.storage
         storage.rel_adapter.mattach(vrefs=[obj])
     if isinstance(obj, ValueRef):
-        return unwrap(obj.obj, through_collections=through_collections)
+        # return unwrap(obj.obj, through_collections=through_collections)
+        return obj.obj
     elif isinstance(obj, ListRef):
         return [unwrap(elt, through_collections=through_collections) for elt in obj.obj]
         # return unwrap(obj.obj, through_collections=through_collections)
@@ -110,16 +113,42 @@ def unwrap(obj: Union[T, Ref], through_collections: bool = True) -> T:
         }
     elif isinstance(obj, SetRef):
         return {unwrap(v, through_collections=through_collections) for v in obj.obj}
-    elif isinstance(obj, tuple) and through_collections:
+    elif type(obj) is tuple and through_collections:
         return tuple(unwrap(v, through_collections=through_collections) for v in obj)
-    elif isinstance(obj, set) and through_collections:
+    elif type(obj) is set and through_collections:
         return {unwrap(v, through_collections=through_collections) for v in obj}
-    elif isinstance(obj, list) and through_collections:
+    elif type(obj) is list and through_collections:
         return [unwrap(v, through_collections=through_collections) for v in obj]
-    elif isinstance(obj, dict) and through_collections:
+    elif type(obj) is dict and through_collections:
         return {
             k: unwrap(v, through_collections=through_collections)
             for k, v in obj.items()
         }
     else:
         return obj
+
+
+def contains_transient(ref: Ref) -> bool:
+    if isinstance(ref, ValueRef):
+        return ref.transient
+    elif isinstance(ref, ListRef):
+        return any(contains_transient(elt) for elt in ref.obj)
+    elif isinstance(ref, DictRef):
+        return any(contains_transient(v) for v in ref.obj.values())
+    elif isinstance(ref, SetRef):
+        return any(contains_transient(v) for v in ref.obj)
+    else:
+        raise ValueError(f"Unexpected ref type {type(ref)}")
+
+
+def contains_not_in_memory(ref: Ref) -> bool:
+    if isinstance(ref, ValueRef):
+        return not ref.in_memory
+    elif isinstance(ref, ListRef):
+        return any(contains_not_in_memory(elt) for elt in ref.obj)
+    elif isinstance(ref, DictRef):
+        return any(contains_not_in_memory(v) for v in ref.obj.values())
+    elif isinstance(ref, SetRef):
+        return any(contains_not_in_memory(v) for v in ref.obj)
+    else:
+        raise ValueError(f"Unexpected ref type {type(ref)}")

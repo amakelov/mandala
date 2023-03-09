@@ -1,11 +1,10 @@
-import pickle
 from ..common_imports import *
 from .model import FuncOp
 from .sig import Signature
 from .config import Config, dump_output_name
 from .weaver import ValQuery, FuncQuery, traverse_all, visualize_computational_graph
-from .utils import invert_dict
-from pypika import Query, Table, Field, Column, Criterion
+from .utils import invert_dict, OpKey
+from pypika import Query, Table, Criterion
 
 
 class Compiler:
@@ -25,7 +24,9 @@ class Compiler:
             val_aliases[val_query] = val_table.as_(f"_{id(val_query)}")
         return val_aliases, func_aliases
 
-    def compile_func(self, op_query: FuncQuery) -> Tuple[list, list]:
+    def compile_func(
+        self, op_query: FuncQuery, semantic_versions: Optional[Set[str]] = None
+    ) -> Tuple[list, list]:
         """
         Compile the query corresponding to an op, including built-in ops
         """
@@ -41,6 +42,10 @@ class Compiler:
                 val_alias[Config.uid_col]
                 == func_alias[dump_output_name(index=output_idx)]
             )
+        if semantic_versions is not None:
+            constraints.append(
+                func_alias[Config.semantic_version_col].isin(semantic_versions)
+            )
         return constraints, select_fields
 
     def compile_val(self, val_query: ValQuery) -> Tuple[list, list]:
@@ -55,7 +60,12 @@ class Compiler:
         select_fields.append(val_alias[Config.uid_col])
         return constraints, select_fields
 
-    def compile(self, select_queries: List[ValQuery], filter_duplicates: bool = False):
+    def compile(
+        self,
+        select_queries: List[ValQuery],
+        semantic_version_constraints: Optional[Dict[OpKey, Optional[Set[str]]]] = None,
+        filter_duplicates: bool = False,
+    ):
         """
         Compile the query induced by the data of this compiler instance to
         an SQL select query.
@@ -71,8 +81,19 @@ class Compiler:
         from_tables = []
         all_constraints = []
         select_cols = [self.val_aliases[vq][Config.uid_col] for vq in select_queries]
+        if semantic_version_constraints is None:
+            semantic_version_constraints = {
+                (op_query.func_op.sig.internal_name, op_query.func_op.sig.version): None
+                for op_query in self.func_queries
+            }
         for func_query in self.func_queries:
-            constraints, select_fields = self.compile_func(func_query)
+            op_key = (
+                func_query.func_op.sig.internal_name,
+                func_query.func_op.sig.version,
+            )
+            constraints, select_fields = self.compile_func(
+                func_query, semantic_versions=semantic_version_constraints[op_key]
+            )
             func_alias = self.func_aliases[func_query]
             from_tables.append(func_alias)
             all_constraints.extend(constraints)
@@ -91,7 +112,7 @@ class Compiler:
         return query
 
 
-class QueryGraph:
+class NaiveQueryEngine:
     """
     Represents the graph expressing a query in a form that is suitable for
     incrementally computing the join of all the tables.
@@ -119,8 +140,9 @@ class QueryGraph:
         # in order to enable recursively joining nodes in the graph.
         self.tables = tables
         for k, v in self.tables.items():
-            if Config.uid_col in v.columns:
-                v.drop(columns=[Config.uid_col], inplace=True)
+            for col in Config.special_call_cols:
+                if col in v.columns:
+                    v.drop(columns=[col], inplace=True)
 
         # for visualization
         self._visualize_intermediate_states = _visualize_steps_at is not None

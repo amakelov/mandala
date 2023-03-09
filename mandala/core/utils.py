@@ -1,12 +1,13 @@
 import hashlib
 import textwrap
-import importlib
 from weakref import WeakKeyDictionary
 from .config import *
 from ..common_imports import *
 
 if Config.has_cityhash:
     import cityhash
+
+OpKey = Tuple[str, int]
 
 
 def get_uid() -> str:
@@ -44,7 +45,7 @@ class Hashing:
     def get_content_hash_blake2b(obj: Any) -> str:
         # if Config.has_torch and isinstance(obj, torch.Tensor):
         #     #! torch tensors do not have a deterministic hash under the below
-        #     #method
+        #     # method
         #     obj = obj.cpu().numpy()
         stream = io.BytesIO()
         joblib.dump(value=obj, filename=stream)
@@ -64,10 +65,19 @@ class Hashing:
         res = s.decode()
         return res
 
+    @staticmethod
+    def get_joblib_hash(obj: Any) -> str:
+        result = joblib.hash(obj)
+        if result is None:
+            raise RuntimeError("joblib.hash returned None")
+        return result
+
     if Config.content_hasher == "blake2b":
         get_content_hash = get_content_hash_blake2b
     elif Config.content_hasher == "cityhash":
         get_content_hash = get_cityhash
+    elif Config.content_hasher == "joblib":
+        get_content_hash = get_joblib_hash
     else:
         raise ValueError("Unknown content hasher: {}".format(Config.content_hasher))
 
@@ -86,57 +96,15 @@ class Hashing:
         return Hashing.get_content_hash(sorted(elts))
 
 
-def load_obj(module_name: str, obj_name: str) -> Tuple[Any, bool]:
-    module = importlib.import_module(module_name)
-    parts = obj_name.split(".")
-    current = module
-    found = True
-    for part in parts:
-        if not hasattr(current, part):
-            found = False
-            break
+def unwrap_decorators(
+    obj: Callable, strict: bool = True
+) -> Union[types.FunctionType, types.MethodType]:
+    while hasattr(obj, "__wrapped__"):
+        obj = obj.__wrapped__
+    if not isinstance(obj, (types.FunctionType, types.MethodType)):
+        msg = f"Expected a function or method, but got {type(obj)}"
+        if strict:
+            raise RuntimeError(msg)
         else:
-            current = getattr(current, part)
-    return current, found
-
-
-def remove_func_signature_and_comments(source: str) -> str:
-    """
-    Given the source code of a function, remove the part that contains the
-    function signature.
-
-    This is used to prevent changes to the signatures of `@op` functions from
-    triggering the dependency tracking logic.
-
-    NOTE: Has the extra effect of removing comments and docstrings by going
-    through an ast parse->unparse cycle.
-    """
-    # using dedent is necessary here to handle decorators
-    if hasattr(ast, "unparse"):
-        tree = ast.parse(textwrap.dedent(source))
-        assert isinstance(tree, ast.Module)
-        body = tree.body
-        assert len(body) == 1
-        assert isinstance(body[0], ast.FunctionDef)
-        func_body = body[0].body
-        return ast.unparse(func_body)
-    else:
-        # ast.unparse was introduced in python 3.9
-        # https://docs.python.org/3/library/ast.html#ast.unparse
-        return source
-
-
-class UIDCache:
-    def __init__(self):
-        self.cache = WeakKeyDictionary()
-
-    def get(self, obj) -> str:
-        if obj in self.cache:
-            return self.cache[obj]
-        else:
-            uid = Hashing.get_content_hash(obj)
-            try:
-                self.cache[obj] = uid
-            except TypeError:
-                pass
-            return uid
+            logger.debug(msg)
+    return obj

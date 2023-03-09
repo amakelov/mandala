@@ -4,7 +4,6 @@ from duckdb import DuckDBPyConnection as Connection
 from pypika import Query, Column
 
 from .bases import RelStorage
-from ...core.config import Config
 from .utils import Transactable, transaction
 from ...core.utils import get_uid
 from ...common_imports import *

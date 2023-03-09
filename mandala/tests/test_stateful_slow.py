@@ -21,7 +21,8 @@ from mandala.core.model import Type, ListType, make_delayed
 from mandala.core.builtins_ import Builtins
 from mandala.core.sig import _get_return_annotations
 from mandala.storages.remote_storage import RemoteStorage
-from mandala.ui.main import SimpleWorkflowExecutor, FuncInterface
+from mandala.ui.executors import SimpleWorkflowExecutor
+from mandala.ui.funcs import FuncInterface
 
 
 class MockStorage:
@@ -45,7 +46,7 @@ class MockStorage:
         for builtin_op in Builtins.OPS.values():
             name = builtin_op.sig.versioned_internal_name
             self.calls[name] = pd.DataFrame(
-                columns=list(builtin_op.sig.input_names) + [Config.uid_col]
+                columns=list(builtin_op.sig.input_names) + Config.special_call_cols
             )
             self.default_uids[name] = {}
         self.check_invariants()
@@ -67,7 +68,7 @@ class MockStorage:
         vref_uids_from_calls = []
         for k, df in self.calls.items():
             for col in df.columns:
-                if col != Config.uid_col:
+                if col not in Config.special_call_cols:
                     vref_uids_from_calls += df[col].values.tolist()
         assert set(vref_uids_from_calls) <= set(self.values.keys())
         for versioned_internal_name, defaults in self.default_uids.items():
@@ -83,7 +84,7 @@ class MockStorage:
         if sig.versioned_internal_name in self.default_uids:
             raise ValueError()
         self.calls[sig.versioned_internal_name] = pd.DataFrame(
-            columns=[Config.uid_col]
+            columns=Config.special_call_cols
             + list(sig.ui_to_internal_input_map.values())
             + [dump_output_name(index=i) for i in range(sig.n_outputs)]
         )
@@ -118,6 +119,9 @@ class MockStorage:
         sig = func_op.sig
         row = {
             Config.uid_col: call.uid,
+            Config.content_version_col: call.content_version,
+            Config.semantic_version_col: call.semantic_version,
+            Config.transient_col: call.transient,
             **{sig.ui_to_internal_input_map[k]: v.uid for k, v in inputs.items()},
             **{dump_output_name(index=i): v.uid for i, v in enumerate(outputs)},
         }

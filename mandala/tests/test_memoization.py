@@ -15,40 +15,36 @@ def test_func_creation():
     check_invariants(storage)
 
 
-def test_computation():
-    for evict_on_commit in [False, True]:
-        Config.evict_on_commit = evict_on_commit
+@pytest.mark.parametrize("storage", generate_storages())
+def test_computation(storage):
+    @op
+    def inc(x: int) -> int:
+        return x + 1
 
-        storage = Storage()
+    @op
+    def add(x: int, y: int) -> int:
+        return x + y
 
-        @op
-        def inc(x: int) -> int:
-            return x + 1
-
-        @op
-        def add(x: int, y: int) -> int:
-            return x + y
-
-        # chain some functions
-        with storage.run():
-            x = 23
-            y = inc(x)
-            z = add(x, y=y)
-        check_invariants(storage)
-        # run it again
-        with storage.run():
-            x = 23
-            y = inc(x)
-            z = add(x, y)
-        check_invariants(storage)
-        # do some more things
-        with storage.run():
-            x = 42
-            y = inc(x)
-            z = add(x, y)
-            for i in range(10):
-                z = add(z, i)
-        check_invariants(storage)
+    # chain some functions
+    with storage.run():
+        x = 23
+        y = inc(x)
+        z = add(x, y=y)
+    check_invariants(storage)
+    # run it again
+    with storage.run():
+        x = 23
+        y = inc(x)
+        z = add(x, y)
+    check_invariants(storage)
+    # do some more things
+    with storage.run():
+        x = 42
+        y = inc(x)
+        z = add(x, y)
+        for i in range(10):
+            z = add(z, i)
+    check_invariants(storage)
 
 
 def test_nosuperops():
@@ -82,9 +78,8 @@ def test_nosuperops():
     Config.autounwrap_inputs = True
 
 
-def test_retracing():
-    storage = Storage()
-
+@pytest.mark.parametrize("storage", generate_storages())
+def test_retracing(storage):
     @op
     def inc(x: int) -> int:
         return x + 1

@@ -3,8 +3,8 @@ from mandala.tests.utils import *
 from mandala.core.weaver import *
 
 
-def test_unit():
-    storage = Storage()
+@pytest.mark.parametrize("storage", generate_storages())
+def test_unit(storage):
 
     ### lists
     @op
@@ -118,9 +118,8 @@ def test_unit():
         df = q.get_table(num, factors, factors_mean)
 
 
-def test_nested():
-    storage = Storage()
-
+@pytest.mark.parametrize("storage", generate_storages())
+def test_nested(storage):
     @op
     def sum_rows(mat: List[List[float]]) -> List[float]:
         return [sum(row) for row in mat]

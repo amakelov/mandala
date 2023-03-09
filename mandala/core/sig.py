@@ -1,7 +1,6 @@
 from ..common_imports import *
 from .config import Config
 from .utils import get_uid, Hashing, is_subdict
-from ..utils import serialize, deserialize
 
 if Config.has_torch:
     import torch

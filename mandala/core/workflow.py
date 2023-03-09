@@ -1,6 +1,6 @@
 from ..common_imports import *
 from .weaver import *
-from .model import Ref, FuncOp, Call
+from .model import Ref, FuncOp
 from .utils import Hashing
 
 
