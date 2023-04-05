@@ -1,11 +1,13 @@
 from functools import wraps
 from ..common_imports import *
-from ..core.model import FuncOp, TransientObj
+from ..core.model import FuncOp, TransientObj, Call
 from ..core.utils import unwrap_decorators
 from ..core.sig import Signature
-from ..core.weaver import ValQuery, qwrap
-from . import contexts
+from ..core.tps import AnyType
+from ..queries.weaver import ValQuery, qwrap, call_query
 from ..deps.tracers.dec_impl import DecTracer
+
+from . import contexts
 from .utils import wrap_inputs, bind_inputs, format_as_outputs, MODES
 
 
@@ -14,7 +16,8 @@ def Q(pattern: Optional[Any] = None) -> "pattern":
     Create a `ValQuery` instance to be used as a placeholder in a query
     """
     if pattern is None:
-        return ValQuery(creator=None, created_as=None)
+        # return ValQuery(creator=None, created_as=None)
+        return ValQuery(creators=[], created_as=[], constraint=None, tp=AnyType())
     else:
         return qwrap(obj=pattern)
 
@@ -101,19 +104,25 @@ class FuncInterface:
         inputs, mode, storage, context = self._preprocess_call(*args, **kwargs)
         if mode == MODES.run:
             if self.executor == "python":
-                outputs, call = storage.call_run(
+                context._call_depth += 1
+                outputs, call, wrapped_inputs = storage.call_run(
                     func_op=self.func_op,
                     inputs=inputs,
                     allow_calls=context.allow_calls,
                     debug_calls=context.debug_calls,
                     recompute_transient=context.recompute_transient,
                     lazy=context.lazy,
+                    _call_depth=context._call_depth,
                     _code_state=context._code_state,
                     _versioner=context._cached_versioner,
                 )
+                sig = self.func_op.sig
+                context._call_uids[(sig.internal_name, sig.version)].append(call.uid)
+                context._call_depth -= 1
                 if context._attach_call_to_outputs:
                     for output in outputs:
                         output._call = call.detached()
+
                 return format_as_outputs(outputs=outputs)
             # elif self.executor == 'asyncio' or inspect.iscoroutinefunction(self.func_op.func):
             elif self.executor == "dask":
@@ -139,20 +148,9 @@ class FuncInterface:
                 return delayed(daskop_f, nout=nout)(*args, __data__=__data__, **kwargs)
             else:
                 raise NotImplementedError()
-        elif mode == MODES.delete:
-            outputs, call = storage.call_run(
-                func_op=self.func_op,
-                inputs=inputs,
-                allow_calls=False,
-                debug_calls=False,
-                _collect_calls=True,
-                _recurse=True,
-                _call_buffer=context._call_buffer,
-            )
-            return format_as_outputs(outputs=outputs)
         elif mode == MODES.query:
             return format_as_outputs(
-                outputs=storage.call_query(func_op=self.func_op, inputs=inputs)
+                outputs=call_query(func_op=self.func_op, inputs=inputs)
             )
         elif mode == MODES.batch:
             assert self.executor == "python"
@@ -206,7 +204,7 @@ class FuncDecorator:
         # func = unwrap_decorators(func, strict=True)
         func_op = FuncOp(
             func=func,
-            n_outputs=self.kwargs.get("n_outputs"),
+            n_outputs_override=self.kwargs.get("n_outputs"),
             version=self.kwargs.get("version"),
             ui_name=self.kwargs.get("ui_name"),
             is_super=self.kwargs.get("is_super", False),
@@ -233,7 +231,7 @@ def op(
         # a hack to handle the @op case
         func = version
         # func = unwrap_decorators(func, strict=True)
-        func_op = FuncOp(func=func, n_outputs=nout)
+        func_op = FuncOp(func=func, n_outputs_override=nout)
         if inspect.iscoroutinefunction(func):
             return wraps(func)(AsyncioFuncInterface(func_op=func_op))
         else:

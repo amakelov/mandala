@@ -1,25 +1,39 @@
 from ..common_imports import *
-from ..core.model import FuncOp, Ref, wrap
+from ..core.model import FuncOp, Ref, wrap_atom, Call
 from ..core.wrapping import unwrap
-from ..core.config import Config
-from ..core.weaver import ValQuery, qwrap
+from ..core.config import Config, MODES
+from ..queries.weaver import ValQuery, qwrap
 from textwrap import shorten
 
 
-class MODES:
-    run = "run"
-    query = "query"
-    batch = "batch"
-    define = "define"
-    delete = "delete"
+T = TypeVar("T")
 
-    all_ = (run, query, batch, define, delete)
+
+def wrap_ui(obj: T, recurse: bool = True) -> T:
+    if isinstance(obj, Ref):
+        return obj
+    elif type(obj) in (list, tuple):
+        if recurse:
+            return type(obj)(wrap_ui(v, recurse=recurse) for v in obj)
+        else:
+            return obj
+    elif type(obj) is dict:
+        if recurse:
+            return {k: wrap_ui(v, recurse=recurse) for k, v in obj.items()}
+        else:
+            return obj
+    else:
+        try:
+            _ = iter(obj)
+            return (wrap_ui(v, recurse=recurse) for v in obj)
+        except TypeError:
+            return wrap_atom(obj)
 
 
 def wrap_inputs(inputs: Dict[str, Any]) -> Dict[str, Ref]:
     # check if we allow implicit wrapping
     if Config.autowrap_inputs:
-        return {k: wrap(v) for k, v in inputs.items()}
+        return {k: wrap_atom(v) for k, v in inputs.items()}
     else:
         assert all(isinstance(v, Ref) for v in inputs.values())
         return inputs
@@ -34,7 +48,10 @@ def bind_inputs(args, kwargs, mode: str, func_op: FuncOp) -> Dict[str, Any]:
         bound_args = func_op.py_sig.bind_partial(*args, **kwargs)
         inputs_dict = dict(bound_args.arguments)
         input_tps = func_op.input_types
-        inputs_dict = {k: qwrap(obj=v, tp=input_tps[k]) for k, v in inputs_dict.items()}
+        inputs_dict = {
+            k: qwrap(obj=v, tp=input_tps[k], strict=True)
+            for k, v in inputs_dict.items()
+        }
     else:
         bound_args = func_op.py_sig.bind(*args, **kwargs)
         bound_args.apply_defaults()

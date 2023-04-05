@@ -51,13 +51,4 @@ if Config.has_torch:
             return_annotation=return_annotation,
             __validate_parameters__=True,
         )
-        return (
-            Signature(
-                ui_name=str(f.name),
-                input_names=set(input_names),
-                n_outputs=n_outputs,
-                defaults=defaults,
-                version=version,
-            ),
-            py_sig,
-        )
+        return Signature.from_py(name=str(f.name), version=version, sig=py_sig), py_sig

@@ -1,13 +1,11 @@
 from typing import Type
 import textwrap
-from .config import Config, parse_output_idx
+from .config import Config, parse_output_idx, dump_output_name, is_output_name, MODES
 from ..common_imports import *
 from .utils import Hashing, get_uid
 from .sig import (
     Signature,
     _postprocess_outputs,
-    _get_arg_annotations,
-    _get_return_annotations,
 )
 from .tps import Type, AnyType, ListType, DictType, SetType
 
@@ -40,10 +38,13 @@ def is_transient_uid(uid: str) -> bool:
 ### refs
 ################################################################################
 class Ref:
-    def __init__(self, uid: str, obj: Any, in_memory: bool):
+    def __init__(self, uid: str, obj: Any, in_memory: bool, transient: bool):
         self.uid = uid
         self._obj = obj
         self.in_memory = in_memory
+        self.transient = transient
+        # runtime only
+        self._query: Optional[ValQuery] = None
 
     @property
     def obj(self) -> Any:
@@ -75,16 +76,29 @@ class Ref:
 
     def _auto_attach(self, shallow: bool = True):
         if not self.in_memory:
-            from ..ui.contexts import GlobalContext
 
             context = GlobalContext.current
             assert context is not None
+            if context.mode != MODES.run:
+                return
             assert context.storage is not None
             storage = context.storage
             storage.rel_adapter.mattach(vrefs=[self], shallow=shallow)
+            if isinstance(self, (ListRef, DictRef, SetRef)):
+                inputs_list = Builtins.get_inputs_list(ref=self)
+                calls = Builtins._make_calls(
+                    builtin_id=self.builtin_id, wrapped_inputs_list=inputs_list
+                )
+                for call in calls:
+                    call.link(
+                        orientation=StructOrientations.destruct,
+                    )
 
     def detached(self) -> "Ref":
         return self.__class__(uid=self.uid, obj=None, in_memory=False)
+
+    def unlinked(self) -> "Ref":
+        raise NotImplementedError
 
     @property
     def _uid_suffix(self) -> str:
@@ -105,25 +119,42 @@ class Ref:
         else:
             return f"{self.__class__.__name__}(in_memory=False, uid={self._short_uid})"
 
+    @property
+    def query(self) -> "ValQuery":
+        if self._query is None:
+            raise ValueError("Ref has no query")
+        return self._query
+
+    def pin(self, *values):
+        assert self._query is not None
+        if len(values) == 0:
+            constraint = [self.uid]
+        else:
+            constraint = [wrap_atom(v).uid for v in values]
+        self._query.constraint = constraint
+
+    def unpin(self):
+        assert self._query is not None
+        self._query.constraint = None
+
 
 class ValueRef(Ref):
-    """
-    Wraps objects with storage metadata.
-
-    This is the object passed between memoized functions (ops).
-    """
-
     def __init__(self, uid: str, obj: Any, in_memory: bool, transient: bool = False):
-        self.uid = uid
-        self._obj = obj
-        self.in_memory = in_memory
-        self.transient = transient
+        super().__init__(uid=uid, obj=obj, in_memory=in_memory, transient=transient)
 
     def dump(self) -> "ValueRef":
         if not self.transient:
             return ValueRef(uid=self.uid, obj=self.obj, in_memory=True)
         return ValueRef(
             uid=self.uid, obj=TransientObj(obj=None), in_memory=False, transient=True
+        )
+
+    def unlinked(self) -> "Ref":
+        return ValueRef(
+            uid=self.uid,
+            obj=self.obj,
+            in_memory=self.in_memory,
+            transient=self.transient,
         )
 
     ############################################################################
@@ -226,19 +257,6 @@ class ValueRef(Ref):
 ### calls
 ################################################################################
 class Call:
-    """
-    Represents the data of a call to an operation (inputs, outputs, and call UID).
-
-    The inputs to an operation are represented as a dictionary, and the outputs
-    are a (possibly empty) list, mirroring how Python functions have named
-    inputs but nameless (but ordered) outputs. This convention is followed
-    throughout to stick as close as possible to the object being modeled (a
-    Python function).
-
-    The UID is a unique identifier for the call derived *deterministically* from
-    the inputs' UIDs and the "identity" of the operation.
-    """
-
     def __init__(
         self,
         uid: str,
@@ -255,8 +273,38 @@ class Call:
         self.inputs = inputs
         self.outputs = outputs
         self.transient = transient  # if outputs contain transient objects
-        self.func_op = FuncOp._from_data(sig=func_op.sig, f=func_op.func)
-        self.func_op.func = None
+        self.func_op = func_op.detached()
+        self._func_query = None
+
+    def link(
+        self,
+        orientation: Optional[str] = None,
+    ):
+        if self._func_query is not None:
+            return
+        input_types, output_types = self.func_op.input_types, self.func_op.output_types
+        for k, v in self.inputs.items():
+            prepare_query(ref=v, tp=input_types[k])
+        for i, v in enumerate(self.outputs):
+            prepare_query(ref=v, tp=output_types[i])
+        outputs = {dump_output_name(i): v.query for i, v in enumerate(self.outputs)}
+        self._func_query = FuncQuery.link(
+            inputs={k: v.query for k, v in self.inputs.items()},
+            func_op=self.func_op.detached(),
+            outputs=outputs,
+            orientation=orientation,
+            constraint=None,
+        )
+
+    def unlink(self):
+        assert self._func_query is not None
+        self._func_query.unlink()
+        self._func_query = None
+
+    @property
+    def func_query(self) -> "FuncQuery":
+        assert self._func_query is not None
+        return self._func_query
 
     def __repr__(self) -> str:
         tuples: List[Tuple[str, str]] = [
@@ -285,9 +333,7 @@ class Call:
         NOTE: this does not include the objects for the inputs and outputs to the call!
         """
         columns = row.column_names
-        output_columns = [
-            column for column in columns if column.startswith(Config.output_name_prefix)
-        ]
+        output_columns = [column for column in columns if is_output_name(column)]
         input_columns = [
             column
             for column in columns
@@ -343,20 +389,6 @@ class Call:
 ### ops
 ################################################################################
 class FuncOp:
-    """
-    Operation that models function execution.
-
-    The `is_synchronized` attribute is responsible for keeping track of whether
-    this operation has been connected to the storage.
-
-    The synchronization process is responsible for verifying that the function
-    signature last stored is compatible with the current signature, and
-    performing the necessary updates to the stored signature.
-
-    See also:
-        - `mandala.core.sig.Signature`
-    """
-
     def __init__(
         self,
         func: Optional[Callable] = None,
@@ -364,7 +396,7 @@ class FuncOp:
         version: Optional[int] = None,
         ui_name: Optional[str] = None,
         is_super: bool = False,
-        n_outputs: Optional[int] = None,
+        n_outputs_override: Optional[int] = None,
         _is_builtin: bool = False,
     ):
         self.is_super = is_super
@@ -372,25 +404,47 @@ class FuncOp:
         if func is None:
             self.sig = sig
             self.py_sig = None
-            self.func = None
+            self._func = None
+            self._module = None
+            self._qualname = None
         else:
-            self.func = func
+            self._func = func
+            self._module = func.__module__
+            self._qualname = func.__qualname__
             if Config.has_torch and isinstance(func, torch.jit.ScriptFunction):
-                sig, py_sig = sig_from_jit_script(self.func, version=version)
+                sig, py_sig = sig_from_jit_script(self._func, version=version)
                 ui_name = sig.ui_name
             else:
-                py_sig = inspect.signature(self.func)
-                ui_name = self.func.__name__ if ui_name is None else ui_name
+                py_sig = inspect.signature(self._func)
+                ui_name = self._func.__name__ if ui_name is None else ui_name
             self.py_sig = py_sig
             self.sig = Signature.from_py(
                 sig=self.py_sig, name=ui_name, version=version, _is_builtin=_is_builtin
             )
-        if n_outputs is not None:
-            self.sig.n_outputs = n_outputs
+        self.n_outputs_override = n_outputs_override
+        if n_outputs_override is not None:
+            self.sig.n_outputs = n_outputs_override
+            self.sig.output_annotations = [Any] * n_outputs_override
+
+    @property
+    def func(self) -> Callable:
+        assert self._func is not None
+        return self._func
+
+    @property
+    def is_builtin(self) -> bool:
+        return self._is_builtin
+
+    @func.setter
+    def func(self, func: Optional[Callable]):
+        self._func = func
+        if func is not None:
+            self.py_sig = inspect.signature(self._func)
 
     @property
     def input_annotations(self) -> Dict[str, Any]:
-        return _get_arg_annotations(func=self.func, support=list(self.sig.input_names))
+        assert self.sig is not None
+        return self.sig.input_annotations
 
     @property
     def input_types(self) -> Dict[str, Type]:
@@ -398,16 +452,12 @@ class FuncOp:
 
     @property
     def output_annotations(self) -> List[Any]:
-        return _get_return_annotations(func=self.func, support_size=self.sig.n_outputs)
+        assert self.sig is not None
+        return self.sig.output_annotations
 
     @property
     def output_types(self) -> List[Type]:
         return [Type.from_annotation(a) for a in self.output_annotations]
-
-    def _set_func(self, func: Callable) -> None:
-        # set the function only
-        self.func = func
-        self.py_sig = inspect.signature(self.func)
 
     def compute(
         self,
@@ -426,20 +476,38 @@ class FuncOp:
         return _postprocess_outputs(sig=self.sig, result=result), tracer
 
     @staticmethod
-    def _from_data(sig: Signature, f: Optional[Callable] = None) -> "Op":
+    def _from_data(
+        sig: Signature,
+        func: Callable,
+    ) -> "FuncOp":
         """
         Create a `FuncOp` object based on a signature and maybe a function. For
         internal use only.
         """
-        if f is None:
-            f = lambda *args, **kwargs: None
-            res = FuncOp(func=f, version=sig.version, ui_name=sig.ui_name)
-            res.sig = sig
-            res.func = None
-        else:
-            res = FuncOp(func=f, version=sig.version, ui_name=sig.ui_name)
-            res.sig = sig
+        res = FuncOp(func=func, version=sig.version, ui_name=sig.ui_name)
+        res.sig = sig
         return res
+
+    @staticmethod
+    def _from_sig(sig: Signature) -> "FuncOp":
+        return FuncOp(func=None, sig=sig)
+
+    def detached(self) -> "FuncOp":
+        if self._func is None:
+            return copy.deepcopy(self)
+        result = FuncOp(
+            func=None,
+            sig=copy.deepcopy(self.sig),
+            version=self.sig.version,
+            ui_name=self.sig.ui_name,
+            is_super=self.is_super,
+            n_outputs_override=self.n_outputs_override,
+            _is_builtin=self._is_builtin,
+        )
+        result._module = self._module
+        result._qualname = self._qualname
+        result.py_sig = self.py_sig  # signature objects are immutable
+        return result
 
     def get_call_uid(self, wrapped_inputs: Dict[str, Ref]) -> str:
         # get call UID using *internal names* to guarantee the same UID will be
@@ -465,7 +533,7 @@ class FuncOp:
 ################################################################################
 ### wrapping
 ################################################################################
-def wrap(obj: Any, uid: Optional[str] = None) -> ValueRef:
+def wrap_atom(obj: Any, uid: Optional[str] = None) -> ValueRef:
     """
     Wraps a value as a `ValueRef`, if it isn't one already.
 
@@ -473,6 +541,8 @@ def wrap(obj: Any, uid: Optional[str] = None) -> ValueRef:
     content hashing may take non-trivial time for large objects. When `obj` is
     already a `ValueRef` and `uid` is provided, an error is raised.
     """
+    if isinstance(obj, Ref) and not isinstance(obj, ValueRef):
+        raise ValueError(f"Cannot wrap {obj} as a ValueRef")
     if isinstance(obj, ValueRef):
         if uid is not None:
             # protect against accidental misuse
@@ -490,15 +560,6 @@ def wrap(obj: Any, uid: Optional[str] = None) -> ValueRef:
         return ValueRef(uid=uid, obj=obj.obj, in_memory=True, transient=True)
 
 
-from .builtins_ import ListRef, DictRef, SetRef
-
-TP_TO_CLS = {
-    AnyType: ValueRef,
-    ListType: ListRef,
-    DictType: DictRef,
-    SetType: SetRef,
-}
-
-
-def make_delayed(tp: Type) -> Ref:
-    return TP_TO_CLS[type(tp)](uid="", obj=Delayed(), in_memory=False)
+from .builtins_ import ListRef, DictRef, SetRef, Builtins
+from ..queries.weaver import ValQuery, StructOrientations, FuncQuery, prepare_query
+from ..ui.contexts import GlobalContext

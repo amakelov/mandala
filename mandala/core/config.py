@@ -32,7 +32,7 @@ class Config:
     warnings = True
     spillover_threshold_mb = 50
     db_backend = "sqlite"
-    query_engine = "sql"
+    query_engine: Literal["sql", "naive", "_test"] = "sql"
     func_interface_cls_name = "FuncInterface"
 
     ### constants
@@ -124,6 +124,13 @@ def parse_output_idx(output_name: str) -> int:
     return int(output_name[len(Config.output_name_prefix) :])
 
 
+def is_output_name(name: str) -> bool:
+    return (
+        name.startswith(Config.output_name_prefix)
+        and name[len(Config.output_name_prefix) :].isdigit()
+    )
+
+
 class Prov:
     relname = "__provenance__"
     call_uid = "call_uid"
@@ -136,3 +143,13 @@ class Prov:
 
 if Config.has_torch:
     import torch
+
+
+class MODES:
+    run = "run"
+    query = "query"
+    batch = "batch"
+    define = "define"
+    delete = "delete"
+
+    all_ = (run, query, batch, define, delete)

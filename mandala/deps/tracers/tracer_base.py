@@ -48,6 +48,13 @@ KEEP = "keep"  # continue tracing and add call to dependencies
 MAIN = "__main__"
 
 
+def get_closure_names(code_obj: types.CodeType, func_qualname: str) -> Tuple[str]:
+    closure_vars = code_obj.co_freevars
+    if "." in func_qualname and "__class__" in closure_vars:
+        closure_vars = tuple([var for var in closure_vars if var != "__class__"])
+    return closure_vars
+
+
 def get_module_flow(module_name: Optional[str], paths: List[Path]) -> str:
     if module_name is None:
         return BREAK

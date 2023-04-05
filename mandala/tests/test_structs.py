@@ -1,6 +1,6 @@
 from mandala.all import *
 from mandala.tests.utils import *
-from mandala.core.weaver import *
+from mandala.queries.weaver import *
 
 
 @pytest.mark.parametrize("storage", generate_storages())
@@ -17,36 +17,36 @@ def test_unit(storage):
 
     with storage.run():
         lst = repeat(x=42, times=23)
+        a = lst[0]
         x = get_list_mean(nums=lst)
         y = get_list_mean(nums=lst[:10])
         assert unwrap(lst[1]) == 42
         assert len(lst) == 23
     storage.rel_adapter.obj_get(uid=lst.uid)
 
-    with storage.query() as q:
+    with storage.query():
         x = Q().named("x")
         lst = repeat(x).named("lst")
         idx = Q().named("idx")
         elt = BuiltinQueries.GetListItemQuery(lst=lst, idx=idx).named("elt")
-        df = q.get_table(x, lst, elt, idx)
+        df = storage.df(x, lst, elt, idx)
     assert df.shape == (23, 4)
     assert all(df["elt"] == 42)
     assert sorted(df["idx"]) == list(range(23))
 
     # test list constructor
-    with storage.query() as q:
+    with storage.query():
         # a query for all the lists whose mean we've taken
-        lst = BuiltinQueries.ListQuery(elt=Q()).named("lst")
+        lst = BuiltinQueries.ListQ(elts=[Q()]).named("lst")
         x = get_list_mean(nums=lst).named("x")
-        df = q.get_table(lst, x)
+        df = storage.df(lst, x)
 
     # test syntax sugar
-    with storage.query() as q:
+    with storage.query():
         x = Q().named("x")
         lst = repeat(x).named("lst")
         first_elt = lst[Q()].named("first_elt")
-        second_elt = lst[Q()].named("second_elt")
-        df = q.get_table(x, lst, first_elt, second_elt)
+        df = storage.df(x, lst, first_elt)
 
     ### dicts
     @op
@@ -70,25 +70,25 @@ def test_unit(storage):
         assert len(dct) == 3
     storage.rel_adapter.obj_get(uid=dct.uid)
 
-    with storage.query() as q:
+    with storage.query():
         seq = Q().named("seq")
         dct = describe_sequence(seq=seq).named("dct")
         dct_mean = get_dict_mean(nums=dct).named("dct_mean")
-        df = q.get_table(seq, dct, dct_mean)
+        df = storage.df(seq, dct, dct_mean)
 
     # test dict constructor
-    with storage.query() as q:
+    with storage.query():
         # a query for all the dicts whose mean we've taken
-        dct = BuiltinQueries.DictQuery(val=Q()).named("dct")
+        dct = BuiltinQueries.DictQ(dct={Q(): Q()}).named("dct")
         dct_mean = get_dict_mean(nums=dct).named("dct_mean")
-        df = q.get_table(dct, dct_mean)
+        df = storage.df(dct, dct_mean)
 
     # test syntax sugar
-    with storage.query() as q:
+    with storage.query():
         seq = Q().named("seq")
         dct = describe_sequence(seq=seq).named("dct")
         dct_mean = dct["mean"].named("dct_mean")
-        df = q.get_table(seq, dct, dct_mean)
+        df = storage.df(seq, dct, dct_mean)
 
     ### sets
     @op
@@ -111,11 +111,11 @@ def test_unit(storage):
         assert len(factors) == 3
     storage.rel_adapter.obj_get(uid=factors.uid)
 
-    with storage.query() as q:
+    with storage.query():
         num = Q().named("num")
-        factors = BuiltinQueries.SetQuery(elt=num).named("factors")
+        factors = BuiltinQueries.SetQ(elts={num}).named("factors")
         factors_mean = mean_set(nums=factors).named("factors_mean")
-        df = q.get_table(num, factors, factors_mean)
+        df = storage.df(num, factors, factors_mean)
 
 
 @pytest.mark.parametrize("storage", generate_storages())
@@ -132,9 +132,9 @@ def test_nested(storage):
         assert sums_2[0].uid == sums[0].uid
         assert sums_2[1].uid == sums[1].uid
 
-    with storage.query() as q:
+    with storage.query():
         x = Q().named("x")
-        row = BuiltinQueries.ListQuery(elt=x).named("row")
-        mat = BuiltinQueries.ListQuery(elt=row).named("mat")
+        row = BuiltinQueries.ListQ(elts=[x]).named("row")
+        mat = BuiltinQueries.ListQ(elts=[row]).named("mat")
         row_sums = sum_rows(mat=mat).named("row_sums")
-        df = q.get_table(x, row, mat, row_sums)
+        df = storage.df(x, row, mat, row_sums)

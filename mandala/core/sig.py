@@ -1,5 +1,5 @@
 from ..common_imports import *
-from .config import Config
+from .config import Config, is_output_name
 from .utils import get_uid, Hashing, is_subdict
 
 if Config.has_torch:
@@ -37,6 +37,8 @@ class Signature:
         n_outputs: int,
         defaults: Dict[str, Any],  # ui name -> default value
         version: int,
+        input_annotations: Dict[str, Any],
+        output_annotations: List[Any],
         _is_builtin: bool = False,
     ):
         self.ui_name = ui_name
@@ -52,6 +54,9 @@ class Signature:
         # added to the function since its creation
         self._new_input_defaults_uids = {}
 
+        self.input_annotations = input_annotations
+        self.output_annotations = output_annotations
+
         self._is_builtin = _is_builtin
         if self.is_builtin:
             self._internal_name = ui_name
@@ -63,6 +68,8 @@ class Signature:
 
     def check_invariants(self):
         assert set(self.defaults.keys()) <= self.input_names
+        assert set(self.input_annotations.keys()) == self.input_names
+        assert len(self.output_annotations) == self.n_outputs
         if self.has_internal_data:
             assert set(self._ui_to_internal_input_map.keys()) == self.input_names
             assert set(self._new_input_defaults_uids.keys()) <= set(
@@ -257,26 +264,34 @@ class Signature:
         if not is_compatible:
             raise ValueError(reason)
         new_defaults = new.defaults
-        new_sig = copy.deepcopy(self)
+        res = copy.deepcopy(self)
         updates = {}
         for k in new.input_names:
-            if k not in new_sig.input_names:
+            if k not in res.input_names:
                 # this means a new input is being created
                 if new.has_internal_data:
                     internal_name = new.ui_to_internal_input_map[k]
                 else:
                     internal_name = None
-                new_sig = new_sig.create_input(
-                    name=k, default=new_defaults[k], internal_name=internal_name
+                res = res.create_input(
+                    name=k,
+                    default=new_defaults[k],
+                    internal_name=internal_name,
+                    annotation=new.input_annotations[k],
                 )
                 updates[k] = new_defaults[k]
         if new.n_outputs != self.n_outputs:
-            new_sig.n_outputs = new.n_outputs
-        new_sig.check_invariants()
-        return new_sig, updates
+            res.n_outputs = new.n_outputs
+            res.output_annotations = new.output_annotations
+        res.check_invariants()
+        return res, updates
 
     def create_input(
-        self, name: str, default, internal_name: Optional[str] = None
+        self,
+        name: str,
+        default: Any,
+        annotation: Any,
+        internal_name: Optional[str] = None,
     ) -> "Signature":
         """
         Add an input with a default value to this signature. This takes care of
@@ -296,6 +311,7 @@ class Signature:
         res.defaults[name] = default
         default_uid = Hashing.get_content_hash(obj=default)
         res._new_input_defaults_uids[internal_name] = default_uid
+        res.input_annotations[name] = annotation
         res.check_invariants()
         return res
 
@@ -328,6 +344,10 @@ class Signature:
             res.input_names.add(new_name)
         # migrate defaults
         res.defaults = {mapping.get(k, k): v for k, v in res.defaults.items()}
+        # migrate annotations
+        res.input_annotations = {
+            mapping.get(k, k): v for k, v in res.input_annotations.items()
+        }
         # migrate internal data
         for current_name, new_name in mapping.items():
             res.ui_to_internal_input_map[new_name] = res.ui_to_internal_input_map.pop(
@@ -361,9 +381,9 @@ class Signature:
             ]
         )
         # ensure that there will be no collisions with input and output names
-        if any(name.startswith(Config.output_name_prefix) for name in input_names):
+        if any(is_output_name(name) for name in input_names):
             raise ValueError(
-                f"Input names cannot start with {Config.output_name_prefix}"
+                f"Input names cannot be of the form {Config.output_name_prefix}_[number]"
             )
         return_annotation = sig.return_annotation
         if (
@@ -386,6 +406,10 @@ class Signature:
             n_outputs=n_outputs,
             defaults=defaults,
             version=version,
+            input_annotations=_get_arg_annotations_from_sig(sig, support=input_names),
+            output_annotations=_get_return_annotations_from_sig(
+                sig=sig, support_size=n_outputs
+            ),
             _is_builtin=_is_builtin,
         )
         res.check_invariants()
@@ -403,18 +427,16 @@ def _postprocess_outputs(sig: Signature, result) -> List[Any]:
     else:
         assert isinstance(
             result, tuple
-        ), f"Operation with signature {sig} has multiple outputs, but its function returned a non-tuple: {result}"
+        ), f"Operation {sig.ui_name} has multiple outputs, but its function returned a non-tuple: {result}"
         assert (
             len(result) == sig.n_outputs
-        ), f"Operation with signature {sig} has {sig.n_outputs} outputs, but its function returned a tuple of length {len(result)}"
+        ), f"Operation {sig.ui_name} has {sig.n_outputs} outputs, but its function returned a tuple of length {len(result)}"
         return list(result)
 
 
-def _get_arg_annotations(func: Callable, support: List[str]) -> Dict[str, Any]:
-    if Config.has_torch and isinstance(func, torch.jit.ScriptFunction):
-        return {a.name: a.type for a in func.schema.arguments}
-    # Use the inspect module to get the function's signature
-    sig = inspect.signature(func)
+def _get_arg_annotations_from_sig(
+    sig: inspect.Signature, support: Set[str]
+) -> Dict[str, Any]:
     # Create an empty dictionary to store the argument annotations
     arg_annotations = {}
     # Iterate over the function's parameters
@@ -428,6 +450,12 @@ def _get_arg_annotations(func: Callable, support: List[str]) -> Dict[str, Any]:
     return arg_annotations
 
 
+def _get_arg_annotations(func: Callable, support: Set[str]) -> Dict[str, Any]:
+    if Config.has_torch and isinstance(func, torch.jit.ScriptFunction):
+        return {a.name: a.type for a in func.schema.arguments}
+    return _get_arg_annotations_from_sig(sig=inspect.signature(func), support=support)
+
+
 def is_typing_tuple(obj: Any) -> bool:
     """
     Check if an object is a typing.Tuple[...] thing
@@ -438,12 +466,7 @@ def is_typing_tuple(obj: Any) -> bool:
         return False
 
 
-def _get_return_annotations(func: Callable, support_size: int) -> List[Any]:
-    if Config.has_torch and isinstance(func, torch.jit.ScriptFunction):
-        return_annotation = func.schema.returns[0].type
-    else:
-        sig = inspect.signature(func)
-        return_annotation = sig.return_annotation
+def unpack_return_annotation(return_annotation: Any, support_size: int) -> List[Any]:
     if is_typing_tuple(return_annotation):
         # we must unpack the typing tuple in this weird way
         res: List[Any] = list(return_annotation.__args__)
@@ -455,3 +478,19 @@ def _get_return_annotations(func: Callable, support_size: int) -> List[Any]:
     else:
         res = [return_annotation]
     return res
+
+
+def _get_return_annotations_from_sig(
+    sig: inspect.Signature, support_size: int
+) -> List[Any]:
+    return_annotation = sig.return_annotation
+    return unpack_return_annotation(return_annotation, support_size)
+
+
+def _get_return_annotations(func: Callable, support_size: int) -> List[Any]:
+    if Config.has_torch and isinstance(func, torch.jit.ScriptFunction):
+        return_annotation = func.schema.returns[0].type
+    else:
+        sig = inspect.signature(func)
+        return_annotation = sig.return_annotation
+    return unpack_return_annotation(return_annotation, support_size)

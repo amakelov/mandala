@@ -1,20 +1,110 @@
 from collections.abc import Sequence, Mapping, Set as SetABC
 from ..common_imports import *
 
-from .model import Ref, FuncOp, Call, wrap
+from .config import MODES
+from .model import Ref, FuncOp, Call, wrap_atom, ValueRef
 from .utils import Hashing
+from .tps import AnyType
+
+HASHERS = {
+    "__list__": Hashing.hash_list,
+    "__set__": Hashing.hash_set,
+    "__dict__": Hashing.hash_dict,
+}
 
 
-class ListRef(Ref, Sequence):
+class StructRef(Ref):
+    builtin_id = None
+
+    def __init__(
+        self,
+        uid: Optional[str],
+        obj: Optional[Any],
+        in_memory: bool,
+        transient: bool = False,
+    ):
+        if uid is None:
+            builtin_id = self.builtin_id
+            hasher = HASHERS[builtin_id]
+            uids = Builtins.map(func=lambda elt: elt.uid, obj=obj, struct_id=builtin_id)
+            uid = Builtins._make_builtin_uid(uid=hasher(uids), builtin_id=builtin_id)
+        super().__init__(uid=uid, obj=obj, in_memory=in_memory, transient=transient)
+        self._calls = None
+        if self._obj is not None:
+            self.set_calls()
+
+    def set_calls(self):
+        assert self._calls is None
+        self._calls = type(self).make_calls(self)
+
+    def get_calls(self) -> Any:
+        if self._calls is None:
+            self.set_calls()
+        return self._calls
+
+    @staticmethod
+    def make_calls(ref: "StructRef") -> Any:
+        """
+        This step - generating calls based on an existing collection - has the
+        benefit of separating the construction of the calls from the
+        construction of the Refs, in particular, the assignment of uids to the
+        Refs. This allows you to easily swap in a different uid assignment
+        strategy.
+        """
+        raise NotImplementedError
+
+    @staticmethod
+    def map(obj: Iterable, func: Callable) -> Iterable:
+        raise NotImplementedError
+
+    @staticmethod
+    def elts(obj: Iterable) -> Iterable:
+        raise NotImplementedError
+
+    def unlinked(self) -> "StructRef":
+        if not self.in_memory:
+            return type(self)(uid=self.uid, obj=None, in_memory=False)
+        else:
+            unlinked_elts = type(self).map(
+                obj=self.obj, func=lambda elt: elt.unlinked()
+            )
+            return type(self)(uid=self.uid, obj=unlinked_elts, in_memory=True)
+
+
+class ListRef(StructRef, Sequence):
     """
     Immutable list of Refs.
     """
 
-    def __init__(self, uid: str, obj: Optional[List[Ref]], in_memory: bool):
-        assert uid.startswith("__list__.")
-        self.uid = uid
-        self._obj = obj
-        self.in_memory = in_memory
+    builtin_id = "__list__"
+
+    def get_calls(self) -> List[Call]:
+        return super().get_calls()
+
+    @staticmethod
+    def make_calls(ref: "ListRef") -> List[Call]:
+        res = []
+        for i, elt in enumerate(ref.obj):
+            wrapped_inputs = {"lst": ref, "elt": elt, "idx": wrap_atom(i)}
+            call_uid = Builtins.list_op.get_call_uid(wrapped_inputs=wrapped_inputs)
+            res.append(
+                Call(
+                    uid=call_uid,
+                    inputs=wrapped_inputs,
+                    outputs=[],
+                    func_op=Builtins.list_op,
+                    transient=False,
+                )
+            )
+        return res
+
+    @staticmethod
+    def map(obj: list, func: Callable) -> list:
+        return [func(elt) for elt in obj]
+
+    @staticmethod
+    def elts(obj: list) -> list:
+        return obj
 
     def dump(self) -> "ListRef":
         return ListRef(
@@ -24,9 +114,26 @@ class ListRef(Ref, Sequence):
     ############################################################################
     ### list interface
     ############################################################################
-    def __getitem__(self, idx: int) -> Ref:
+    def __getitem__(
+        self, idx: Union[int, "ValQuery", Ref, slice]
+    ) -> Union[Ref, "ValQuery"]:
         self._auto_attach()
-        return self.obj[idx]
+        if isinstance(idx, Ref):
+            prepare_query(ref=idx, tp=AnyType())
+            res_query = BuiltinQueries.GetListItemQuery(lst=self.query, idx=idx.query)
+            res = self.obj[idx.obj].unlinked()
+            res._query = res_query
+            return res
+        elif isinstance(idx, ValQuery):
+            res = BuiltinQueries.GetListItemQuery(lst=self.query, idx=idx)
+            return res
+        else:
+            if (
+                GlobalContext.current is not None
+                and GlobalContext.current.mode != MODES.run
+            ):
+                raise ValueError
+            return self.obj[idx]
 
     def __iter__(self):
         self._auto_attach()
@@ -37,16 +144,37 @@ class ListRef(Ref, Sequence):
         return len(self.obj)
 
 
-class DictRef(Ref, Mapping):
+class DictRef(StructRef, Mapping):
     """
     Immutable string-keyed dict of Refs.
     """
 
-    def __init__(self, uid: str, obj: Optional[Dict[str, Ref]], in_memory: bool):
-        assert uid.startswith("__dict__.")
-        self.uid = uid
-        self._obj = obj
-        self.in_memory = in_memory
+    builtin_id = "__dict__"
+
+    @staticmethod
+    def map(obj: dict, func: Callable) -> dict:
+        return {k: func(v) for k, v in obj.items()}
+
+    @staticmethod
+    def elts(obj: dict) -> Iterable:
+        return obj.values()
+
+    def make_calls(self) -> Dict[str, Call]:
+        res = {}
+        for k, v in self.obj.items():
+            wrapped_inputs = {"dct": self, "key": wrap_atom(k), "val": v}
+            call_uid = Builtins.dict_op.get_call_uid(wrapped_inputs=wrapped_inputs)
+            res[k] = Call(
+                uid=call_uid,
+                inputs=wrapped_inputs,
+                outputs=[],
+                func_op=Builtins.dict_op,
+                transient=False,
+            )
+        return res
+
+    def get_calls(self) -> Dict[str, Call]:
+        return super().get_calls()
 
     def dump(self) -> "DictRef":
         assert self.in_memory
@@ -59,9 +187,26 @@ class DictRef(Ref, Mapping):
     ############################################################################
     ### dict interface
     ############################################################################
-    def __getitem__(self, key: str) -> Ref:
+    def __getitem__(self, key: Union[str, "ValQuery", Ref]) -> Union[Ref, "ValQuery"]:
         self._auto_attach()
-        return self.obj[key]
+        if isinstance(key, str):
+            if (
+                GlobalContext.current is not None
+                and GlobalContext.current.mode != MODES.run
+            ):
+                raise ValueError
+            return self.obj[key]
+        if isinstance(key, Ref):
+            prepare_query(ref=key, tp=AnyType())
+            res_query = BuiltinQueries.GetDictItemQuery(dct=self.query, key=key.query)
+            res = self.obj[key.obj].unlinked()
+            res._query = res_query
+            return res
+        elif isinstance(key, ValQuery):
+            res = BuiltinQueries.GetDictItemQuery(dct=self.query, key=key)
+            return res
+        else:
+            raise ValueError
 
     def __iter__(self):
         self._auto_attach()
@@ -72,16 +217,39 @@ class DictRef(Ref, Mapping):
         return len(self.obj)
 
 
-class SetRef(Ref, SetABC):
+class SetRef(StructRef, SetABC):
     """
     Immutable set of Refs.
     """
 
-    def __init__(self, uid: str, obj: Optional[Set[Ref]], in_memory: bool):
-        assert uid.startswith("__set__.")
-        self.uid = uid
-        self._obj = obj
-        self.in_memory = in_memory
+    builtin_id = "__set__"
+
+    @staticmethod
+    def map(obj: set, func: Callable) -> list:
+        return [func(elt) for elt in obj]
+
+    @staticmethod
+    def elts(obj: set) -> Iterable:
+        return obj
+
+    def make_calls(self) -> Set[Call]:
+        res = set()
+        for elt in self.obj:
+            wrapped_inputs = {"st": self, "elt": elt}
+            call_uid = Builtins.set_op.get_call_uid(wrapped_inputs=wrapped_inputs)
+            res.add(
+                Call(
+                    uid=call_uid,
+                    inputs=wrapped_inputs,
+                    outputs=[],
+                    func_op=Builtins.set_op,
+                    transient=False,
+                )
+            )
+        return res
+
+    def get_calls(self) -> Set[Call]:
+        return super().get_calls()
 
     def dump(self) -> "SetRef":
         assert self.in_memory
@@ -150,6 +318,25 @@ class Builtins:
         "__set__": SetRef,
     }
 
+    PY_TYPES = {
+        "__list__": list,
+        "__dict__": dict,
+        "__set__": set,
+    }
+
+    IO = {
+        "construct": {
+            "__list__": {"in": {"elt", "idx"}, "out": {"lst"}},
+            "__dict__": {"in": {"key", "val"}, "out": {"dct"}},
+            "__set__": {"in": {"elt"}, "out": {"st"}},
+        },
+        "destruct": {
+            "__list__": {"in": {"lst", "idx"}, "out": {"elt"}},
+            "__dict__": {"in": {"dct", "key"}, "out": {"val"}},
+            "__set__": {"in": {"st"}, "out": {"elt"}},
+        },
+    }
+
     @staticmethod
     def _make_builtin_uid(uid: str, builtin_id: str) -> str:
         return f"{builtin_id}.{uid}"
@@ -191,34 +378,51 @@ class Builtins:
         return calls
 
     @staticmethod
-    def construct_list(elts: List[Ref]) -> Tuple[ListRef, List[Call]]:
-        uid = Builtins._make_builtin_uid(
-            uid=Hashing.hash_list([elt.uid for elt in elts]), builtin_id="__list__"
-        )
-        lst = ListRef(uid=uid, obj=elts, in_memory=True)
-        idxs = [wrap(idx) for idx in range(len(elts))]
-        wrapped_inputs_list = [
-            {"lst": lst, "elt": elt, "idx": idx} for elt, idx in zip(elts, idxs)
-        ]
-        return lst, Builtins._make_calls("__list__", wrapped_inputs_list)
+    def get_inputs_list(ref: Union[ListRef, DictRef, SetRef]) -> List[Dict[str, Ref]]:
+        assert ref.in_memory
+        if isinstance(ref, ListRef):
+            idxs = [wrap_atom(idx) for idx in range(len(ref))]
+            wrapped_inputs_list = [
+                {"lst": ref, "elt": elt, "idx": idx} for elt, idx in zip(ref, idxs)
+            ]
+        elif isinstance(ref, DictRef):
+            wrapped_inputs_list = [
+                {"dct": ref, "key": wrap_atom(k), "val": v} for k, v in ref.items()
+            ]
+        elif isinstance(ref, SetRef):
+            wrapped_inputs_list = [{"st": ref, "elt": elt} for elt in ref]
+        else:
+            raise ValueError(f"Unexpected ref type: {type(ref)}")
+        return wrapped_inputs_list
 
     @staticmethod
-    def construct_dict(elts: Dict[str, Ref]) -> Tuple[DictRef, List[Call]]:
-        uid = Builtins._make_builtin_uid(
-            uid=Hashing.hash_dict({k: v.uid for k, v in elts.items()}),
-            builtin_id="__dict__",
-        )
-        dct = DictRef(uid=uid, obj=elts, in_memory=True)
-        wrapped_inputs_list = [
-            {"dct": dct, "key": wrap(key), "val": val} for key, val in elts.items()
-        ]
-        return dct, Builtins._make_calls("__dict__", wrapped_inputs_list)
+    def map(
+        func: Callable, obj: Union[List, Dict, Set], struct_id: str
+    ) -> Union[List, Dict, Set]:
+        if struct_id == "__list__":
+            return [func(elt) for elt in obj]
+        elif struct_id == "__dict__":
+            return {key: func(val) for key, val in obj.items()}
+        elif struct_id == "__set__":
+            return {func(elt) for elt in obj}
+        else:
+            raise ValueError(f"Invalid struct_id: {struct_id}")
 
     @staticmethod
-    def construct_set(elts: Set[Ref]) -> Tuple[SetRef, List[Call]]:
-        uid = Builtins._make_builtin_uid(
-            uid=Hashing.hash_set({elt.uid for elt in elts}), builtin_id="__set__"
-        )
-        st = SetRef(uid=uid, obj=elts, in_memory=True)
-        wrapped_inputs_list = [{"st": st, "elt": elt} for elt in elts]
-        return st, Builtins._make_calls("__set__", wrapped_inputs_list)
+    def collect_all_calls(ref: Ref) -> List[Call]:
+        if isinstance(ref, ValueRef):
+            return []
+        elif isinstance(ref, StructRef):
+            if not ref.in_memory:
+                return []
+            else:
+                calls = list(ref.elts(obj=ref.get_calls()))
+                for elt in ref.elts(ref.obj):
+                    calls.extend(Builtins.collect_all_calls(elt))
+                return calls
+        else:
+            raise ValueError(f"Unexpected ref type: {type(ref)}")
+
+
+from ..queries.weaver import ValQuery, BuiltinQueries, prepare_query
+from ..ui.contexts import GlobalContext

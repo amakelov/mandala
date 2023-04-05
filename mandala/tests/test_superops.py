@@ -1,6 +1,6 @@
 from mandala.all import *
 from mandala.tests.utils import *
-from mandala.core.weaver import *
+from mandala.queries.weaver import *
 
 
 @pytest.mark.parametrize("storage", generate_storages())
@@ -61,3 +61,23 @@ def test_unit(storage):
         dct = make_dict(a=23, b=42)
         z = workflow(a=23, b=42, c=10)
         w = super_workflow(a=a, b=b)
+
+
+@pytest.mark.parametrize("storage", generate_storages())
+def test_mutual_recursion(storage):
+    @superop
+    def f(x: int) -> int:
+        if unwrap(x) == 0:
+            return 0
+        else:
+            return g(unwrap(x) - 1)
+
+    @superop
+    def g(x: int) -> int:
+        if unwrap(x) == 0:
+            return 0
+        else:
+            return f(unwrap(x) - 1)
+
+    with storage.run():
+        a = f(23)

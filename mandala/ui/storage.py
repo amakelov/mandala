@@ -13,18 +13,18 @@ from ..storages.sigs import SigSyncer
 from ..storages.remote_storage import RemoteStorage
 from ..common_imports import *
 from ..core.config import Config
-from ..core.model import Ref, Call, FuncOp, make_delayed
-from ..core.builtins_ import Builtins
+from ..core.model import Ref, Call, FuncOp, ValueRef, Delayed
+from ..core.builtins_ import Builtins, ListRef, DictRef, SetRef
 from ..core.wrapping import (
-    wrap_dict,
-    wrap_list,
+    wrap_inputs,
+    wrap_outputs,
     unwrap,
     contains_transient,
     contains_not_in_memory,
+    compare_dfs_as_relations,
 )
-from ..core.tps import Type
+from ..core.tps import Type, AnyType, ListType, DictType, SetType
 from ..core.sig import Signature
-from ..core.workflow import CallStruct
 from ..core.utils import get_uid, Hashing, OpKey
 
 from ..deps.tracers import TracerABC, SysTracer
@@ -34,13 +34,22 @@ from ..deps.model import DepKey, TerminalData
 from .viz import write_output, _get_colorized_diff
 from .utils import MODES, debug_call
 
-from ..core.weaver import (
+from ..queries.workflow import CallStruct, Workflow
+from ..queries.weaver import (
     ValQuery,
     FuncQuery,
     traverse_all,
-    computational_graph_to_dot,
+    StructOrientations,
 )
-from ..core.compiler import Compiler, NaiveQueryEngine
+from ..queries.viz import (
+    graph_to_dot,
+    visualize_graph,
+    print_graph,
+    get_names,
+    extract_names_from_scope,
+)
+from ..queries.main import Querier
+from ..queries.graphs import get_canonical_order, get_deps, InducedSubgraph
 
 
 if Config.has_rich:
@@ -696,17 +705,25 @@ class Storage(Transactable):
     @transaction()
     def get_compatible_semantic_versions(
         self,
-        func_queries: List[FuncQuery],
-        code_state: CodeState,
+        fqs: Set[FuncQuery],
         conn: Optional[Connection] = None,
-    ) -> Tuple[Dict[OpKey, Set[str]], Dict[DepKey, Set[str]]]:
+    ) -> Tuple[Optional[Dict[OpKey, Set[str]]], Optional[Dict[DepKey, Set[str]]]]:
+        if not self.versioned:
+            return None, None
+        if contexts.GlobalContext.current is not None:
+            code_state = contexts.GlobalContext.current._code_state
+        else:
+            code_state = self.guess_code_state(
+                versioner=self.get_versioner(), conn=conn
+            )
         result_ops = {}
         result_deps = {}
         versioner = self.get_versioner(conn=conn)
-        for func_query in func_queries:
+        for func_query in fqs:
             sig = func_query.func_op.sig
             op_key = (sig.internal_name, sig.version)
-            dep_key = get_dep_key_from_func(func=func_query.func_op.func)
+            # dep_key = get_dep_key_from_func(func=func_query.func_op.func)
+            dep_key = (func_query.func_op._module, func_query.func_op._qualname)
             if func_query.func_op._is_builtin:
                 result_ops[op_key] = None
                 result_deps[dep_key] = None
@@ -719,83 +736,29 @@ class Storage(Transactable):
         return result_ops, result_deps
 
     @transaction()
-    def execute_query(
+    def eval_df(
         self,
-        select_queries: List[ValQuery],
+        uids_df: pd.DataFrame,
         values: Literal["objs", "refs", "uids", "lazy"] = "objs",
-        engine: str = "sql",
-        filter_duplicates: bool = True,
-        visualize_steps_at: Optional[Path] = None,
-        constrain_versions: bool = True,
         conn: Optional[Connection] = None,
     ) -> pd.DataFrame:
-        """
-        Execute the given queries and return the result as a pandas DataFrame.
-        """
-        if visualize_steps_at is not None:
-            assert engine == "naive"
-        if not select_queries:
-            return pd.DataFrame()
-        val_queries, func_queries = traverse_all(select_queries)
-        if engine == "sql":
-            compiler = Compiler(val_queries=val_queries, func_queries=func_queries)
-            if self.versioned and constrain_versions:
-                code_state = contexts.GlobalContext.current._code_state
-                semantic_constraints, _ = self.get_compatible_semantic_versions(
-                    func_queries=func_queries,
-                    code_state=code_state,
-                )
-            else:
-                semantic_constraints = None
-            query = compiler.compile(
-                select_queries=select_queries,
-                filter_duplicates=filter_duplicates,
-                semantic_version_constraints=semantic_constraints,
-            )
-            df = self.rel_storage.execute_df(query=str(query), conn=conn)
-        elif engine == "naive":
-            val_copies, func_copies, select_copies = NaiveQueryEngine._copy_graph(
-                val_queries, func_queries, select_queries=select_queries
-            )
-            memoization_tables = self._load_memoization_tables(conn=conn)
-            tables = {
-                f: memoization_tables[f.func_op.sig.versioned_internal_name]
-                for f in func_copies
-            }
-            query_graph = NaiveQueryEngine(
-                val_queries=val_copies,
-                func_queries=func_copies,
-                select_queries=select_copies,
-                tables=tables,
-                _table_evaluator=self.rel_adapter.evaluate_call_table,
-                _visualize_steps_at=visualize_steps_at,
-            )
-            df = query_graph.solve()
-            if filter_duplicates:
-                df = df.drop_duplicates(keep="first")
-        else:
-            raise NotImplementedError()
-        # finally, name the columns
-        df.columns = [str(i) for i in range(len(df.columns))]
-        cols = [
-            f"unnamed_{i}" if query.column_name is None else query.column_name
-            for i, query in zip(range(len((df.columns))), select_queries)
-        ]
-        df.rename(columns=dict(zip(df.columns, cols)), inplace=True)
-        # now, evaluate the table
         if values in ("objs", "refs"):
             uids_to_collect = [
-                item for _, column in df.items() for _, item in column.items()
+                item for _, column in uids_df.items() for _, item in column.items()
             ]
             self.preload_objs(uids_to_collect, conn=conn)
             if values == "objs":
-                result = df.applymap(lambda uid: unwrap(self.obj_get(uid, conn=conn)))
+                result = uids_df.applymap(
+                    lambda uid: unwrap(self.obj_get(uid, conn=conn))
+                )
             else:
-                result = df.applymap(lambda uid: self.obj_get(uid, conn=conn))
+                result = uids_df.applymap(lambda uid: self.obj_get(uid, conn=conn))
         elif values == "uids":
-            result = df
+            result = uids_df
         elif values == "lazy":
-            result = df.applymap(lambda uid: Ref.from_uid(uid=uid))
+            print("Doing this")
+            result = uids_df.applymap(lambda uid: Ref.from_uid(uid=uid))
+            print(result)
         else:
             raise ValueError(
                 f"Invalid value for `values`: {values}. Must be one of "
@@ -804,32 +767,243 @@ class Storage(Transactable):
         return result
 
     @transaction()
-    def visualize_query(
+    def execute_query(
         self,
-        *select_queries: List[ValQuery],
-        how: str = "none",
-        output_path: Optional[Path] = None,
+        selection: List[ValQuery],
+        vqs: Set[ValQuery],
+        fqs: Set[FuncQuery],
+        names: Dict[ValQuery, str],
+        values: Literal["objs", "refs", "uids", "lazy"] = "objs",
+        engine: Optional[Literal["sql", "naive", "_test"]] = None,
+        local: bool = False,
+        verbose: bool = True,
+        drop_duplicates: bool = True,
+        visualize_steps_at: Optional[Path] = None,
         conn: Optional[Connection] = None,
-    ) -> None:
-        val_queries, func_queries = traverse_all(select_queries)
-        memoization_tables = self._load_memoization_tables(evaluate=True, conn=conn)
-        tables_by_fq = {
-            fq: memoization_tables[fq.func_op.sig.versioned_internal_name]
-            for fq in func_queries
-        }
-        dot_string = computational_graph_to_dot(
-            val_queries=val_queries,
-            func_queries=func_queries,
-            layout="computational",
-            memoization_tables=tables_by_fq,
+    ) -> pd.DataFrame:
+        """
+        Execute the given queries and return the result as a pandas DataFrame.
+        """
+        if engine is None:
+            engine = Config.query_engine
+
+        def rename_cols(
+            df: pd.DataFrame, selection: List[ValQuery], names: Dict[ValQuery, str]
+        ):
+            df.columns = [str(i) for i in range(len(df.columns))]
+            cols = [names[query] for query in selection]
+            df.rename(columns=dict(zip(df.columns, cols)), inplace=True)
+
+        Querier.validate_query(vqs=vqs, fqs=fqs, selection=selection, names=names)
+        context = contexts.GlobalContext.current
+        if verbose:
+            print(
+                "Pattern-matching to the following computational graph (all constraints apply):"
+            )
+            print_graph(vqs=vqs, fqs=fqs, names=names, selection=selection)
+        if visualize_steps_at is not None:
+            assert engine == "naive"
+        if engine in ["sql", "_test"]:
+            version_constraints, _ = self.get_compatible_semantic_versions(
+                fqs=fqs, conn=conn
+            )
+            call_uids = context._call_uids if local else None
+            query = Querier.compile(
+                selection=selection,
+                vqs=vqs,
+                fqs=fqs,
+                version_constraints=version_constraints,
+                filter_duplicates=drop_duplicates,
+                call_uids=call_uids,
+            )
+            start = time.time()
+            sql_uids_df = self.rel_storage.execute_df(query=str(query), conn=conn)
+            end = time.time()
+            print(f"Query executed in {end - start} seconds.")
+            rename_cols(df=sql_uids_df, selection=selection, names=names)
+            uids_df = sql_uids_df
+        if engine in ["naive", "_test"]:
+            print(f"Loading memoization tables...")
+            memoization_tables = self._load_memoization_tables(conn=conn)
+            logger.debug("Executing query naively...")
+            naive_uids_df = Querier.execute_naive(
+                vqs=vqs,
+                fqs=fqs,
+                selection=selection,
+                memoization_tables=memoization_tables,
+                filter_duplicates=drop_duplicates,
+                table_evaluator=self.rel_adapter.evaluate_call_table,
+                visualize_steps_at=visualize_steps_at,
+            )
+            rename_cols(df=naive_uids_df, selection=selection, names=names)
+            uids_df = naive_uids_df
+        if engine == "_test":
+            outcome, reason = compare_dfs_as_relations(
+                df_1=sql_uids_df, df_2=naive_uids_df, return_reason=True
+            )
+            assert outcome, reason
+        return self.eval_df(uids_df=uids_df, values=values, conn=conn)
+
+    def _get_graph_and_names(
+        self,
+        objs: Tuple[Union[Ref, ValQuery]],
+        direction: Literal["forward", "backward", "both"] = "both",
+        scope: Optional[Dict[str, Any]] = None,
+        project: bool = False,
+    ):
+        vqs = {obj.query if isinstance(obj, Ref) else obj for obj in objs}
+        vqs, fqs = traverse_all(vqs=vqs, direction=direction)
+        hints = extract_names_from_scope(scope=scope) if scope is not None else {}
+        g = InducedSubgraph(vqs=vqs, fqs=fqs)
+        if project:
+            v_proj, f_proj, _ = g.project()
+            proj_hints = {v_proj[vq]: hints[vq] for vq in v_proj if vq in hints}
+            names = get_names(
+                hints=proj_hints,
+                canonical_order=get_canonical_order(
+                    vqs=set(v_proj.values()), fqs=set(f_proj.values())
+                ),
+            )
+            final_vqs = set(v_proj.values())
+            final_fqs = set(f_proj.values())
+        else:
+            names = get_names(
+                hints=hints,
+                canonical_order=get_canonical_order(vqs=set(vqs), fqs=set(fqs)),
+            )
+            final_vqs = vqs
+            final_fqs = fqs
+        return final_vqs, final_fqs, names
+
+    def draw(
+        self,
+        *objs: Union[Ref, ValQuery],
+        traverse: Literal["forward", "backward", "both"] = "both",
+        project: bool = False,
+        show_how: Literal["none", "browser", "inline", "open"] = "browser",
+    ):
+        scope = inspect.currentframe().f_back.f_locals
+        vqs, fqs, names = self._get_graph_and_names(
+            objs,
+            direction=traverse,
+            scope=scope,
+            project=project,
         )
-        output_ext = "svg" if how in ["browser"] else "png"
-        write_output(
-            dot_string=dot_string,
-            output_ext=output_ext,
-            output_path=output_path,
-            show_how=how,
+        visualize_graph(vqs, fqs, names=names, show_how=show_how)
+
+    def print(
+        self,
+        *objs: Union[Ref, ValQuery],
+        project: bool = False,
+        traverse: Literal["forward", "backward", "both"] = "both",
+    ):
+        scope = inspect.currentframe().f_back.f_locals
+        vqs, fqs, names = self._get_graph_and_names(
+            objs,
+            direction=traverse,
+            scope=scope,
+            project=project,
         )
+        print_graph(
+            vqs=vqs,
+            fqs=fqs,
+            names=names,
+            selection=[obj.query if isinstance(obj, Ref) else obj for obj in objs],
+        )
+
+    @transaction()
+    def df_back(
+        self,
+        *objs: Union[Ref, ValQuery],
+        values: Literal["objs", "refs", "uids", "lazy"] = "objs",
+        include_context: bool = True,
+        verbose: bool = True,
+        local: bool = False,
+        drop_duplicates: bool = True,
+        engine: Literal["sql", "naive", "_test"] = None,
+        _visualize_steps_at: Optional[Path] = None,
+        conn: Optional[Connection] = None,
+    ) -> pd.DataFrame:
+        scope = inspect.currentframe().f_back.f_back.f_locals
+        return self.df(
+            *objs,
+            direction="backward",
+            scope=scope,
+            values=values,
+            include_context=include_context,
+            skip_objs=False,
+            verbose=verbose,
+            local=local,
+            drop_duplicates=drop_duplicates,
+            engine=engine,
+            _visualize_steps_at=_visualize_steps_at,
+            conn=conn,
+        )
+
+    @transaction()
+    def df(
+        self,
+        *objs: Union[Ref, ValQuery],
+        direction: Literal["forward", "backward", "both"] = "both",
+        values: Literal["objs", "refs", "uids", "lazy"] = "objs",
+        include_context: bool = False,
+        skip_objs: bool = False,
+        verbose: bool = True,
+        local: bool = False,
+        drop_duplicates: bool = True,
+        engine: Literal["sql", "naive", "_test"] = None,
+        _visualize_steps_at: Optional[Path] = None,
+        scope: Optional[Dict[str, Any]] = None,
+        conn: Optional[Connection] = None,
+    ) -> pd.DataFrame:
+        """
+        Universal query method over computational graphs, both imperative and
+        declarative.
+        """
+        if not all(isinstance(obj, (Ref, ValQuery)) for obj in objs):
+            raise ValueError(
+                "All arguments to df() must be either `Ref`s or `ValQuery`s."
+            )
+        #! important
+        # We must sync any dirty cache elements to the db before performing a query.
+        # If we don't, we'll query a store that might be missing calls and objs.
+        self.commit(versioner=None)
+        selection = [obj.query if isinstance(obj, Ref) else obj for obj in objs]
+        # deps = get_deps(nodes=set(selection))
+        vqs, fqs = traverse_all(vqs=set(selection), direction=direction)
+        if scope is None:
+            scope = inspect.currentframe().f_back.f_back.f_locals
+        name_hints = extract_names_from_scope(scope=scope)
+        v_map, f_map, target_selection, target_names = Querier.prepare_projection_query(
+            vqs=vqs, fqs=fqs, selection=selection, name_hints=name_hints
+        )
+        target_vqs, target_fqs = set(v_map.values()), set(f_map.values())
+        if include_context:
+            g = InducedSubgraph(vqs=target_vqs, fqs=target_fqs)
+            _, _, topsort = g.canonicalize()
+            target_selection = [vq for vq in topsort if isinstance(vq, ValQuery)]
+        df = self.execute_query(
+            selection=target_selection,
+            vqs=set(v_map.values()),
+            fqs=set(f_map.values()),
+            values=values,
+            names=target_names,
+            verbose=verbose,
+            drop_duplicates=drop_duplicates,
+            visualize_steps_at=_visualize_steps_at,
+            engine=engine,
+            local=local,
+            conn=conn,
+        )
+        for col in df.columns:
+            try:
+                df = df.sort_values(by=col)
+            except Exception:
+                continue
+        if skip_objs:
+            # drop the dtypes that are objects
+            df = df.select_dtypes(exclude=["object"])
+        return df
 
     def _make_terminal_data(self, func_op: FuncOp, call: Call) -> TerminalData:
         terminal_data = TerminalData(
@@ -908,6 +1082,7 @@ class Storage(Transactable):
         self,
         func_op: FuncOp,
         inputs: Dict[str, Union[Any, Ref]],
+        _call_depth: int,
         recompute_transient: bool = False,
         allow_calls: bool = True,
         debug_calls: bool = False,
@@ -915,18 +1090,26 @@ class Storage(Transactable):
         _collect_calls: bool = False,
         _recurse: bool = False,
         _call_buffer: Optional[List[Call]] = None,
+        _call_uids: Optional[List[str]] = None,
         _code_state: Optional[CodeState] = None,
         _versioner: Optional[Versioner] = None,
         conn: Optional[Connection] = None,
-    ) -> Tuple[List[Ref], Call]:
+    ) -> Tuple[List[Ref], Call, Dict[str, Ref]]:
+        linking_on = _call_depth == 1
 
         if self.versioned:
             suspended_trace_obj = _versioner.TracerCls.get_active_trace_obj()
             _versioner.TracerCls.set_active_trace_obj(trace_obj=None)
 
-        wrapped_inputs, input_calls = wrap_dict(
-            objs=inputs, annotations=func_op.input_annotations
+        wrapped_inputs, input_calls = wrap_inputs(
+            objs=inputs,
+            annotations=func_op.input_annotations,
         )
+        if linking_on:
+            for input_call in input_calls:
+                input_call.link(
+                    orientation=StructOrientations.construct,
+                )
         pre_call_uid = func_op.get_call_uid(wrapped_inputs=wrapped_inputs)
         call_option = self.lookup_call(
             func_op=func_op,
@@ -989,8 +1172,9 @@ class Storage(Transactable):
                 # update the global topology and code state
                 _versioner.update_global_topology(graph=tracer_option.graph)
                 _code_state.add_globals_from(graph=tracer_option.graph)
-            wrapped_outputs, output_calls = wrap_list(
-                objs=outputs, annotations=func_op.output_annotations
+            wrapped_outputs, output_calls = wrap_outputs(
+                objs=outputs,
+                annotations=func_op.output_annotations,
             )
             (
                 call_uid,
@@ -1024,6 +1208,14 @@ class Storage(Transactable):
                         f"{func_op.sig.ui_name} after recomputation of transient values. "
                         f"{[v.uid for v in call_option.outputs]} != {[w.uid for w in wrapped_outputs]}"
                     )
+            if linking_on:
+                wrapped_outputs = [x.unlinked() for x in wrapped_outputs]
+                output_calls = [Builtins.collect_all_calls(x) for x in wrapped_outputs]
+                output_calls = [x for y in output_calls for x in y]
+                for output_call in output_calls:
+                    output_call.link(
+                        orientation=StructOrientations.destruct,
+                    )
             call = Call(
                 uid=call_uid,
                 func_op=func_op,
@@ -1033,6 +1225,8 @@ class Storage(Transactable):
                 semantic_version=semantic_version,
                 transient=transient,
             )
+            if linking_on:
+                call.link(orientation=None)
             if must_save:
                 for constituent_call in itertools.chain(
                     [call], input_calls, output_calls
@@ -1040,12 +1234,36 @@ class Storage(Transactable):
                     self.cache_call_and_objs(call=constituent_call)
         else:
             assert call_option is not None
-            call = call_option
             if not lazy:
-                self.preload_objs([v.uid for v in call.outputs], conn=conn)
-                wrapped_outputs = [self.obj_get(v.uid, conn=conn) for v in call.outputs]
+                self.preload_objs([v.uid for v in call_option.outputs], conn=conn)
+                wrapped_outputs = [
+                    self.obj_get(v.uid, conn=conn) for v in call_option.outputs
+                ]
             else:
-                wrapped_outputs = [v for v in call.outputs]
+                wrapped_outputs = [v for v in call_option.outputs]
+            # recreate call
+            call = Call(
+                uid=call_option.uid,
+                func_op=func_op,
+                inputs=wrapped_inputs,
+                outputs=wrapped_outputs,
+                content_version=call_option.content_version,
+                semantic_version=call_option.semantic_version,
+                transient=call_option.transient,
+            )
+            if linking_on:
+                call.outputs = [x.unlinked() for x in call.outputs]
+                if not lazy:
+                    output_calls = [Builtins.collect_all_calls(x) for x in call.outputs]
+                    output_calls = [x for y in output_calls for x in y]
+
+                else:
+                    output_calls = []
+                call.link(orientation=None)
+                for output_call in output_calls:
+                    output_call.link(
+                        orientation=StructOrientations.destruct,
+                    )
         if self.versioned and suspended_trace_obj is not None:
             _versioner.TracerCls.set_active_trace_obj(trace_obj=suspended_trace_obj)
             terminal_data = self._make_terminal_data(func_op=func_op, call=call)
@@ -1063,14 +1281,7 @@ class Storage(Transactable):
             )
         if _collect_calls:
             _call_buffer.append(call)
-        return wrapped_outputs, call
-
-    def call_query(
-        self, func_op: FuncOp, inputs: Dict[str, ValQuery]
-    ) -> List[ValQuery]:
-        assert all(isinstance(inp, ValQuery) for inp in inputs.values())
-        fq = FuncQuery.link(inputs=inputs, func_op=func_op)
-        return fq.outputs
+        return call.outputs, call, wrapped_inputs
 
     def call_batch(
         self, func_op: FuncOp, inputs: Dict[str, Ref]
@@ -1147,3 +1358,15 @@ class Storage(Transactable):
 from . import funcs
 
 FuncInterface = funcs.FuncInterface
+
+
+TP_TO_CLS = {
+    AnyType: ValueRef,
+    ListType: ListRef,
+    DictType: DictRef,
+    SetType: SetRef,
+}
+
+
+def make_delayed(tp: Type) -> Ref:
+    return TP_TO_CLS[type(tp)](uid="", obj=Delayed(), in_memory=False)

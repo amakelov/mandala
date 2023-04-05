@@ -95,6 +95,10 @@ class Hashing:
     def hash_set(elts: Set[str]) -> str:
         return Hashing.get_content_hash(sorted(elts))
 
+    @staticmethod
+    def hash_multiset(elts: List[str]) -> str:
+        return Hashing.get_content_hash(sorted(elts))
+
 
 def unwrap_decorators(
     obj: Callable, strict: bool = True

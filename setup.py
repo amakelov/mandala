@@ -41,6 +41,7 @@ packages = [
     "mandala",
     "mandala.core",
     "mandala.deps",
+    "mandala.queries",
     "mandala.storages",
     "mandala.storages.rel_impls",
     "mandala.storages.remote_impls",

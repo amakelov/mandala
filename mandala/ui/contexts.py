@@ -3,12 +3,16 @@ from typing import Literal
 from ..common_imports import *
 from ..core.config import Config
 from ..core.model import Call
-from ..core.workflow import Workflow
+from ..queries.workflow import Workflow
+from ..queries.graphs import get_canonical_order
+from ..queries.weaver import traverse_all
+from ..queries.viz import get_names, extract_names_from_scope
+from ..queries.main import Querier
 
 from ..deps.versioner import CodeState, Versioner
 from .utils import MODES
 
-from ..core.weaver import (
+from ..queries.weaver import (
     qwrap,
 )
 
@@ -39,7 +43,9 @@ class Context:
         self.debug_truncate = debug_truncate
         self.updates = {}
         self._updates_stack = []
+        self._call_depth = 0
         self._call_structs = []
+        self._call_uids: Dict[Tuple[str, int], List[str]] = defaultdict(list)
         self._defined_funcs: List["FuncInterface"] = []
         self._call_buffer: List[Call] = []
         self._code_state: CodeState = None
@@ -152,29 +158,6 @@ class Context:
             **updates,
         }
         return self
-
-    def get_table(
-        self,
-        *queries: Any,
-        values: Literal["objs", "refs", "uids", "lazy"] = "objs",
-        constrain_versions: bool = True,
-        _engine: str = "sql",
-        _filter_duplicates: bool = True,
-        _visualize_steps_at: Optional[Path] = None,
-    ) -> pd.DataFrame:
-        #! important
-        # We must sync any dirty cache elements to the DuckDB store before performing a query.
-        # If we don't, we'll query a store that might be missing calls and objs.
-        wrapped_queries = [qwrap(q) for q in queries]
-        self.storage.commit(versioner=None)
-        return self.storage.execute_query(
-            select_queries=wrapped_queries,
-            engine=_engine,
-            values=values,
-            filter_duplicates=_filter_duplicates,
-            visualize_steps_at=_visualize_steps_at,
-            constrain_versions=constrain_versions,
-        )
 
 
 from . import storage

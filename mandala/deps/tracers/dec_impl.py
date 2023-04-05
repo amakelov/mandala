@@ -18,10 +18,10 @@ from ..utils import (
     DepKey,
     GlobalsStrictness,
 )
-from .tracer_base import TracerABC, get_module_flow, KEEP
+from .tracer_base import TracerABC, get_module_flow, KEEP, get_closure_names
 
 
-class TracerConfig:
+class DecTracerConfig:
     allow_class_tracking = True
     restrict_global_accesses = True
     allow_owned_class_accesses = False
@@ -54,7 +54,7 @@ class TrackedDict(dict):
                 if (
                     is_owned
                     and is_cls_access
-                    and not TracerConfig.allow_owned_class_accesses
+                    and not DecTracerConfig.allow_owned_class_accesses
                 ):
                     raise ValueError(
                         f"Attempting to access class {result} from module {unwrapped_result.__module__}."
@@ -68,7 +68,7 @@ class TrackedDict(dict):
                 TracerState.tracer.register_global_access(key=__key, value=result)
             else:
                 if (
-                    TracerConfig.restrict_global_accesses
+                    DecTracerConfig.restrict_global_accesses
                     and not GlobalsStrictness.is_excluded(result)
                 ):
                     raise ValueError(
@@ -104,9 +104,9 @@ def get_nonfunc_attributes(cls: type) -> Dict[str, Any]:
 
 def track(obj: Union[types.FunctionType, type]) -> "obj":
     if isinstance(obj, type):
-        if not TracerConfig.allow_class_tracking:
+        if not DecTracerConfig.allow_class_tracking:
             raise ValueError("Class tracking is not allowed")
-        if not TracerConfig.allow_nonfunc_attributes:
+        if not DecTracerConfig.allow_nonfunc_attributes:
             nonfunc_attributes = get_nonfunc_attributes(obj)
             if len(nonfunc_attributes) > 0:
                 raise ValueError(
@@ -197,9 +197,11 @@ class DecTracer(TracerABC):
         module_name = func.__module__
         qualname = func.__qualname__
         # check for closure variables
-        closure_vars = func.__code__.co_freevars
-        if len(closure_vars) > 0:
-            msg = f"Found closure variables accessed by function {module_name}.{qualname}:\n{closure_vars}"
+        closure_names = get_closure_names(
+            code_obj=func.__code__, func_qualname=qualname
+        )
+        if len(closure_names) > 0:
+            msg = f"Found closure variables accessed by function {module_name}.{qualname}:\n{closure_names}"
             raise ValueError(msg)
         ### get call node
         node = CallableNode.from_runtime(

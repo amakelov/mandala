@@ -1,5 +1,5 @@
 from ..common_imports import *
-from ..core.workflow import Workflow
+from ..queries.workflow import Workflow
 from abc import ABC, abstractmethod
 from ..core.model import Call
 
@@ -22,9 +22,10 @@ class SimpleWorkflowExecutor(WorkflowExecutor):
                     call_struct.outputs,
                 )
                 assert all([not inp.is_delayed() for inp in inputs.values()])
-                vref_outputs, call = storage.call_run(
+                vref_outputs, call, wrapped_inputs = storage.call_run(
                     func_op=func_op,
                     inputs=inputs,
+                    _call_depth=0,
                 )
                 # overwrite things
                 for output, vref_output in zip(outputs, vref_outputs):

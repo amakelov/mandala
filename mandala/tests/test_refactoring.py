@@ -50,10 +50,10 @@ def test_add_input():
         add_many(0, 1)
         add_many(0, 1, 2)
 
-    with storage.query() as q:
+    with storage.query():
         x, y, z = Q(), Q(), Q()
         w = add_many(x, y, z)
-        df = q.get_table(x, y, z, w)
+        df = storage.df(x, y, z, w)
 
     rows = set(tuple(row) for row in df.values.tolist())
     assert rows == {(0, 1, 2, 3), (0, 1, 42, 43), (0, 23, 42, 65)}
@@ -64,7 +64,7 @@ def test_add_input():
     with storage.query() as q:
         x = Q()
         w = add_many(x)
-        df = q.get_table(x, w)
+        df = storage.df(x, w)
 
     ############################################################################
     ### check that invalid ways to add an input are not allowed

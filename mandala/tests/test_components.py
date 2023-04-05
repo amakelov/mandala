@@ -36,10 +36,10 @@ def test_wrapping():
     assert unwrap("23") == "23"
     assert unwrap([1, 2, 3]) == [1, 2, 3]
 
-    vref = wrap(23)
-    assert wrap(vref) is vref
+    vref = wrap_atom(23)
+    assert wrap_atom(vref) is vref
     try:
-        wrap(vref, uid="aaaaaa")
+        wrap_atom(vref, uid="aaaaaa")
     except:
         assert True
 
@@ -47,28 +47,28 @@ def test_wrapping():
 def test_unwrapping():
     # tuples
     assert unwrap((1, 2, 3)) == (1, 2, 3)
-    vrefs = (wrap(23), wrap(24), wrap(25))
+    vrefs = (wrap_atom(23), wrap_atom(24), wrap_atom(25))
     assert unwrap(vrefs, through_collections=True) == (23, 24, 25)
     assert unwrap(vrefs, through_collections=False) == vrefs
     # sets
     assert unwrap({1, 2, 3}) == {1, 2, 3}
-    vrefs = {wrap(23), wrap(24), wrap(25)}
+    vrefs = {wrap_atom(23), wrap_atom(24), wrap_atom(25)}
     assert unwrap(vrefs, through_collections=True) == {23, 24, 25}
     assert unwrap(vrefs, through_collections=False) == vrefs
     # lists
     assert unwrap([1, 2, 3]) == [1, 2, 3]
-    vrefs = [wrap(23), wrap(24), wrap(25)]
+    vrefs = [wrap_atom(23), wrap_atom(24), wrap_atom(25)]
     assert unwrap(vrefs, through_collections=True) == [23, 24, 25]
     assert unwrap(vrefs, through_collections=False) == vrefs
     # dicts
     assert unwrap({"a": 1, "b": 2, "c": 3}) == {"a": 1, "b": 2, "c": 3}
-    vrefs = {"a": wrap(23), "b": wrap(24), "c": wrap(25)}
+    vrefs = {"a": wrap_atom(23), "b": wrap_atom(24), "c": wrap_atom(25)}
     assert unwrap(vrefs, through_collections=True) == {"a": 23, "b": 24, "c": 25}
     assert unwrap(vrefs, through_collections=False) == vrefs
 
 
 def test_reprs():
-    x = wrap(23)
+    x = wrap_atom(23)
     repr(x), str(x)
 
 
@@ -84,10 +84,16 @@ def test_nesting_new_api():
     with storage.query() as q:
         assert q.mode == MODES.query
 
+    with storage.run() as c_1:
+        with storage.run() as c_2:
+            with storage.run() as c_3:
+                assert c_1 is c_2 is c_3
+
     with storage.run() as c:
         assert c.mode == MODES.run
         assert c.storage is storage
         with storage.query() as q:
+            assert q is c
             assert q.storage is storage
             assert q.mode == MODES.query
         assert c.mode == MODES.run
@@ -116,8 +122,8 @@ def test_nesting_more():
 
     ### run -> query -> run composition
     with storage.run():
-        i = 7
-        with storage.query() as q:
+        i = wrap(7)
+        with storage.query():
             j = inc(i)
             k = add(i, j)
             df = q.get_table(i, j, k, values="objs")
@@ -158,6 +164,8 @@ def test_signatures():
         n_outputs=1,
         defaults={"y": 42},
         version=0,
+        input_annotations={"x": int, "y": int},
+        output_annotations=[Any],
     )
 
     # if internal data has not been set, it should not be accessible
@@ -183,6 +191,8 @@ def test_signatures():
         n_outputs=1,
         defaults={"y": 42},
         version=0,
+        input_annotations={"x": int, "z": int},
+        output_annotations=[Any],
     )
     try:
         sig.update(new=new)
@@ -194,6 +204,8 @@ def test_signatures():
         n_outputs=1,
         defaults={},
         version=0,
+        input_annotations={"x": int, "y": int},
+        output_annotations=[Any],
     )
     try:
         sig.update(new=new)
@@ -206,6 +218,8 @@ def test_signatures():
         n_outputs=1,
         defaults={"y": 42},
         version=1,
+        input_annotations={"x": int, "y": int},
+        output_annotations=[Any],
     )
     try:
         sig.update(new=new)
@@ -215,10 +229,10 @@ def test_signatures():
     # add input
     sig = sig._generate_internal()
     try:
-        sig.create_input(name="y", default=23)
+        sig.create_input(name="y", default=23, annotation=Any)
     except ValueError:
         assert True
-    new = sig.create_input(name="z", default=23)
+    new = sig.create_input(name="z", default=23, annotation=Any)
     assert new.input_names == {"x", "y", "z"}
 
 
@@ -245,7 +259,7 @@ def test_changing_num_outputs():
     try:
         with storage.run():
             f(1)
-    except AssertionError:
+    except Exception:
         assert True
 
     @op
@@ -373,9 +387,10 @@ def test_get():
     storage.rel_adapter.mattach(vrefs=[factorizations_shallow[0]])
     assert unwrap(factorizations_shallow[0]) == [42]
 
-    result, call = storage.call_run(
+    result, call, wrapped_inputs = storage.call_run(
         func_op=get_factorizations.func_op,
         inputs={"n": 42},
+        _call_depth=0,
     )
 
 

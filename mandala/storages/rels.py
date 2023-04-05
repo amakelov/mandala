@@ -724,8 +724,6 @@ class RelAdapter(Transactable):
         result = {}
         for table in self.get_call_tables(conn=conn):
             result[table] = self.rel_storage.get_data(table=table, conn=conn)
-        for k, v in result.items():
-            v = self.evaluate_call_table(ta=v, conn=conn)
         return result
 
     ############################################################################
@@ -895,7 +893,7 @@ class RelAdapter(Transactable):
             versioned_name=str(table_name)
         )
         sig = self.sig_adapter.load_ui_sigs(conn=conn)[ui_name, version]
-        return Call.from_row(results, func_op=FuncOp._from_data(f=None, sig=sig))
+        return Call.from_row(results, func_op=FuncOp._from_sig(sig=sig))
 
     ############################################################################
     ### object methods

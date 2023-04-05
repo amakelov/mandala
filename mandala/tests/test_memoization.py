@@ -30,6 +30,7 @@ def test_computation(storage):
         x = 23
         y = inc(x)
         z = add(x, y=y)
+
     check_invariants(storage)
     # run it again
     with storage.run():
@@ -69,8 +70,8 @@ def test_nosuperops():
         return x
 
     with storage.run():
-        n = add(x=wrap(23), y=wrap(42))
-        a = inc_n_times(x=wrap(23), n=n)
+        n = add(x=wrap_atom(23), y=wrap_atom(42))
+        a = inc_n_times(x=wrap_atom(23), n=n)
     check_invariants(storage)
 
     # re-enable for isolation
@@ -128,3 +129,45 @@ def test_debugging():
         x = 23
         y = inc(x)
         z = add(x, y)
+
+
+def _a():
+    @op
+    def generate_dataset() -> Tuple[int, int]:
+        return 1, 2
+
+    @op
+    def train_model(
+        train_dataset: int,
+        test_dataset: int,
+        learning_rate: float,
+        batch_size: int,
+        num_epochs: int,
+    ) -> Tuple[int, float]:
+        return train_dataset + test_dataset + learning_rate, batch_size + num_epochs
+
+    storage = Storage()
+
+    with storage.run():
+        X, y = generate_dataset()
+        for batch_size in (100, 200, 400):
+            for learning_rate in (1, 2, 3):
+                model, acc = train_model(
+                    X,
+                    y,
+                    learning_rate=learning_rate,
+                    batch_size=batch_size,
+                    num_epochs=10,
+                )
+
+    with storage.run():
+        X, y = generate_dataset()
+        for batch_size in (100, 200, 400):
+            for learning_rate in (1, 2, 3):
+                model, acc = train_model(
+                    X,
+                    y,
+                    learning_rate=learning_rate,
+                    batch_size=batch_size,
+                    num_epochs=10,
+                )

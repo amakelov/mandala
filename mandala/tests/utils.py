@@ -6,8 +6,9 @@ from ..common_imports import *
 from mandala.all import *
 from mandala.ui.storage import Storage
 from mandala.ui.storage import MODES
-from mandala.core.config import Config
+from mandala.core.config import Config, is_output_name
 from mandala.core.model import Ref
+from mandala.core.wrapping import compare_dfs_as_relations
 from mandala.storages.remote_impls.mongo_impl import MongoRemoteStorage
 from mandala.storages.remote_impls.mongo_mock import MongoMockRemoteStorage
 from mandala.storages.rels import RelAdapter
@@ -57,47 +58,6 @@ def signatures_are_equal(storage_1: Storage, storage_2: Storage) -> bool:
         if sig_1 != sig_2:
             return False
     return True
-
-
-def _sanitize_value(value: Any) -> Any:
-    if isinstance(value, Ref):
-        return (_sanitize_value(value.obj), value.in_memory, value.uid)
-    try:
-        hash(value)
-        return value
-    except TypeError:
-        if isinstance(value, bytearray):
-            return value.hex()
-        elif isinstance(value, list):
-            return tuple([_sanitize_value(v) for v in value])
-        else:
-            raise NotImplementedError(f"Got value of type {type(value)}")
-
-
-def compare_dfs_as_relations(
-    df_1: pd.DataFrame, df_2: pd.DataFrame, return_reason: bool = False
-) -> Union[bool, Tuple[bool, str]]:
-    if df_1.shape != df_2.shape:
-        result, reason = False, f"Shapes differ: {df_1.shape} vs {df_2.shape}"
-    if set(df_1.columns) != set(df_2.columns):
-        result, reason = False, f"Columns differ: {df_1.columns} vs {df_2.columns}"
-    # reorder columns of df_2 to match df_1
-    df_2 = df_2[df_1.columns]
-    # sanitize values to make them hashable
-    df_1 = df_1.applymap(_sanitize_value)
-    df_2 = df_2.applymap(_sanitize_value)
-    # compare as sets of tuples
-    result = set(map(tuple, df_1.itertuples(index=False))) == set(
-        map(tuple, df_2.itertuples(index=False))
-    )
-    if result:
-        reason = ""
-    else:
-        reason = f"Dataframe rows differ: {df_1} vs {df_2}"
-    if return_reason:
-        return result, reason
-    else:
-        return result
 
 
 def data_is_equal(
@@ -162,8 +122,7 @@ def check_invariants(storage: Storage):
         input_cols = [
             col
             for col in columns
-            if not col.startswith(Config.output_name_prefix)
-            and col not in Config.special_call_cols
+            if not is_output_name(col) and col not in Config.special_call_cols
         ]
         ui_name, version = Signature.parse_versioned_name(versioned_name=call_table)
         assert set(input_cols).issubset(ui_sigs[ui_name, version].input_names)

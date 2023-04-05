@@ -14,15 +14,16 @@ from mandala.common_imports import *
 from mandala.all import *
 from mandala.tests.utils import *
 from mandala.tests.stateful_utils import *
-from mandala.core.workflow import Workflow, CallStruct
+from mandala.queries.workflow import Workflow, CallStruct
 from mandala.core.utils import Hashing, get_uid
-from mandala.core.compiler import *
-from mandala.core.model import Type, ListType, make_delayed
+from mandala.queries.compiler import *
+from mandala.core.model import Type, ListType
 from mandala.core.builtins_ import Builtins
 from mandala.core.sig import _get_return_annotations
 from mandala.storages.remote_storage import RemoteStorage
 from mandala.ui.executors import SimpleWorkflowExecutor
 from mandala.ui.funcs import FuncInterface
+from mandala.ui.storage import make_delayed
 
 
 class MockStorage:
@@ -452,9 +453,9 @@ class SingleClientSimulator(RuleBasedStateMachine):
         # simulate update using low-level API
         new_name = random_string()
         default_value = 23
-        new_sig = sig.create_input(name=new_name, default=default_value)
+        new_sig = sig.create_input(name=new_name, default=default_value, annotation=Any)
         # TODO: provide a new function with extra input as a user would
-        new_func_op = FuncOp._from_data(f=f, sig=new_sig)
+        new_func_op = FuncOp._from_data(func=make_func_from_sig(new_sig), sig=new_sig)
         client.storage.synchronize_op(func_op=new_func_op)
         client.func_ops[idx] = new_func_op
         new_sig = new_func_op.sig
@@ -498,7 +499,9 @@ class SingleClientSimulator(RuleBasedStateMachine):
                     func_op_version.sig.internal_name, func_op_version.sig.version
                 ]
             # now update the state of the simulator
-            new_func_op_version = FuncOp._from_data(f=func_op_version.func, sig=new_sig)
+            new_func_op_version = FuncOp._from_data(
+                func=func_op_version.func, sig=new_sig
+            )
             client.storage.synchronize_op(func_op=new_func_op_version)
             client.func_ops[version_idx] = new_func_op_version
         client.num_func_renames += 1
@@ -521,7 +524,8 @@ class SingleClientSimulator(RuleBasedStateMachine):
             new_name=new_name,
         )
         # now update the state of the simulator
-        new_func_op = FuncOp._from_data(f=func_op.func, sig=new_sig)
+        new_func = make_func_from_sig(sig=new_sig)
+        new_func_op = FuncOp._from_data(func=new_func, sig=new_sig)
         client.storage.synchronize_op(func_op=new_func_op)
         client.func_ops[func_idx] = new_func_op
         client.num_input_renames += 1
@@ -571,7 +575,7 @@ class SingleClientSimulator(RuleBasedStateMachine):
         # workflow = random.choice([w for w in self._workflows if w.shape_size < 5])
         # always add a value to make sampling proceed faster
         var = workflow.add_var()
-        workflow.add_value(value=wrap(get_uid()), var=var)
+        workflow.add_value(value=wrap_atom(get_uid()), var=var)
 
     @precondition(lambda machine: Preconditions.add_op_to_workflow(machine)[0])
     @rule()
@@ -588,7 +592,7 @@ class SingleClientSimulator(RuleBasedStateMachine):
             name: random.choice(workflow.var_nodes) for name in func_op.sig.input_names
         }
         # add function over these inputs
-        op_node, output_nodes = workflow.add_op(inputs=inputs, func_op=func_op)
+        _, _ = workflow.add_op(inputs=inputs, func_op=func_op)
 
     @precondition(lambda machine: Preconditions.add_call_to_workflow(machine)[0])
     @rule()

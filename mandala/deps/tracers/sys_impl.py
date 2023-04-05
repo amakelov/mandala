@@ -14,7 +14,7 @@ from ..model import (
 )
 import sys
 import importlib
-from .tracer_base import TracerABC
+from .tracer_base import TracerABC, get_closure_names
 
 ################################################################################
 ### tracer
@@ -41,7 +41,7 @@ class SysTracer(TracerABC):
         self.call_stack: List[Optional[CallableNode]] = []
         self.graph = DependencyGraph() if graph is None else graph
         self.paths = paths
-        self.path_str = str(paths[0])
+        self.path_strs = [str(path) for path in paths]
         self.strict = strict
         self.allow_methods = allow_methods
 
@@ -85,11 +85,19 @@ class SysTracer(TracerABC):
             raise RuntimeError("Another tracer is already active")
 
         def tracer(frame: types.FrameType, event: str, arg: Any):
+            if event not in ("call", "return"):
+                return
             module_name = frame.f_globals.get("__name__")
+            # fast check to rule out non-user code
             if event == "call":
                 try:
                     module = importlib.import_module(module_name)
-                    if not module.__file__.startswith(self.path_str):
+                    if not any(
+                        [
+                            module.__file__.startswith(path_str)
+                            for path_str in self.path_strs
+                        ]
+                    ):
                         return
                 except:
                     if module_name != MAIN:
@@ -116,8 +124,6 @@ class SysTracer(TracerABC):
                     # something went wrong
                     raise RuntimeError("Call stack is empty")
                 return
-            if event != "call":
-                return
 
             if func_name == LEAF_SIGNAL:
                 data: TerminalData = frame.f_locals["data"]
@@ -141,24 +147,30 @@ class SysTracer(TracerABC):
             module_control_flow = get_module_flow(
                 paths=self.paths, module_name=module_name
             )
-            logger.debug(
-                f"For module {module_name}, control flow is {module_control_flow}"
-            )
-            if module_control_flow == BREAK:
-                frame.f_trace = None
-                return
-            if module_control_flow == CONTINUE:
+            if module_control_flow in (BREAK, CONTINUE):
                 frame.f_trace = None
                 return
 
             logger.debug(f"Tracing call to {module_name}.{func_name}")
 
+            ### get the qualified name of the function/method
+            func_qualname = get_func_qualname(
+                func_name=func_name, code=code_obj, frame=frame
+            )
+            if "." in func_qualname:
+                if not self.allow_methods:
+                    raise RuntimeError(
+                        f"Methods are currently not supported: {func_qualname} from {module_name}"
+                    )
+
             ### detect use of closure variables
-            closure_vars = code_obj.co_freevars
-            if len(closure_vars) > 0 and func_name not in SKIP_FRAMES:
+            closure_names = get_closure_names(
+                code_obj=code_obj, func_qualname=func_qualname
+            )
+            if len(closure_names) > 0 and func_name not in SKIP_FRAMES:
                 closure_values = {
                     var: frame.f_locals.get(var, frame.f_globals.get(var, None))
-                    for var in closure_vars
+                    for var in closure_names
                 }
                 msg = f"Found closure variables accessed by function {module_name}.{func_name}:\n{closure_values}"
                 self._process_failure(msg=msg)
@@ -187,16 +199,6 @@ class SysTracer(TracerABC):
                     )
                 self.call_stack.append(func_name)
                 return tracer
-
-            ### get the qualified name of the function/method
-            func_qualname = get_func_qualname(
-                func_name=func_name, code=code_obj, frame=frame
-            )
-            if "." in func_qualname:
-                if not self.allow_methods:
-                    raise RuntimeError(
-                        f"Methods are currently not supported: {func_qualname} from {module_name}"
-                    )
 
             ### manage the call stack
             call_node = CallableNode.from_runtime(

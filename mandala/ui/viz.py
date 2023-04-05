@@ -341,6 +341,10 @@ def write_output(
     output_path: Optional[Path] = None,
     show_how: Literal["none", "browser", "inline", "open"] = "none",
 ):
+    """
+    Writes the given dot string to a dot file (temp file by default) and then
+    optionally shows it in the browser, opens it in a program, or does nothing.
+    """
     # make a temp file and write the dot string to it
     if output_path is None:
         tfile = tempfile.NamedTemporaryFile(suffix=f".{output_ext}", delete=False)

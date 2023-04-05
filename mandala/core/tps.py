@@ -31,7 +31,7 @@ class Type:
             elif annotation.__origin__ is dict:
                 value_annotation = annotation.__args__[1]
                 return DictType(
-                    val_type=Type.from_annotation(annotation=value_annotation)
+                    elt_type=Type.from_annotation(annotation=value_annotation)
                 )
             elif annotation.__origin__ is set:
                 elt_annotation = annotation.__args__[0]
@@ -43,21 +43,48 @@ class Type:
         else:
             return AnyType()
 
+    def __eq__(self, other: Any) -> bool:
+        if type(self) != type(other):
+            return False
+        if isinstance(self, StructType):
+            return self.struct_id == other.struct_id and self.elt_type == other.elt_type
+        elif isinstance(self, AnyType):
+            return True
+        else:
+            raise NotImplementedError
+
 
 class AnyType(Type):
-    pass
+    def __repr__(self):
+        return "AnyType()"
 
 
-class ListType(Type):
+class StructType(Type):
+    struct_id = None
+
     def __init__(self, elt_type: Optional[Type] = None):
         self.elt_type = AnyType() if elt_type is None else elt_type
 
 
-class DictType(Type):
-    def __init__(self, val_type: Optional[Type] = None):
-        self.val_type = AnyType() if val_type is None else val_type
+class ListType(StructType):
+    struct_id = "__list__"
+    model = list
+
+    def __repr__(self):
+        return f"ListType(elt_type={self.elt_type})"
 
 
-class SetType(Type):
-    def __init__(self, elt_type: Optional[Type] = None):
-        self.elt_type = AnyType() if elt_type is None else elt_type
+class DictType(StructType):
+    struct_id = "__dict__"
+    model = dict
+
+    def __repr__(self):
+        return f"DictType(elt_type={self.elt_type})"
+
+
+class SetType(StructType):
+    struct_id = "__set__"
+    model = set
+
+    def __repr__(self):
+        return f"SetType(elt_type={self.elt_type})"

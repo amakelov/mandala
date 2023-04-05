@@ -413,77 +413,8 @@ def test_recursion(tracer_impl):
 
 
 @pytest.mark.parametrize("tracer_impl", [DecTracer, SysTracer])
-def test_queries_basic(tracer_impl):
-    storage = Storage(
-        deps_path=DEPS_PATH, deps_package=DEPS_PACKAGE, tracer_impl=tracer_impl
-    )
-
-    global f_1
-
-    ### create an op, run it and check the query result
-    @op
-    def f_1(x) -> int:
-        return x + 2
-
-    with storage.run():
-        [f_1(i) for i in range(10)]
-
-    with storage.query() as q:
-        i = Q()
-        j = f_1(i)
-        df = q.get_table(i.named("i"), j.named("j"))
-
-    assert df.shape == (10, 2)
-    assert (df["j"] == df["i"] + 2).all()
-
-    ### change the op semantically and check that the query result is empty
-    @op
-    def f_1(x) -> int:
-        return x + 3
-
-    storage.sync_component(
-        component=f_1,
-        is_semantic_change=True,
-    )
-
-    with storage.query() as q:
-        i = Q()
-        j = f_1(i)
-        df = q.get_table(i.named("i"), j.named("j"))
-
-    assert df.empty
-
-    ### run the op again and check that the query result is correct for the new version
-    with storage.run():
-        [f_1(i) for i in range(10)]
-
-    with storage.query() as q:
-        i = Q()
-        j = f_1(i)
-        df = q.get_table(i.named("i"), j.named("j"))
-
-    assert df.shape == (10, 2)
-    assert (df["j"] == df["i"] + 3).all()
-
-    ### go back to the old version and check that the query result is correct
-    @op
-    def f_1(x) -> int:
-        return x + 2
-
-    storage.sync_component(
-        component=f_1,
-        is_semantic_change=None,
-    )
-    with storage.query() as q:
-        i = Q()
-        j = f_1(i)
-        df = q.get_table(i.named("i"), j.named("j"))
-    assert df.shape == (10, 2)
-    assert (df["j"] == df["i"] + 2).all()
-
-
-@pytest.mark.parametrize("tracer_impl", [DecTracer, SysTracer])
 def test_queries_multiple_versions(tracer_impl):
+    Config.query_engine = "sql"  # doesn't work yet with the naive engine
     storage = Storage(
         deps_path=DEPS_PATH, deps_package=DEPS_PACKAGE, tracer_impl=tracer_impl
     )
@@ -510,10 +441,10 @@ def test_queries_multiple_versions(tracer_impl):
         for i in range(10):  # make sure both versions are used
             f_3(i)
 
-    with storage.query() as q:
+    with storage.query():
         i = Q()
         j = f_3(i)
-        df_1 = q.get_table(i.named("i"), j.named("j"))
+        df_1 = storage.df(i.named("i"), j.named("j"))
     assert df_1.shape == (10, 2)
     assert (df_1["j"] == df_1["i"].apply(f_3)).all()
 
@@ -528,10 +459,10 @@ def test_queries_multiple_versions(tracer_impl):
         is_semantic_change=True,
     )
 
-    with storage.query() as q:
+    with storage.query():
         i = Q()
         j = f_3(i)
-        df_2 = q.get_table(i.named("i"), j.named("j"))
+        df_2 = storage.df(i.named("i"), j.named("j"))
     assert df_2.shape == (5, 2)
     assert sorted(df_2["i"].values.tolist()) == [0, 2, 4, 6, 8]
     assert (df_2["j"] == df_2["i"].apply(f_3)).all()
@@ -546,10 +477,10 @@ def test_queries_multiple_versions(tracer_impl):
         is_semantic_change=None,
     )
 
-    with storage.query() as q:
+    with storage.query():
         i = Q()
         j = f_3(i)
-        df_3 = q.get_table(i.named("i"), j.named("j"))
+        df_3 = storage.df(i.named("i"), j.named("j"))
     assert (df_1 == df_3).all().all()
 
 
@@ -608,3 +539,75 @@ def test_transient(tracer_impl):
         a = f(42)
     with storage.run(recompute_transient=True):
         a = f(42)
+
+
+@pytest.mark.parametrize("tracer_impl", [DecTracer, SysTracer])
+def test_queries_unit(tracer_impl):
+    Config.query_engine = "sql"  # doesn't work yet with the naive engine
+
+    storage = Storage(
+        deps_path=DEPS_PATH, deps_package=DEPS_PACKAGE, tracer_impl=tracer_impl
+    )
+
+    global g_1
+
+    ### create an op, run it and check the query result
+    @op
+    def g_1(x) -> int:
+        return x + 2
+
+    with storage.run():
+        [g_1(i) for i in range(10)]
+
+    with storage.query():
+        i = Q()
+        j = g_1(i)
+        df = storage.df(i.named("i"), j.named("j"))
+
+    assert df.shape == (10, 2)
+    assert (df["j"] == df["i"] + 2).all()
+
+    ### change the op semantically and check that the query result is empty
+    @op
+    def g_1(x) -> int:
+        return x + 3
+
+    storage.sync_component(
+        component=g_1,
+        is_semantic_change=True,
+    )
+
+    with storage.query():
+        i = Q()
+        j = g_1(i)
+        df = storage.df(i.named("i"), j.named("j"))
+
+    assert df.empty
+
+    ### run the op again and check that the query result is correct for the new version
+    with storage.run():
+        [g_1(i) for i in range(10)]
+
+    with storage.query():
+        i = Q()
+        j = g_1(i)
+        df = storage.df(i.named("i"), j.named("j"))
+
+    assert df.shape == (10, 2)
+    assert (df["j"] == df["i"] + 3).all()
+
+    ### go back to the old version and check that the query result is correct
+    @op
+    def g_1(x) -> int:
+        return x + 2
+
+    storage.sync_component(
+        component=g_1,
+        is_semantic_change=None,
+    )
+    with storage.query():
+        i = Q()
+        j = g_1(i)
+        df = storage.df(i.named("i"), j.named("j"))
+    assert df.shape == (10, 2)
+    assert (df["j"] == df["i"] + 2).all()

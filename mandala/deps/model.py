@@ -307,10 +307,5 @@ class DependencyGraph:
             self.add_node(target)
         self.edges.add((source.key, target.key))
 
-    def update_from(self, other: "DependencyGraph"):
-        self.nodes.update(other.nodes)
-        self.roots.update(other.roots)
-        self.edges.update(other.edges)
-
 
 from .viz import to_dot, to_string
