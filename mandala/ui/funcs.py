@@ -143,7 +143,11 @@ class FuncInterface:
                     )
                     return format_as_outputs(outputs=outputs)
 
-                __data__ = (storage.call_cache, storage.obj_cache, storage.db_path)
+                __data__ = (
+                    storage.call_cache_by_causal,
+                    storage.obj_cache,
+                    storage.db_path,
+                )
                 nout = self.func_op.sig.n_outputs
                 return delayed(daskop_f, nout=nout)(*args, __data__=__data__, **kwargs)
             else:
@@ -186,7 +190,11 @@ class AsyncioFuncInterface(FuncInterface):
                 )
                 return format_as_outputs(outputs=outputs)
 
-            __data__ = (storage.call_cache, storage.obj_cache, storage.db_path)
+            __data__ = (
+                storage.call_cache_by_causal,
+                storage.obj_cache,
+                storage.db_path,
+            )
             return await async_f(*args, __data__=__data__, **kwargs)
         else:
             return super().__call__(*args, **kwargs)

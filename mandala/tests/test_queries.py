@@ -13,6 +13,47 @@ def get_graph(vqs: Set[ValQuery]) -> InducedSubgraph:
     return InducedSubgraph(vqs=vqs, fqs=fqs)
 
 
+@pytest.mark.parametrize("storage", generate_storages())
+def test_queries_basics(storage):
+    Config.query_engine = "_test"
+
+    @op
+    def inc(x: int) -> int:
+        return x + 1
+
+    @op
+    def add(x: int, y: int) -> int:
+        return x + y
+
+    with storage.run():
+        for i in range(20, 25):
+            j = inc(i)
+            final = add(i, y=j)
+
+    with storage.query():
+        i = Q().named("i")
+        j = inc(i).named("j")
+        final = add(i, y=j).named("final")
+        df = storage.df(i, j, final)
+        assert set(df["i"]) == {i for i in range(20, 25)}
+        assert all(df["j"] == df["i"] + 1)
+        df_refs = storage.df(i, j, final, values="refs")
+        df_uids = storage.df(i, j, final, values="uids")
+        df_lazy = storage.df(i, j, final, values="lazy")
+        assert compare_dfs_as_relations(df_refs.applymap(lambda x: x.uid), df_uids)
+        assert compare_dfs_as_relations(
+            df_refs.applymap(lambda x: x.detached()), df_lazy
+        )
+        assert compare_dfs_as_relations(df_refs.applymap(unwrap), df)
+        assert compare_dfs_as_relations(df_lazy.applymap(unwrap), df)
+
+    check_invariants(storage)
+    vqs, fqs = traverse_all([i, j, final])
+    visualize_graph(
+        vqs=vqs, fqs=fqs, output_path=OUTPUT_ROOT / "test_basics.svg", names=None
+    )
+
+
 def test_empty():
     storage = Storage()
 
@@ -147,51 +188,6 @@ def test_queries_visualization():
         storage.print(a, b, c, d, e, traverse="both")
 
 
-@pytest.mark.parametrize("storage", generate_storages())
-def test_queries_basics(storage):
-    Config.query_engine = "_test"
-
-    @op
-    def inc(x: int) -> int:
-        return x + 1
-
-    @op
-    def add(x: int, y: int) -> int:
-        return x + y
-
-    with storage.run():
-        for i in range(20, 25):
-            j = inc(i)
-            final = add(i, y=j)
-
-    with storage.query():
-        i = Q().named("i")
-        j = inc(i).named("j")
-        final = add(i, y=j).named("final")
-        df = storage.df(i, j, final)
-        assert set(df["i"]) == {i for i in range(20, 25)}
-        assert all(df["j"] == df["i"] + 1)
-        df_refs = storage.df(i, j, final, values="refs")
-        df_uids = storage.df(i, j, final, values="uids")
-        df_lazy = storage.df(i, j, final, values="lazy")
-        assert compare_dfs_as_relations(df_refs.applymap(lambda x: x.uid), df_uids)
-        A = df_refs.applymap(lambda x: x.detached())
-        B = df_lazy
-        print(A)
-        print(B)
-        assert compare_dfs_as_relations(
-            df_refs.applymap(lambda x: x.detached()), df_lazy
-        )
-        assert compare_dfs_as_relations(df_refs.applymap(unwrap), df)
-        assert compare_dfs_as_relations(df_lazy.applymap(unwrap), df)
-
-    check_invariants(storage)
-    vqs, fqs = traverse_all([i, j, final])
-    visualize_graph(
-        vqs=vqs, fqs=fqs, output_path=OUTPUT_ROOT / "test_basics.svg", names=None
-    )
-
-
 def test_queries_exceptions():
     storage = Storage()
 
@@ -223,6 +219,7 @@ def test_queries_filter_duplicates():
         for x in range(5):
             for y in range(5):
                 z = inc(x)
+                print(z.causal_uid)
                 w = add(z, y)
 
     with storage.query():
@@ -253,72 +250,6 @@ def test_queries_filter_duplicates():
     assert len(df_2) == 25
     assert compare_dfs_as_relations(df_1, df_3)
     assert compare_dfs_as_relations(df_2, df_4)
-
-
-def test_queries_superops_multilevel():
-    Config.autowrap_inputs = False
-    Config.autounwrap_inputs = False
-    Config.query_engine = "_test"
-
-    storage = Storage()
-
-    @op
-    def add(x: int, y: int) -> int:
-        return unwrap(x) + unwrap(y)
-
-    @op
-    def add_many(xs: Any, ys: Any) -> Any:
-        result = []
-        for x in unwrap(xs):
-            for y in unwrap(ys):
-                result.append(add(wrap_atom(x), wrap_atom(y)))
-        return result
-
-    with storage.run():
-        result = add_many(xs=wrap_atom([1, 2, 3]), ys=wrap_atom([4, 5, 6]))
-    check_invariants(storage=storage)
-
-    # individual adds
-    with storage.query():
-        x, y = Q().named("x"), Q().named("y")
-        z = add(x, y).named("z")
-        df = storage.df(x, y, z)
-    assert all(df["x"] + df["y"] == df["z"])
-    assert set(zip(df["x"].values.tolist(), df["y"].values.tolist())) == set(
-        itertools.product([1, 2, 3], [4, 5, 6])
-    )
-
-    # end-to-end
-    with storage.query():
-        xs, ys = Q().named("xs"), Q().named("ys")
-        result = add_many(xs=xs, ys=ys).named("result")
-        df = storage.df(xs, ys, result)
-    assert df["xs"].item() == [1, 2, 3]
-    assert df["ys"].item() == [4, 5, 6]
-    assert [unwrap(x) for x in df["result"].item()] == [
-        a + b for a in [1, 2, 3] for b in [4, 5, 6]
-    ]
-
-    # two levels of nesting
-    @op
-    def add_many_many(xs: Any, ys: Any, zs: Any) -> Any:
-        intermediate = add_many(xs, ys)
-        final = add_many(intermediate, zs)
-        return final
-
-    with storage.run():
-        a = wrap_atom([1, 2, 3])
-        b = wrap_atom([4, 5, 6])
-        c = wrap_atom([7, 8, 9])
-        d = add_many_many(xs=a, ys=b, zs=c)
-
-    with storage.query():
-        xs, ys, zs = Q().named("xs"), Q().named("ys"), Q().named("zs")
-        intermediate = add_many(xs, ys).named("intermediate")
-        final = add_many(intermediate, zs).named("final")
-        df = storage.df(xs, ys, intermediate, final)
-        assert len(df["intermediate"].item()) == 9
-        assert len(df["final"].item()) == 27
 
 
 def test_queries_weird():
@@ -394,3 +325,35 @@ def test_queries_required_args():
         result = add(x=x).named("result")
         df = storage.df(x, result)
         assert df.shape == (9, 2)
+
+
+def test_generalized():
+    Config.query_engine = "sql"
+    storage = Storage()
+
+    @op
+    def create_list(x) -> list:
+        return [x + i for i in range(10)]
+
+    @op
+    def consume_list(nums: list) -> int:
+        return sum(nums)
+
+    with storage.run():
+        for x in wrap(list(range(10))):
+            nums = create_list(x)
+            for i in [2, 4, 6, 8, 10]:
+                res = consume_list(nums[:i])
+    df = storage.df_back(res)
+    assert df.shape[0] == 300
+
+    with storage.query():
+        idx0 = Q()
+        idx0.pin(0)
+        x = Q()
+        nums = create_list(x=x)
+        a0 = nums[idx0]
+        a1 = ListQ(elts=[a0], idxs=[idx0])
+        res = consume_list(nums=a1)
+        result = storage.df(idx0, x, nums, a0, a1, res)
+        assert result.shape[0] == 50

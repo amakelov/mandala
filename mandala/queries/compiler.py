@@ -28,7 +28,7 @@ class Compiler:
         val_aliases = {}
         val_counter = 0
         for val_query in self.vqs:
-            val_table = Table(Config.vref_table)
+            val_table = Table(Config.causal_vref_table)
             val_aliases[val_query] = val_table.as_(f"_var_{val_counter}")
             val_counter += 1
         return val_aliases, func_aliases
@@ -44,16 +44,18 @@ class Compiler:
         func_alias = self.func_aliases[fq]
         for input_name, val_query in fq.inputs.items():
             val_alias = self.val_aliases[val_query]
-            constraints.append(val_alias[Config.uid_col] == func_alias[input_name])
+            constraints.append(val_alias[Config.full_uid_col] == func_alias[input_name])
         for output_name, val_query in fq.outputs.items():
             val_alias = self.val_aliases[val_query]
-            constraints.append(val_alias[Config.uid_col] == func_alias[output_name])
+            constraints.append(
+                val_alias[Config.full_uid_col] == func_alias[output_name]
+            )
         if semantic_versions is not None:
             constraints.append(
                 func_alias[Config.semantic_version_col].isin(semantic_versions)
             )
         if fq.constraint is not None:
-            constraints.append(func_alias[Config.uid_col].isin(fq.constraint))
+            constraints.append(func_alias[Config.causal_uid_col].isin(fq.constraint))
         return constraints, select_fields
 
     def compile_val(self, val_query: ValQuery) -> Tuple[list, list]:
@@ -64,8 +66,10 @@ class Compiler:
         select_fields = []
         val_alias = self.val_aliases[val_query]
         if val_query.constraint is not None:
-            constraints.append(val_alias[Config.uid_col].isin(val_query.constraint))
-        select_fields.append(val_alias[Config.uid_col])
+            constraints.append(
+                val_alias[Config.full_uid_col].isin(val_query.constraint)
+            )
+        select_fields.append(val_alias[Config.full_uid_col])
         return constraints, select_fields
 
     def compile(
@@ -91,7 +95,9 @@ class Compiler:
         assert all([vq in self.vqs for vq in select_queries])
         from_tables = []
         all_constraints = []
-        select_cols = [self.val_aliases[vq][Config.uid_col] for vq in select_queries]
+        select_cols = [
+            self.val_aliases[vq][Config.full_uid_col] for vq in select_queries
+        ]
         if semantic_version_constraints is None:
             semantic_version_constraints = {
                 (op_query.func_op.sig.internal_name, op_query.func_op.sig.version): None

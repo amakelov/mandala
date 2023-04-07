@@ -249,7 +249,7 @@ def test_arg_renaming():
         return x_new + 1
 
     with storage.run():
-        inc(23)
+        x = inc(23)
 
     df = storage.get_table(inc)
     # make sure the call was not new

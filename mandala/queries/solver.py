@@ -129,6 +129,8 @@ class NaiveQueryEngine:
         renamed_df1 = df1.rename(columns=mapping1)
         renamed_df2 = df2.rename(columns=mapping2)
         # join the dataframes
+        logger.info(f"Joining tables of shapes {df1.shape} and {df2.shape}...")
+        start = time.time()
         if len(left_on) == 0:
             df = renamed_df1.merge(renamed_df2, how="cross")
         else:
@@ -137,6 +139,8 @@ class NaiveQueryEngine:
                 left_on=[mapping1[col] for col in left_on],
                 right_on=[mapping2[col] for col in right_on],
             )
+        end = time.time()
+        logger.info(f"Join took {round(end - start, 3)} seconds")
         # drop duplicate columns from the *right* dataframe
         df.drop(columns=[mapping2[col] for col in right_on], inplace=True)
         # construct the mapping functions from the columns of each dataframe to
@@ -159,7 +163,6 @@ class NaiveQueryEngine:
         """
         # get the data
         df1, df2 = self.tables[f1], self.tables[f2]
-        print(f"Joining tables of shapes {df1.shape} and {df2.shape}")
         # compute correspondence between columns and vqs
         col_to_vq1, vq_to_cols1 = self._get_col_to_vq_mappings(f1)
         col_to_vq2, vq_to_cols2 = self._get_col_to_vq_mappings(f2)

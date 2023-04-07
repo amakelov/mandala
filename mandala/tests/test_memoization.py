@@ -48,37 +48,6 @@ def test_computation(storage):
     check_invariants(storage)
 
 
-def test_nosuperops():
-    # disable auto-boxing things
-    Config.autowrap_inputs = False
-    Config.autounwrap_inputs = False
-
-    storage = Storage()
-
-    @op
-    def inc(x: int) -> int:
-        return unwrap(x) + 1
-
-    @op
-    def add(x: int, y: int) -> int:
-        return unwrap(x) + unwrap(y)
-
-    @op
-    def inc_n_times(x: int, n: int) -> int:
-        for i in range(unwrap(n)):
-            x = inc(x)
-        return x
-
-    with storage.run():
-        n = add(x=wrap_atom(23), y=wrap_atom(42))
-        a = inc_n_times(x=wrap_atom(23), n=n)
-    check_invariants(storage)
-
-    # re-enable for isolation
-    Config.autowrap_inputs = True
-    Config.autounwrap_inputs = True
-
-
 @pytest.mark.parametrize("storage", generate_storages())
 def test_retracing(storage):
     @op

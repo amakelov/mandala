@@ -2,6 +2,7 @@ from ..common_imports import *
 from ..queries.workflow import Workflow
 from abc import ABC, abstractmethod
 from ..core.model import Call
+from ..core.wrapping import unwrap
 
 
 class WorkflowExecutor(ABC):
@@ -22,7 +23,8 @@ class SimpleWorkflowExecutor(WorkflowExecutor):
                     call_struct.outputs,
                 )
                 assert all([not inp.is_delayed() for inp in inputs.values()])
-                vref_outputs, call, wrapped_inputs = storage.call_run(
+                inputs = unwrap(inputs)
+                vref_outputs, call, _ = storage.call_run(
                     func_op=func_op,
                     inputs=inputs,
                     _call_depth=0,

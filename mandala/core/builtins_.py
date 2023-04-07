@@ -8,7 +8,7 @@ from .tps import AnyType
 
 HASHERS = {
     "__list__": Hashing.hash_list,
-    "__set__": Hashing.hash_set,
+    "__set__": Hashing.hash_multiset,
     "__dict__": Hashing.hash_dict,
 }
 
@@ -29,29 +29,31 @@ class StructRef(Ref):
             uids = Builtins.map(func=lambda elt: elt.uid, obj=obj, struct_id=builtin_id)
             uid = Builtins._make_builtin_uid(uid=hasher(uids), builtin_id=builtin_id)
         super().__init__(uid=uid, obj=obj, in_memory=in_memory, transient=transient)
-        self._calls = None
-        if self._obj is not None:
-            self.set_calls()
 
-    def set_calls(self):
-        assert self._calls is None
-        self._calls = type(self).make_calls(self)
-
-    def get_calls(self) -> Any:
-        if self._calls is None:
-            self.set_calls()
-        return self._calls
-
-    @staticmethod
-    def make_calls(ref: "StructRef") -> Any:
-        """
-        This step - generating calls based on an existing collection - has the
-        benefit of separating the construction of the calls from the
-        construction of the Refs, in particular, the assignment of uids to the
-        Refs. This allows you to easily swap in a different uid assignment
-        strategy.
-        """
+    def as_inputs_list(self) -> List[Dict[str, Ref]]:
         raise NotImplementedError
+
+    def causify_up(self):
+        raise NotImplementedError
+
+    def get_call(self, wrapped_inputs: Dict[str, Ref]) -> Call:
+        call_uid = Builtins.OPS[self.builtin_id].get_pre_call_uid(
+            input_uids={k: v.uid for k, v in wrapped_inputs.items()}
+        )
+        return Call(
+            uid=call_uid,
+            inputs=wrapped_inputs,
+            outputs=[],
+            func_op=Builtins.OPS[self.builtin_id],
+            transient=False,
+        )
+
+    def get_calls(self) -> List[Call]:
+        inputs_list = self.as_inputs_list()
+        res = []
+        for wrapped_inputs in inputs_list:
+            res.append(self.get_call(wrapped_inputs=wrapped_inputs))
+        return res
 
     @staticmethod
     def map(obj: Iterable, func: Callable) -> Iterable:
@@ -61,14 +63,23 @@ class StructRef(Ref):
     def elts(obj: Iterable) -> Iterable:
         raise NotImplementedError
 
-    def unlinked(self) -> "StructRef":
+    def children(self) -> Iterable[Ref]:
+        return self.elts(self.obj)
+
+    def unlinked(self, keep_causal: bool) -> "StructRef":
         if not self.in_memory:
-            return type(self)(uid=self.uid, obj=None, in_memory=False)
+            res = type(self)(uid=self.uid, obj=None, in_memory=False)
+            if keep_causal:
+                res._causal_uid = self._causal_uid
+            return res
         else:
             unlinked_elts = type(self).map(
-                obj=self.obj, func=lambda elt: elt.unlinked()
+                obj=self.obj, func=lambda elt: elt.unlinked(keep_causal=keep_causal)
             )
-            return type(self)(uid=self.uid, obj=unlinked_elts, in_memory=True)
+            res = type(self)(uid=self.uid, obj=unlinked_elts, in_memory=True)
+            if keep_causal:
+                res._causal_uid = self._causal_uid
+            return res
 
 
 class ListRef(StructRef, Sequence):
@@ -78,25 +89,18 @@ class ListRef(StructRef, Sequence):
 
     builtin_id = "__list__"
 
-    def get_calls(self) -> List[Call]:
-        return super().get_calls()
+    def as_inputs_list(self) -> List[Dict[str, Ref]]:
+        idxs = [wrap_atom(idx) for idx in range(len(self))]
+        for idx in idxs:
+            causify_atom(idx)
+        wrapped_inputs_list = [
+            {"lst": self, "elt": elt, "idx": idx} for elt, idx in zip(self.obj, idxs)
+        ]
+        return wrapped_inputs_list
 
-    @staticmethod
-    def make_calls(ref: "ListRef") -> List[Call]:
-        res = []
-        for i, elt in enumerate(ref.obj):
-            wrapped_inputs = {"lst": ref, "elt": elt, "idx": wrap_atom(i)}
-            call_uid = Builtins.list_op.get_call_uid(wrapped_inputs=wrapped_inputs)
-            res.append(
-                Call(
-                    uid=call_uid,
-                    inputs=wrapped_inputs,
-                    outputs=[],
-                    func_op=Builtins.list_op,
-                    transient=False,
-                )
-            )
-        return res
+    def causify_up(self):
+        assert all(elt.causal_uid is not None for elt in self.obj)
+        self.causal_uid = Hashing.hash_list([elt.causal_uid for elt in self.obj])
 
     @staticmethod
     def map(obj: list, func: Callable) -> list:
@@ -121,19 +125,45 @@ class ListRef(StructRef, Sequence):
         if isinstance(idx, Ref):
             prepare_query(ref=idx, tp=AnyType())
             res_query = BuiltinQueries.GetListItemQuery(lst=self.query, idx=idx.query)
-            res = self.obj[idx.obj].unlinked()
+            res = self.obj[idx.obj].unlinked(keep_causal=True)
             res._query = res_query
             return res
         elif isinstance(idx, ValQuery):
             res = BuiltinQueries.GetListItemQuery(lst=self.query, idx=idx)
             return res
-        else:
+        elif isinstance(idx, int):
             if (
                 GlobalContext.current is not None
                 and GlobalContext.current.mode != MODES.run
             ):
                 raise ValueError
-            return self.obj[idx]
+            res: Ref = self.obj[idx]
+            res = res.unlinked(keep_causal=True)
+            wrapped_idx = wrap_atom(obj=idx)
+            causify_atom(ref=wrapped_idx)
+            sess.d()
+            call = self.get_call(
+                wrapped_inputs={"lst": self, "idx": wrapped_idx, "elt": res}
+            )
+            call.link(orientation=StructOrientations.destruct)
+            return res
+        elif isinstance(idx, slice):
+            if (
+                GlobalContext.current is not None
+                and GlobalContext.current.mode != MODES.run
+            ):
+                raise ValueError
+            res = self.obj[idx]
+            res = [elt.unlinked(keep_causal=True) for elt in res]
+            wrapped_idxs = [wrap_atom(obj=i) for i in range(*idx.indices(len(self)))]
+            for wrapped_idx in wrapped_idxs:
+                causify_atom(ref=wrapped_idx)
+            for wrapped_idx, elt in zip(wrapped_idxs, res):
+                call = self.get_call(
+                    wrapped_inputs={"lst": self, "idx": wrapped_idx, "elt": elt}
+                )
+                call.link(orientation=StructOrientations.destruct)
+            return res
 
     def __iter__(self):
         self._auto_attach()
@@ -151,30 +181,28 @@ class DictRef(StructRef, Mapping):
 
     builtin_id = "__dict__"
 
+    def as_inputs_list(self) -> List[Dict[str, Ref]]:
+        keys = {k: wrap_atom(k) for k in self.obj.keys()}
+        for k in keys.values():
+            causify_atom(k)
+        wrapped_inputs_list = [
+            {"dct": self, "key": keys[k], "val": v} for k, v in self.obj.items()
+        ]
+        return wrapped_inputs_list
+
+    def causify_up(self):
+        assert all(elt.causal_uid is not None for elt in self.obj.values())
+        self.causal_uid = Hashing.hash_dict(
+            {k: v.causal_uid for k, v in self.obj.items()}
+        )
+
     @staticmethod
     def map(obj: dict, func: Callable) -> dict:
         return {k: func(v) for k, v in obj.items()}
 
     @staticmethod
     def elts(obj: dict) -> Iterable:
-        return obj.values()
-
-    def make_calls(self) -> Dict[str, Call]:
-        res = {}
-        for k, v in self.obj.items():
-            wrapped_inputs = {"dct": self, "key": wrap_atom(k), "val": v}
-            call_uid = Builtins.dict_op.get_call_uid(wrapped_inputs=wrapped_inputs)
-            res[k] = Call(
-                uid=call_uid,
-                inputs=wrapped_inputs,
-                outputs=[],
-                func_op=Builtins.dict_op,
-                transient=False,
-            )
-        return res
-
-    def get_calls(self) -> Dict[str, Call]:
-        return super().get_calls()
+        return iter(obj.values())
 
     def dump(self) -> "DictRef":
         assert self.in_memory
@@ -199,7 +227,7 @@ class DictRef(StructRef, Mapping):
         if isinstance(key, Ref):
             prepare_query(ref=key, tp=AnyType())
             res_query = BuiltinQueries.GetDictItemQuery(dct=self.query, key=key.query)
-            res = self.obj[key.obj].unlinked()
+            res = self.obj[key.obj].unlinked(keep_causal=True)
             res._query = res_query
             return res
         elif isinstance(key, ValQuery):
@@ -224,32 +252,21 @@ class SetRef(StructRef, SetABC):
 
     builtin_id = "__set__"
 
+    def as_inputs_list(self) -> List[Dict[str, Ref]]:
+        wrapped_inputs_list = [{"st": self, "elt": elt} for elt in self.obj]
+        return wrapped_inputs_list
+
+    def causify_up(self):
+        assert all(elt.causal_uid is not None for elt in self.obj)
+        self.causal_uid = Hashing.hash_multiset([elt.causal_uid for elt in self.obj])
+
     @staticmethod
     def map(obj: set, func: Callable) -> list:
         return [func(elt) for elt in obj]
 
     @staticmethod
     def elts(obj: set) -> Iterable:
-        return obj
-
-    def make_calls(self) -> Set[Call]:
-        res = set()
-        for elt in self.obj:
-            wrapped_inputs = {"st": self, "elt": elt}
-            call_uid = Builtins.set_op.get_call_uid(wrapped_inputs=wrapped_inputs)
-            res.add(
-                Call(
-                    uid=call_uid,
-                    inputs=wrapped_inputs,
-                    outputs=[],
-                    func_op=Builtins.set_op,
-                    transient=False,
-                )
-            )
-        return res
-
-    def get_calls(self) -> Set[Call]:
-        return super().get_calls()
+        return iter(obj)
 
     def dump(self) -> "SetRef":
         assert self.in_memory
@@ -348,7 +365,7 @@ class Builtins:
     @staticmethod
     def parse_builtin_uid(uid: str) -> Tuple[str, str]:
         assert Builtins.is_builtin_uid(uid)
-        builtin_id, uid = uid.split(".")
+        builtin_id, uid = uid.split(".", 1)
         return builtin_id, uid
 
     @staticmethod
@@ -356,44 +373,6 @@ class Builtins:
         assert builtin_id in Builtins.IDS
         uid = Builtins._make_builtin_uid(uid=uid, builtin_id=builtin_id)
         return Builtins.REF_CLASSES[builtin_id](uid=uid, obj=None, in_memory=False)
-
-    @staticmethod
-    def _make_calls(
-        builtin_id: str, wrapped_inputs_list: List[Dict[str, Ref]]
-    ) -> List[Call]:
-        calls = []
-        for wrapped_inputs in wrapped_inputs_list:
-            call_uid = Builtins.OPS[builtin_id].get_call_uid(
-                wrapped_inputs=wrapped_inputs
-            )
-            calls.append(
-                Call(
-                    uid=call_uid,
-                    inputs=wrapped_inputs,
-                    outputs=[],
-                    func_op=Builtins.OPS[builtin_id],
-                    transient=False,
-                )
-            )
-        return calls
-
-    @staticmethod
-    def get_inputs_list(ref: Union[ListRef, DictRef, SetRef]) -> List[Dict[str, Ref]]:
-        assert ref.in_memory
-        if isinstance(ref, ListRef):
-            idxs = [wrap_atom(idx) for idx in range(len(ref))]
-            wrapped_inputs_list = [
-                {"lst": ref, "elt": elt, "idx": idx} for elt, idx in zip(ref, idxs)
-            ]
-        elif isinstance(ref, DictRef):
-            wrapped_inputs_list = [
-                {"dct": ref, "key": wrap_atom(k), "val": v} for k, v in ref.items()
-            ]
-        elif isinstance(ref, SetRef):
-            wrapped_inputs_list = [{"st": ref, "elt": elt} for elt in ref]
-        else:
-            raise ValueError(f"Unexpected ref type: {type(ref)}")
-        return wrapped_inputs_list
 
     @staticmethod
     def map(
@@ -416,7 +395,7 @@ class Builtins:
             if not ref.in_memory:
                 return []
             else:
-                calls = list(ref.elts(obj=ref.get_calls()))
+                calls = ref.get_calls()
                 for elt in ref.elts(ref.obj):
                     calls.extend(Builtins.collect_all_calls(elt))
                 return calls
@@ -424,5 +403,6 @@ class Builtins:
             raise ValueError(f"Unexpected ref type: {type(ref)}")
 
 
-from ..queries.weaver import ValQuery, BuiltinQueries, prepare_query
+from ..queries.weaver import ValQuery, BuiltinQueries, prepare_query, StructOrientations
 from ..ui.contexts import GlobalContext
+from .wrapping import causify_atom

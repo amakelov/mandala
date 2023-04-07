@@ -18,6 +18,15 @@ def get_uid() -> str:
     return "{}".format(binascii.hexlify(os.urandom(16)).decode("utf-8"))
 
 
+def get_full_uid(uid: str, causal_uid: str) -> str:
+    return f"{uid}.{causal_uid}"
+
+
+def parse_full_uid(full_uid: str) -> Tuple[str, str]:
+    uid, causal_uid = full_uid.rsplit(".", 1)
+    return uid, causal_uid
+
+
 def is_subdict(a: Dict, b: Dict) -> bool:
     """
     Check that all keys in `a` are in `b` with the same value.

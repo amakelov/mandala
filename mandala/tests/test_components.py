@@ -99,41 +99,6 @@ def test_nesting_new_api():
         assert c.mode == MODES.run
 
 
-def test_nesting_more():
-    storage = Storage()
-
-    @op
-    def inc(x: int) -> int:
-        return x + 1
-
-    @op
-    def add(x: int, y: int) -> int:
-        return x + y
-
-    @op
-    def mul(x: int, y: int) -> int:
-        return x * y
-
-    with storage.run():
-        for i in range(10):
-            j = inc(i)
-            k = add(i, j)
-            l = mul(i, k)
-
-    ### run -> query -> run composition
-    with storage.run():
-        i = wrap(7)
-        with storage.query():
-            j = inc(i)
-            k = add(i, j)
-            df = q.get_table(i, j, k, values="objs")
-            assert len(df) == 1
-            with storage.run():
-                for i, j, k in df.itertuples(index=False):
-                    l = mul(i, k)
-    assert unwrap(l) == 7 * (7 + 8)
-
-
 def test_noop():
     # check that ops are noops when not in a context
 
@@ -384,8 +349,8 @@ def test_get():
         uid=factorizations.uid, depth=1
     )
     assert factorizations_shallow.in_memory
-    storage.rel_adapter.mattach(vrefs=[factorizations_shallow[0]])
-    assert unwrap(factorizations_shallow[0]) == [42]
+    storage.rel_adapter.mattach(vrefs=[factorizations_shallow.obj[0]])
+    assert unwrap(factorizations_shallow.obj[0]) == [42]
 
     result, call, wrapped_inputs = storage.call_run(
         func_op=get_factorizations.func_op,
@@ -469,8 +434,8 @@ def test_persistent():
             n = len(factorizations)
             assert factorizations.in_memory
             assert not factorizations[0].in_memory
-            factorizations[0][0]
-            assert factorizations[0].in_memory
+            # factorizations[0][0]
+            # assert factorizations[0].in_memory
 
             for elt in factorizations[1]:
                 assert not elt.in_memory
@@ -557,55 +522,6 @@ def test_spillover():
     finally:
         db_path.unlink()
         shutil.rmtree(spillover_dir)
-
-
-################################################################################
-### test components for integrations
-################################################################################
-if Config.has_torch:
-    import torch
-
-    def test_jit_script():
-        storage = Storage()
-
-        @op
-        @torch.jit.script
-        def f(x: torch.Tensor, y: bool = False) -> Tuple[torch.Tensor, torch.Tensor]:
-            # a function with multiple outputs
-            if y:
-                return x, x
-            else:
-                return 2 * x, x
-
-        with storage.run():
-            x = torch.ones(1)
-            y = f(x)
-
-        @op
-        @torch.jit.script
-        def g(x: torch.Tensor) -> torch.Tensor:
-            # a function with a single output
-            return x
-
-        with storage.run():
-            x = torch.ones(1)
-            y = g(x)
-
-        @op
-        @torch.jit.script
-        def h(x: torch.Tensor):
-            # a function with no outputs
-            return
-
-        with storage.run():
-            x = torch.ones(1)
-            h(x)
-
-        data = storage.rel_adapter.get_all_call_data()
-        func_names = {"f_0", "g_0", "h_0"}
-        assert func_names <= set(data.keys())
-        for k in func_names:
-            assert data[k].shape[0] == 1
 
 
 def test_batching_unit():

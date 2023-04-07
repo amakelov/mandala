@@ -1,8 +1,8 @@
 from ..common_imports import *
-from ..core.model import FuncOp, Ref, wrap_atom, Call
-from ..core.wrapping import unwrap
+from ..core.model import FuncOp, Ref, wrap_atom
+from ..core.wrapping import unwrap, causify_atom
 from ..core.config import Config, MODES
-from ..queries.weaver import ValQuery, qwrap
+from ..queries.weaver import ValQuery, qwrap, prepare_query
 from textwrap import shorten
 
 
@@ -23,11 +23,9 @@ def wrap_ui(obj: T, recurse: bool = True) -> T:
         else:
             return obj
     else:
-        try:
-            _ = iter(obj)
-            return (wrap_ui(v, recurse=recurse) for v in obj)
-        except TypeError:
-            return wrap_atom(obj)
+        res = wrap_atom(obj)
+        causify_atom(ref=res)
+        return res
 
 
 def wrap_inputs(inputs: Dict[str, Any]) -> Dict[str, Ref]:

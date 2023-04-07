@@ -18,6 +18,8 @@ from ..core.builtins_ import Builtins, ListRef, DictRef, SetRef
 from ..core.wrapping import (
     wrap_inputs,
     wrap_outputs,
+    causify_outputs,
+    decausify,
     unwrap,
     contains_transient,
     contains_not_in_memory,
@@ -96,7 +98,11 @@ class Storage(Transactable):
         self.root = root
         if call_cache is None:
             call_cache = MultiProcInMemoryStorage() if multiproc else InMemoryStorage()
-        self.call_cache = call_cache
+        call_cache_by_uid = (
+            MultiProcInMemoryStorage() if multiproc else InMemoryStorage()
+        )
+        self.call_cache_by_causal = call_cache  # by causal_uid
+        self.call_cache_by_uid = call_cache_by_uid  # by uid only for fast lookup
         if obj_cache is None:
             obj_cache = MultiProcInMemoryStorage() if multiproc else InMemoryStorage()
         self.obj_cache = obj_cache
@@ -198,19 +204,30 @@ class Storage(Transactable):
     ### interacting with the caches and the database
     ############################################################################
     @transaction()
-    def call_exists(self, call_uid: str, conn: Optional[Connection] = None) -> bool:
-        return self.call_cache.exists(call_uid) or self.rel_adapter.call_exists(
-            call_uid, conn=conn
-        )
+    def call_exists(
+        self, uid: str, by_causal: bool, conn: Optional[Connection] = None
+    ) -> bool:
+        if by_causal:
+            return self.call_cache_by_causal.exists(
+                uid
+            ) or self.rel_adapter.call_exists(uid=uid, by_causal=True, conn=conn)
+        else:
+            return self.call_cache_by_uid.exists(uid) or self.rel_adapter.call_exists(
+                uid=uid, by_causal=False, conn=conn
+            )
 
     @transaction()
     def call_get(
-        self, call_uid: str, lazy: bool, conn: Optional[Connection] = None
+        self, uid: str, by_causal: bool, lazy: bool, conn: Optional[Connection] = None
     ) -> Call:
-        if self.call_cache.exists(call_uid):
-            return self.call_cache.get(call_uid)
+        if by_causal and self.call_cache_by_causal.exists(uid):
+            return self.call_cache_by_causal.get(uid)
+        elif not by_causal and self.call_cache_by_uid.exists(uid):
+            return self.call_cache_by_uid.get(uid)
         else:
-            lazy_call = self.rel_adapter.call_get_lazy(call_uid, conn=conn)
+            lazy_call = self.rel_adapter.call_get_lazy(
+                uid=uid, by_causal=by_causal, conn=conn
+            )
             if not lazy:
                 # load the values of the inputs and outputs
                 inputs = {
@@ -227,10 +244,11 @@ class Storage(Transactable):
     def cache_call_and_objs(self, call: Call) -> None:
         for vref in itertools.chain(call.inputs.values(), call.outputs):
             self.cache_obj(vref.uid, vref)
-        self.cache_call(call_uid=call.uid, call=call)
+        self.cache_call(causal_uid=call.causal_uid, call=call)
 
-    def cache_call(self, call_uid: str, call: Call) -> None:
-        self.call_cache.set(call_uid, call)
+    def cache_call(self, causal_uid: str, call: Call) -> None:
+        self.call_cache_by_causal.set(causal_uid, call)
+        self.call_cache_by_uid.set(call.uid, call)
 
     @transaction()
     def obj_get(self, obj_uid: str, conn: Optional[Connection] = None) -> Ref:
@@ -239,6 +257,7 @@ class Storage(Transactable):
         return self.rel_adapter.obj_get(uid=obj_uid, conn=conn)
 
     def cache_obj(self, obj_uid: str, vref: Ref) -> None:
+        vref = vref.unlinked(keep_causal=False)
         self.obj_cache.set(obj_uid, vref)
 
     @transaction()
@@ -254,8 +273,8 @@ class Storage(Transactable):
             self.obj_cache.set(k=uid, v=vref)
 
     def evict_caches(self):
-        for k in self.call_cache.keys():
-            self.call_cache.delete(k=k)
+        for k in self.call_cache_by_causal.keys():
+            self.call_cache_by_causal.delete(k=k)
         for k in self.obj_cache.keys():
             self.obj_cache.delete(k=k)
 
@@ -274,7 +293,8 @@ class Storage(Transactable):
                 key: self.obj_cache.get(key) for key in self.obj_cache.dirty_entries
             }
             new_calls = [
-                self.call_cache.get(key) for key in self.call_cache.dirty_entries
+                self.call_cache_by_causal.get(key)
+                for key in self.call_cache_by_causal.dirty_entries
             ]
         else:
             new_objs = {}
@@ -292,21 +312,28 @@ class Storage(Transactable):
 
         # Remove dirty bits from cache.
         self.obj_cache.dirty_entries.clear()
-        self.call_cache.dirty_entries.clear()
+        self.call_cache_by_causal.dirty_entries.clear()
 
     @transaction()
     def get_table(
         self,
         func_interface: Union["funcs.FuncInterface", Any],
         meta: bool = False,
+        values: Literal["objs", "uids", "refs", "lazy"] = "objs",
+        drop_duplicates: bool = False,
         conn: Optional[Connection] = None,
     ) -> pd.DataFrame:
-        df = self.rel_storage.get_data(
+        full_uids_df = self.rel_storage.get_data(
             table=func_interface.func_op.sig.versioned_ui_name, conn=conn
         )
-        df = self.rel_adapter.evaluate_call_table(ta=df, conn=conn)
         if not meta:
-            df = df.drop(columns=Config.special_call_cols)
+            full_uids_df = full_uids_df.drop(columns=Config.special_call_cols)
+        df = self.eval_df(
+            full_uids_df=full_uids_df,
+            values=values,
+            drop_duplicates=drop_duplicates,
+            conn=conn,
+        )
         return df
 
     ############################################################################
@@ -462,8 +489,6 @@ class Storage(Transactable):
             )
             for table_name, deserialized_table in changeset_data.items():
                 self.rel_storage.upsert(table_name, deserialized_table, conn=conn)
-        # evaluated_tables = {k: self.rel_adapter.evaluate_call_table(ta=v, conn=conn) for k, v in data.items() if k != Config.vref_table}
-        # logger.debug(f'Applied tables from remote: {evaluated_tables}')
 
     @transaction()
     def sync_from_remote(self, conn: Optional[Connection] = None):
@@ -522,7 +547,7 @@ class Storage(Transactable):
         Check that the storage has no uncommitted calls or objects.
         """
         return (
-            self.call_cache.is_clean and self.obj_cache.is_clean
+            self.call_cache_by_causal.is_clean and self.obj_cache.is_clean
         )  # and self.rel_adapter.event_log_is_clean()
 
     ############################################################################
@@ -697,7 +722,7 @@ class Storage(Transactable):
         call_data = {ui_to_internal[k]: v for k, v in ui_call_data.items()}
         if evaluate:
             call_data = {
-                k: self.rel_adapter.evaluate_call_table(v, conn=conn)
+                k: self.eval_df(full_uids_df=v, values="objs", conn=conn)
                 for k, v in call_data.items()
             }
         return call_data
@@ -738,10 +763,12 @@ class Storage(Transactable):
     @transaction()
     def eval_df(
         self,
-        uids_df: pd.DataFrame,
+        full_uids_df: pd.DataFrame,
+        drop_duplicates: bool = False,
         values: Literal["objs", "refs", "uids", "lazy"] = "objs",
         conn: Optional[Connection] = None,
     ) -> pd.DataFrame:
+        uids_df = full_uids_df.applymap(lambda uid: uid.rsplit(".", 1)[0])
         if values in ("objs", "refs"):
             uids_to_collect = [
                 item for _, column in uids_df.items() for _, item in column.items()
@@ -756,14 +783,14 @@ class Storage(Transactable):
         elif values == "uids":
             result = uids_df
         elif values == "lazy":
-            print("Doing this")
             result = uids_df.applymap(lambda uid: Ref.from_uid(uid=uid))
-            print(result)
         else:
             raise ValueError(
                 f"Invalid value for `values`: {values}. Must be one of "
                 "['objs', 'refs', 'uids', 'lazy']"
             )
+        if drop_duplicates:
+            result = result.drop_duplicates()
         return result
 
     @transaction()
@@ -819,11 +846,10 @@ class Storage(Transactable):
             start = time.time()
             sql_uids_df = self.rel_storage.execute_df(query=str(query), conn=conn)
             end = time.time()
-            print(f"Query executed in {end - start} seconds.")
+            logger.info(f"SQL query took {round(end - start, 3)} seconds")
             rename_cols(df=sql_uids_df, selection=selection, names=names)
             uids_df = sql_uids_df
         if engine in ["naive", "_test"]:
-            print(f"Loading memoization tables...")
             memoization_tables = self._load_memoization_tables(conn=conn)
             logger.debug("Executing query naively...")
             naive_uids_df = Querier.execute_naive(
@@ -832,7 +858,7 @@ class Storage(Transactable):
                 selection=selection,
                 memoization_tables=memoization_tables,
                 filter_duplicates=drop_duplicates,
-                table_evaluator=self.rel_adapter.evaluate_call_table,
+                table_evaluator=self.eval_df,
                 visualize_steps_at=visualize_steps_at,
             )
             rename_cols(df=naive_uids_df, selection=selection, names=names)
@@ -842,7 +868,7 @@ class Storage(Transactable):
                 df_1=sql_uids_df, df_2=naive_uids_df, return_reason=True
             )
             assert outcome, reason
-        return self.eval_df(uids_df=uids_df, values=values, conn=conn)
+        return self.eval_df(full_uids_df=uids_df, values=values, conn=conn)
 
     def _get_graph_and_names(
         self,
@@ -1015,16 +1041,13 @@ class Storage(Transactable):
         )
         return terminal_data
 
-    def _get_call_uid_from_pre_uid_and_semantic(
-        self, pre_call_uid: str, semantic_version: Optional[str]
-    ) -> str:
-        return Hashing.get_content_hash((pre_call_uid, semantic_version))
-
     @transaction()
     def lookup_call(
         self,
         func_op: FuncOp,
         pre_call_uid: str,
+        input_uids: Dict[str, str],
+        input_causal_uids: Dict[str, str],
         lazy: bool,
         code_state: Optional[CodeState] = None,
         versioner: Optional[Versioner] = None,
@@ -1032,7 +1055,6 @@ class Storage(Transactable):
     ) -> Optional[Call]:
         if not self.versioned:
             semantic_version = None
-            # call_uid = Hashing.get_content_hash((pre_call_uid, None))
         else:
             assert code_state is not None
             component = get_dep_key_from_func(func=func_op.func)
@@ -1042,22 +1064,28 @@ class Storage(Transactable):
             if lookup_outcome is None:
                 return
             else:
-                content_version, semantic_version = lookup_outcome
-        call_uid = self._get_call_uid_from_pre_uid_and_semantic(
+                _, semantic_version = lookup_outcome
+        causal_uid = func_op.get_call_causal_uid(
+            input_uids=input_uids,
+            input_causal_uids=input_causal_uids,
+            semantic_version=semantic_version,
+        )
+        if self.call_exists(uid=causal_uid, by_causal=True, conn=conn):
+            return self.call_get(uid=causal_uid, by_causal=True, lazy=lazy, conn=conn)
+        call_uid = func_op.get_call_uid(
             pre_call_uid=pre_call_uid, semantic_version=semantic_version
         )
-        if self.call_exists(call_uid=call_uid, conn=conn):
-            return self.call_get(call_uid=call_uid, lazy=lazy, conn=conn)
+        if self.call_exists(uid=call_uid, by_causal=False, conn=conn):
+            return self.call_get(uid=call_uid, by_causal=False, lazy=lazy, conn=conn)
         return None
 
-    def process_trace_metadata(
+    def get_version_ids(
         self,
         pre_call_uid: str,
-        wrapped_outputs,
         tracer_option: Optional[TracerABC],
         is_recompute: bool,
         versioner: Optional[Versioner] = None,
-    ) -> Tuple[str, Optional[str], Optional[str], bool]:
+    ) -> Tuple[Optional[str], Optional[str]]:
         if self.versioned:
             assert tracer_option is not None
             version = versioner.process_trace(
@@ -1071,11 +1099,7 @@ class Storage(Transactable):
         else:
             content_version = None
             semantic_version = None
-        call_uid = self._get_call_uid_from_pre_uid_and_semantic(
-            pre_call_uid=pre_call_uid, semantic_version=semantic_version
-        )
-        transient = any(contains_transient(ref) for ref in wrapped_outputs)
-        return call_uid, content_version, semantic_version, transient
+        return content_version, semantic_version
 
     @transaction()
     def call_run(
@@ -1090,7 +1114,6 @@ class Storage(Transactable):
         _collect_calls: bool = False,
         _recurse: bool = False,
         _call_buffer: Optional[List[Call]] = None,
-        _call_uids: Optional[List[str]] = None,
         _code_state: Optional[CodeState] = None,
         _versioner: Optional[Versioner] = None,
         conn: Optional[Connection] = None,
@@ -1110,10 +1133,14 @@ class Storage(Transactable):
                 input_call.link(
                     orientation=StructOrientations.construct,
                 )
-        pre_call_uid = func_op.get_call_uid(wrapped_inputs=wrapped_inputs)
+        pre_call_uid = func_op.get_pre_call_uid(
+            input_uids={k: v.uid for k, v in wrapped_inputs.items()}
+        )
         call_option = self.lookup_call(
             func_op=func_op,
             pre_call_uid=pre_call_uid,
+            input_uids={k: v.uid for k, v in wrapped_inputs.items()},
+            input_causal_uids={k: v.causal_uid for k, v in wrapped_inputs.items()},
             conn=conn,
             lazy=lazy,
             code_state=_code_state,
@@ -1172,22 +1199,21 @@ class Storage(Transactable):
                 # update the global topology and code state
                 _versioner.update_global_topology(graph=tracer_option.graph)
                 _code_state.add_globals_from(graph=tracer_option.graph)
-            wrapped_outputs, output_calls = wrap_outputs(
-                objs=outputs,
-                annotations=func_op.output_annotations,
-            )
-            (
-                call_uid,
-                content_version,
-                semantic_version,
-                transient,
-            ) = self.process_trace_metadata(
+
+            content_version, semantic_version = self.get_version_ids(
                 pre_call_uid=pre_call_uid,
-                wrapped_outputs=wrapped_outputs,
                 tracer_option=tracer_option,
                 is_recompute=is_recompute,
                 versioner=_versioner,
             )
+            call_uid = func_op.get_call_uid(
+                pre_call_uid=pre_call_uid, semantic_version=semantic_version
+            )
+            wrapped_outputs, output_calls = wrap_outputs(
+                objs=outputs,
+                annotations=func_op.output_annotations,
+            )
+            transient = any(contains_transient(ref) for ref in wrapped_outputs)
             if is_recompute:
                 # check deterministic behavior
                 if call_option.semantic_version != semantic_version:
@@ -1209,13 +1235,9 @@ class Storage(Transactable):
                         f"{[v.uid for v in call_option.outputs]} != {[w.uid for w in wrapped_outputs]}"
                     )
             if linking_on:
-                wrapped_outputs = [x.unlinked() for x in wrapped_outputs]
-                output_calls = [Builtins.collect_all_calls(x) for x in wrapped_outputs]
-                output_calls = [x for y in output_calls for x in y]
-                for output_call in output_calls:
-                    output_call.link(
-                        orientation=StructOrientations.destruct,
-                    )
+                wrapped_outputs = [
+                    x.unlinked(keep_causal=True) for x in wrapped_outputs
+                ]
             call = Call(
                 uid=call_uid,
                 func_op=func_op,
@@ -1225,8 +1247,17 @@ class Storage(Transactable):
                 semantic_version=semantic_version,
                 transient=transient,
             )
+            for outp in wrapped_outputs:
+                decausify(ref=outp)  # for now, a "clean slate" approach
+            causify_outputs(refs=wrapped_outputs, call_causal_uid=call.causal_uid)
             if linking_on:
                 call.link(orientation=None)
+                output_calls = [Builtins.collect_all_calls(x) for x in wrapped_outputs]
+                output_calls = [x for y in output_calls for x in y]
+                for output_call in output_calls:
+                    output_call.link(
+                        orientation=StructOrientations.destruct,
+                    )
             if must_save:
                 for constituent_call in itertools.chain(
                     [call], input_calls, output_calls
@@ -1252,7 +1283,8 @@ class Storage(Transactable):
                 transient=call_option.transient,
             )
             if linking_on:
-                call.outputs = [x.unlinked() for x in call.outputs]
+                call.outputs = [x.unlinked(keep_causal=False) for x in call.outputs]
+                causify_outputs(refs=call.outputs, call_causal_uid=call.causal_uid)
                 if not lazy:
                     output_calls = [Builtins.collect_all_calls(x) for x in call.outputs]
                     output_calls = [x for y in output_calls for x in y]
@@ -1264,6 +1296,16 @@ class Storage(Transactable):
                     output_call.link(
                         orientation=StructOrientations.destruct,
                     )
+            else:
+                causify_outputs(refs=call.outputs, call_causal_uid=call.causal_uid)
+            if call.causal_uid != call_option.causal_uid:
+                # this is a new call causally; must save it and its constituents
+                output_calls = [Builtins.collect_all_calls(x) for x in call.outputs]
+                output_calls = [x for y in output_calls for x in y]
+                for constituent_call in itertools.chain(
+                    input_calls, [call], output_calls
+                ):
+                    self.cache_call_and_objs(call=constituent_call)
         if self.versioned and suspended_trace_obj is not None:
             _versioner.TracerCls.set_active_trace_obj(trace_obj=suspended_trace_obj)
             terminal_data = self._make_terminal_data(func_op=func_op, call=call)

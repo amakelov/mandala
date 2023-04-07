@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from ..common_imports import *
 from ..core.model import FuncOp, Ref, wrap_atom
+from ..core.wrapping import causify_atom
 from ..core.config import dump_output_name, parse_output_idx
 from ..core.tps import Type, ListType, DictType, SetType, AnyType, StructType
 from ..core.builtins_ import Builtins, ListRef, DictRef, SetRef
@@ -86,12 +87,17 @@ class ValQuery(Node):
         else:
             return f"ValQuery({self.tp})"
 
+    def get_constraint(self, *values) -> List[str]:
+        wrapped = [wrap_atom(v) for v in values]
+        for w in wrapped:
+            causify_atom(w)
+        return [w.full_uid for w in wrapped]
+
     def pin(self, *values):
         if len(values) == 0:
             raise ValueError("Must pin to at least one value")
         else:
-            constraint = [wrap_atom(v).uid for v in values]
-        self.constraint = constraint
+            self.constraint = self.get_constraint(*values)
 
     def unpin(self):
         self.constraint = None

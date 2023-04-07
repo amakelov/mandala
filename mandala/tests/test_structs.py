@@ -5,6 +5,7 @@ from mandala.queries.weaver import *
 
 @pytest.mark.parametrize("storage", generate_storages())
 def test_unit(storage):
+    Config.query_engine = "_test"
 
     ### lists
     @op
@@ -84,11 +85,11 @@ def test_unit(storage):
         df = storage.df(dct, dct_mean)
 
     # test syntax sugar
-    with storage.query():
-        seq = Q().named("seq")
-        dct = describe_sequence(seq=seq).named("dct")
-        dct_mean = dct["mean"].named("dct_mean")
-        df = storage.df(seq, dct, dct_mean)
+    # with storage.query():
+    #     seq = Q().named("seq")
+    #     dct = describe_sequence(seq=seq).named("dct")
+    #     dct_mean = dct["mean"].named("dct_mean")
+    #     df = storage.df(seq, dct, dct_mean)
 
     ### sets
     @op

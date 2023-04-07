@@ -3,7 +3,7 @@ from ..common_imports import *
 from .tps import Type, ListType, DictType, SetType, AnyType, StructType
 from .utils import Hashing
 from .model import Ref, Call, wrap_atom, ValueRef
-from .builtins_ import ListRef, DictRef, SetRef, Builtins
+from .builtins_ import ListRef, DictRef, SetRef, Builtins, StructRef
 
 
 def typecheck(obj: Any, tp: Type):
@@ -21,53 +21,54 @@ def typecheck(obj: Any, tp: Type):
         raise ValueError(f"Expecting a set, got {type(obj)}")
 
 
-def wrap_causal(obj: Any, annotation: Any, start_uid: str) -> Tuple[Ref, List[Call]]:
-    tp = Type.from_annotation(annotation=annotation)
-    typecheck(obj=obj, tp=tp)
-    calls = []
-    if isinstance(obj, Ref):
-        return obj, calls
-    if isinstance(tp, AnyType):
-        return wrap_atom(obj=obj, uid=start_uid), calls
-    if isinstance(tp, ListType):
-        elt_hashes = [Hashing.hash_list([start_uid, i]) for i in range(len(obj))]
-        elt_refs = []
-        for i, elt in enumerate(obj):
-            elt, elt_calls = wrap_causal(
-                obj=elt,
-                annotation=tp.elt_type,
-                start_uid=elt_hashes[i],
-            )
-            elt_refs.append(elt)
-            calls.extend(elt_calls)
-        res = ListRef(uid=start_uid, obj=elt_refs, in_memory=True)
-        calls.extend(res.get_calls())
-        return res, calls
-    elif isinstance(tp, DictType):
-        elt_hashes = {k: Hashing.hash_list([start_uid, k]) for k in obj.keys()}
-        elt_refs = {}
-        for k, elt in obj.items():
-            elt, elt_calls = wrap_causal(
-                obj=elt,
-                annotation=tp.elt_type,
-                start_uid=elt_hashes[k],
-            )
-            elt_refs[k] = elt
-            calls.extend(elt_calls)
-    elif isinstance(tp, SetType):
-        elt_hashes = [Hashing.hash_list([start_uid, i]) for i in range(len(obj))]
-        elt_refs = []
-        for i, elt in enumerate(obj):
-            elt, elt_calls = wrap_causal(
-                obj=elt,
-                annotation=tp.elt_type,
-                start_uid=elt_hashes[i],
-            )
-            elt_refs.append(elt)
-            calls.extend(elt_calls)
-        res = SetRef(uid=start_uid, obj=elt_refs, in_memory=True)
-        calls.extend(res.get_calls())
-        return res, calls
+def causify_atom(ref: ValueRef):
+    if ref.causal_uid is not None:
+        return
+    ref.causal_uid = Hashing.get_content_hash(ref.uid)
+
+
+def causify_down(ref: Ref, start: str, stop_at_causal: bool = True):
+    """
+    In-place top-down assignment of causal hashes to a Ref and its children.
+    Requires causal hashes to not be present initially.
+    """
+    assert start is not None
+    if ref.causal_uid is not None and stop_at_causal:
+        return
+    if isinstance(ref, ValueRef):
+        ref.causal_uid = start
+    elif isinstance(ref, ListRef):
+        if ref.in_memory:
+            for i, elt in enumerate(ref.obj):
+                causify_down(elt, start=Hashing.hash_list([start, i]))
+        ref.causal_uid = start
+    elif isinstance(ref, DictRef):
+        if ref.in_memory:
+            for k, elt in ref.obj.items():
+                causify_down(elt, start=Hashing.hash_list([start, k]))
+        ref.causal_uid = start
+    elif isinstance(ref, SetRef):
+        # sort by uid to ensure deterministic ordering
+        if ref.in_memory:
+            elts_by_uid = {elt.uid: elt for elt in ref.obj}
+            sorted_uids = sorted({elt.uid for elt in ref.obj})
+            for i, uid in enumerate(sorted_uids):
+                causify_down(elts_by_uid[uid], start=Hashing.hash_list([start, uid]))
+        ref.causal_uid = start
+    else:
+        raise ValueError(f"Unknown ref type {type(ref)}")
+
+
+def decausify(ref: Ref, stop_at_first_missing: bool = False):
+    """
+    In-place recursive removal of causal hashes from a Ref
+    """
+    if ref._causal_uid is None and stop_at_first_missing:
+        return
+    ref._causal_uid = None
+    if isinstance(ref, StructRef):
+        for elt in ref.children():
+            decausify(elt, stop_at_first_missing=stop_at_first_missing)
 
 
 def wrap_constructive(obj: Any, annotation: Any) -> Tuple[Ref, List[Call]]:
@@ -75,14 +76,15 @@ def wrap_constructive(obj: Any, annotation: Any) -> Tuple[Ref, List[Call]]:
     typecheck(obj=obj, tp=tp)
     calls = []
     if isinstance(obj, Ref):
-        return obj, calls
-    if isinstance(tp, AnyType):
-        return wrap_atom(obj=obj), calls
-    if isinstance(tp, StructType):
+        res = obj, calls
+    elif isinstance(tp, AnyType):
+        res = wrap_atom(obj=obj), calls
+        causify_atom(ref=res[0])
+    elif isinstance(tp, StructType):
         RefCls: Union[
             typing.Type[ListRef], typing.Type[DictRef], typing.Type[SetRef]
         ] = Builtins.REF_CLASSES[tp.struct_id]
-        assert isinstance(obj, tp.model)
+        assert type(obj) == tp.model
         recursive_result = RefCls.map(
             obj=obj, func=lambda elt: wrap_constructive(elt, annotation=tp.elt_type)
         )
@@ -91,12 +93,14 @@ def wrap_constructive(obj: Any, annotation: Any) -> Tuple[Ref, List[Call]]:
             RefCls.map(obj=recursive_result, func=lambda elt: elt[1])
         )
         calls.extend([c for cs in recursive_calls for c in cs])
-        obj = RefCls(obj=wrapped_elts, uid=None, in_memory=True)
+        obj: StructRef = RefCls(obj=wrapped_elts, uid=None, in_memory=True)
+        obj.causify_up()
         obj_calls = obj.get_calls()
-        calls.extend(RefCls.elts(obj_calls))
-        return obj, calls
+        calls.extend(obj_calls)
+        res = obj, calls
     else:
-        raise ValueError(f"Cannot wrap {type(obj)}")
+        raise ValueError(f"Unknown type {tp}")
+    return res
 
 
 def wrap_inputs(
@@ -113,6 +117,12 @@ def wrap_inputs(
         wrapped_objs[k] = wrapped_obj
         calls.extend(wrapping_calls)
     return wrapped_objs, calls
+
+
+def causify_outputs(refs: List[Ref], call_causal_uid: str):
+    assert isinstance(call_causal_uid, str)
+    for i, ref in enumerate(refs):
+        causify_down(ref=ref, start=Hashing.hash_list([call_causal_uid, str(i)]))
 
 
 def wrap_outputs(
@@ -157,18 +167,12 @@ def unwrap(obj: Union[T, Ref], through_collections: bool = True) -> T:
         storage = GlobalContext.current.storage
         storage.rel_adapter.mattach(vrefs=[obj])
     if isinstance(obj, ValueRef):
-        # return unwrap(obj.obj, through_collections=through_collections)
         return obj.obj
-    elif isinstance(obj, ListRef):
-        return [unwrap(elt, through_collections=through_collections) for elt in obj.obj]
-        # return unwrap(obj.obj, through_collections=through_collections)
-    elif isinstance(obj, DictRef):
-        return {
-            k: unwrap(v, through_collections=through_collections)
-            for k, v in obj.obj.items()
-        }
-    elif isinstance(obj, SetRef):
-        return {unwrap(v, through_collections=through_collections) for v in obj.obj}
+    elif isinstance(obj, StructRef):
+        return type(obj).map(
+            obj=obj.obj,
+            func=lambda elt: unwrap(elt, through_collections=through_collections),
+        )
     elif type(obj) is tuple and through_collections:
         return tuple(unwrap(v, through_collections=through_collections) for v in obj)
     elif type(obj) is set and through_collections:
@@ -187,12 +191,8 @@ def unwrap(obj: Union[T, Ref], through_collections: bool = True) -> T:
 def contains_transient(ref: Ref) -> bool:
     if isinstance(ref, ValueRef):
         return ref.transient
-    elif isinstance(ref, ListRef):
-        return any(contains_transient(elt) for elt in ref.obj)
-    elif isinstance(ref, DictRef):
-        return any(contains_transient(v) for v in ref.obj.values())
-    elif isinstance(ref, SetRef):
-        return any(contains_transient(v) for v in ref.obj)
+    elif isinstance(ref, StructRef):
+        return any(contains_transient(elt) for elt in ref.children())
     else:
         raise ValueError(f"Unexpected ref type {type(ref)}")
 
@@ -200,12 +200,8 @@ def contains_transient(ref: Ref) -> bool:
 def contains_not_in_memory(ref: Ref) -> bool:
     if isinstance(ref, ValueRef):
         return not ref.in_memory
-    elif isinstance(ref, ListRef):
-        return any(contains_not_in_memory(elt) for elt in ref.obj)
-    elif isinstance(ref, DictRef):
-        return any(contains_not_in_memory(v) for v in ref.obj.values())
-    elif isinstance(ref, SetRef):
-        return any(contains_not_in_memory(v) for v in ref.obj)
+    elif isinstance(ref, StructRef):
+        return any(contains_not_in_memory(elt) for elt in ref.children())
     else:
         raise ValueError(f"Unexpected ref type {type(ref)}")
 

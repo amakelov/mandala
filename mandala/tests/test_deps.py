@@ -248,6 +248,7 @@ def test_superops(tracer_impl):
         (MODULE_NAME, "f_3"),
     }
     _test_version_reprs(storage=storage)
+    Config.enable_ref_magics = False
 
 
 @pytest.mark.parametrize("tracer_impl", [DecTracer, SysTracer])
@@ -410,78 +411,7 @@ def test_recursion(tracer_impl):
     version_2 = storage.get_versioner().get_flat_versions()[call_2.content_version]
     assert version_2.support == {(MODULE_NAME, "s_1"), (MODULE_NAME, "s_2")}
     _test_version_reprs(storage=storage)
-
-
-@pytest.mark.parametrize("tracer_impl", [DecTracer, SysTracer])
-def test_queries_multiple_versions(tracer_impl):
-    Config.query_engine = "sql"  # doesn't work yet with the naive engine
-    storage = Storage(
-        deps_path=DEPS_PATH, deps_package=DEPS_PACKAGE, tracer_impl=tracer_impl
-    )
-
-    global f_1, f_2, f_3
-
-    ### define an op with multiple semantically-compatible versions
-    @op
-    def f_1(x) -> int:
-        return x + 2
-
-    @op
-    def f_2(x) -> int:
-        return x + 3
-
-    @op
-    def f_3(x) -> int:
-        if x % 2 == 0:
-            return f_2(2 * x)
-        else:
-            return f_1(x + 1)
-
-    with storage.run():
-        for i in range(10):  # make sure both versions are used
-            f_3(i)
-
-    with storage.query():
-        i = Q()
-        j = f_3(i)
-        df_1 = storage.df(i.named("i"), j.named("j"))
-    assert df_1.shape == (10, 2)
-    assert (df_1["j"] == df_1["i"].apply(f_3)).all()
-
-    # change one of the dependencies semantically and check that the query
-    # result is what remains from the other branch
-    @op
-    def f_1(x) -> int:
-        return x + 4
-
-    storage.sync_component(
-        f_1,
-        is_semantic_change=True,
-    )
-
-    with storage.query():
-        i = Q()
-        j = f_3(i)
-        df_2 = storage.df(i.named("i"), j.named("j"))
-    assert df_2.shape == (5, 2)
-    assert sorted(df_2["i"].values.tolist()) == [0, 2, 4, 6, 8]
-    assert (df_2["j"] == df_2["i"].apply(f_3)).all()
-
-    ### go back to the old version and check that the query result is recovered
-    @op
-    def f_1(x) -> int:
-        return x + 2
-
-    storage.sync_component(
-        f_1,
-        is_semantic_change=None,
-    )
-
-    with storage.query():
-        i = Q()
-        j = f_3(i)
-        df_3 = storage.df(i.named("i"), j.named("j"))
-    assert (df_1 == df_3).all().all()
+    Config.enable_ref_magics = False
 
 
 @pytest.mark.parametrize("tracer_impl", [DecTracer, SysTracer])
@@ -520,7 +450,7 @@ def test_memoized_tracking(tracer_impl):
             f(i)
 
     with storage.run():
-        g(10)
+        z = g(10)
 
 
 @pytest.mark.parametrize("tracer_impl", [SysTracer, DecTracer])
@@ -611,3 +541,75 @@ def test_queries_unit(tracer_impl):
         df = storage.df(i.named("i"), j.named("j"))
     assert df.shape == (10, 2)
     assert (df["j"] == df["i"] + 2).all()
+
+
+@pytest.mark.parametrize("tracer_impl", [DecTracer, SysTracer])
+def test_queries_multiple_versions(tracer_impl):
+    Config.query_engine = "sql"  # doesn't work yet with the naive engine
+    storage = Storage(
+        deps_path=DEPS_PATH, deps_package=DEPS_PACKAGE, tracer_impl=tracer_impl
+    )
+
+    global f_1, f_2, f_3
+
+    ### define an op with multiple semantically-compatible versions
+    @op
+    def f_1(x) -> int:
+        return x + 2
+
+    @op
+    def f_2(x) -> int:
+        return x + 3
+
+    @op
+    def f_3(x) -> int:
+        if x % 2 == 0:
+            return f_2(2 * x)
+        else:
+            return f_1(x + 1)
+
+    with storage.run():
+        for i in range(10):  # make sure both versions are used
+            f_3(i)
+
+    with storage.query():
+        i = Q()
+        j = f_3(i)
+        df_1 = storage.df(i.named("i"), j.named("j"))
+    assert df_1.shape == (10, 2)
+    assert (df_1["j"] == df_1["i"].apply(f_3)).all()
+
+    # change one of the dependencies semantically and check that the query
+    # result is what remains from the other branch
+    @op
+    def f_1(x) -> int:
+        return x + 4
+
+    storage.sync_component(
+        f_1,
+        is_semantic_change=True,
+    )
+
+    with storage.query():
+        i = Q()
+        j = f_3(i)
+        df_2 = storage.df(i.named("i"), j.named("j"))
+    assert df_2.shape == (5, 2)
+    assert sorted(df_2["i"].values.tolist()) == [0, 2, 4, 6, 8]
+    assert (df_2["j"] == df_2["i"].apply(f_3)).all()
+
+    ### go back to the old version and check that the query result is recovered
+    @op
+    def f_1(x) -> int:
+        return x + 2
+
+    storage.sync_component(
+        f_1,
+        is_semantic_change=None,
+    )
+
+    with storage.query():
+        i = Q()
+        j = f_3(i)
+        df_3 = storage.df(i.named("i"), j.named("j"))
+    assert (df_1 == df_3).all().all()

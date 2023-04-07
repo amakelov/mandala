@@ -15,7 +15,7 @@ from mandala.all import *
 from mandala.tests.utils import *
 from mandala.tests.stateful_utils import *
 from mandala.queries.workflow import Workflow, CallStruct
-from mandala.core.utils import Hashing, get_uid
+from mandala.core.utils import Hashing, get_uid, parse_full_uid
 from mandala.queries.compiler import *
 from mandala.core.model import Type, ListType
 from mandala.core.builtins_ import Builtins
@@ -33,6 +33,8 @@ class MockStorage:
     - only uses internal names for signatures;
     - can be synced in a "naive" way with another storage: the state of the
     other storage is upserted into this storage.
+    - note: currently, it replicates only the memoization tables and the table
+    of values (not the causal UIDs table)
 
     It is invariant-checked at the entry and exit of every method. The
     state of this object should only be changed through these methods. This
@@ -71,6 +73,7 @@ class MockStorage:
             for col in df.columns:
                 if col not in Config.special_call_cols:
                     vref_uids_from_calls += df[col].values.tolist()
+        vref_uids_from_calls = [parse_full_uid(x)[0] for x in vref_uids_from_calls]
         assert set(vref_uids_from_calls) <= set(self.values.keys())
         for versioned_internal_name, defaults in self.default_uids.items():
             df = self.calls[versioned_internal_name]
@@ -93,14 +96,19 @@ class MockStorage:
         self.check_invariants()
 
     def add_input(
-        self, func_op: FuncOp, internal_name: str, default_value: Any, default_uid: str
+        self,
+        func_op: FuncOp,
+        internal_name: str,
+        default_value: Any,
+        default_full_uid: str,
     ):
         self.check_invariants()
+        default_uid, default_causal_uid = parse_full_uid(default_full_uid)
         sig = func_op.sig
         df = self.calls[sig.versioned_internal_name]
-        df[internal_name] = [default_uid for _ in range(len(df))]
+        df[internal_name] = [default_full_uid for _ in range(len(df))]
         self.values[default_uid] = default_value
-        self.default_uids[sig.versioned_internal_name][internal_name] = default_uid
+        self.default_uids[sig.versioned_internal_name][internal_name] = default_full_uid
         self.check_invariants()
 
     def rename_func(self, func_op: FuncOp, new_name: str):
@@ -120,11 +128,12 @@ class MockStorage:
         sig = func_op.sig
         row = {
             Config.uid_col: call.uid,
+            Config.causal_uid_col: call.causal_uid,
             Config.content_version_col: call.content_version,
             Config.semantic_version_col: call.semantic_version,
             Config.transient_col: call.transient,
-            **{sig.ui_to_internal_input_map[k]: v.uid for k, v in inputs.items()},
-            **{dump_output_name(index=i): v.uid for i, v in enumerate(outputs)},
+            **{sig.ui_to_internal_input_map[k]: v.full_uid for k, v in inputs.items()},
+            **{dump_output_name(index=i): v.full_uid for i, v in enumerate(outputs)},
         }
         df = self.calls[sig.versioned_internal_name]
         # handle stale calls
@@ -464,7 +473,7 @@ class SingleClientSimulator(RuleBasedStateMachine):
                 func_op=new_func_op,
                 internal_name=new_sig.ui_to_internal_input_map[new_name],
                 default_value=default_value,
-                default_uid=new_sig.new_ui_input_default_uids[new_name],
+                default_full_uid=new_sig.new_ui_input_default_uids[new_name],
             )
             mock_storage.check_invariants()
 

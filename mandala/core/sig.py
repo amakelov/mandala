@@ -1,6 +1,6 @@
 from ..common_imports import *
 from .config import Config, is_output_name
-from .utils import get_uid, Hashing, is_subdict
+from .utils import get_uid, Hashing, is_subdict, get_full_uid
 
 if Config.has_torch:
     import torch
@@ -309,8 +309,9 @@ class Signature:
         internal_name = get_uid() if internal_name is None else internal_name
         res.ui_to_internal_input_map[name] = internal_name
         res.defaults[name] = default
-        default_uid = Hashing.get_content_hash(obj=default)
-        res._new_input_defaults_uids[internal_name] = default_uid
+        uid = Hashing.get_content_hash(obj=default)
+        full_uid = get_full_uid(uid=uid, causal_uid=uid)
+        res._new_input_defaults_uids[internal_name] = full_uid
         res.input_annotations[name] = annotation
         res.check_invariants()
         return res

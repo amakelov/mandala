@@ -352,7 +352,7 @@ class SigAdapter(Transactable):
         self.rel_storage.create_relation(
             name=sig.versioned_ui_name,
             columns=all_cols,
-            primary_key=Config.uid_col,
+            primary_key=Config.causal_uid_col,
             defaults=sig.new_ui_input_default_uids,
             conn=conn,
         )
@@ -412,15 +412,16 @@ class SigAdapter(Transactable):
         # create new inputs in the database, if any
         for new_input, default_value in updates.items():
             internal_input_name = new_sig.ui_to_internal_input_map[new_input]
-            default_uid = new_sig._new_input_defaults_uids[internal_input_name]
+            full_default_uid = new_sig._new_input_defaults_uids[internal_input_name]
             self.rel_storage.create_column(
                 relation=new_sig.versioned_ui_name,
                 name=new_input,
-                default_value=default_uid,
+                default_value=full_default_uid,
                 conn=conn,
             )
             # insert the default in the objects *in the database*, if it's
             # not there already
+            default_uid, _ = Ref.parse_full_uid(full_uid=full_default_uid)
             default_vref = ValueRef(uid=default_uid, obj=default_value, in_memory=True)
             self.rel_adapter.obj_set(uid=default_uid, value=default_vref, conn=conn)
         # update the outputs in the database, if this is allowed
@@ -584,6 +585,7 @@ class SigAdapter(Transactable):
 class RelAdapter(Transactable):
     EVENT_LOG_TABLE = Config.event_log_table
     VREF_TABLE = Config.vref_table
+    CAUSAL_VREF_TABLE = Config.causal_vref_table
     SIGNATURES_TABLE = Config.schema_table
     DEPS_TABLE = Config.deps_table
     PROVENANCE_TABLE = Config.provenance_table
@@ -631,6 +633,14 @@ class RelAdapter(Transactable):
             if_not_exists=True,
             conn=conn,
         )
+        self.rel_storage.create_relation(
+            name=self.CAUSAL_VREF_TABLE,
+            columns=[(Config.full_uid_col, None)],
+            primary_key=Config.full_uid_col,
+            defaults={},
+            if_not_exists=True,
+            conn=conn,
+        )
         # Initialize the event log.
         # The event log is just a list of UIDs that changed, for now.
         # the UID column stores the vref/call uid, the `table` column stores the
@@ -666,42 +676,17 @@ class RelAdapter(Transactable):
             if_not_exists=True,
             conn=conn,
         )
-        # self.rel_storage.create_relation(
-        #     name=self.PROVENANCE_TABLE,
-        #     columns=[
-        #         (ProvTable.call_uid, None),
-        #         (ProvTable.io_name, None),
-        #         (ProvTable.vref_uid, None),
-        #         (ProvTable.direction, None),
-        #         (ProvTable.internal_name, None),
-        #         (ProvTable.version, "int"),
-        #     ],
-        #     primary_key=None,
-        #     defaults={},
-        #     if_not_exists=True,
-        #     conn=conn,
-        # )
 
     @transaction()
     def get_call_tables(self, conn: Optional[Connection] = None) -> List[str]:
         tables = self.rel_storage.get_tables(conn=conn)
         return [
-            t for t in tables if t not in self.SPECIAL_TABLES and t != self.VREF_TABLE
+            t
+            for t in tables
+            if t not in self.SPECIAL_TABLES
+            and t != self.VREF_TABLE
+            and t != self.CAUSAL_VREF_TABLE
         ]
-
-    @transaction()
-    def evaluate_call_table(
-        self, ta: TableType, conn: Optional[Connection] = None
-    ) -> pd.DataFrame:
-        # if isinstance(ta, pa.Table):
-        #     ta = pa.Table.to_pandas(ta)
-        ta = ta.copy()
-        for col in ta.columns:
-            if col not in Config.special_call_cols:
-                ta[col] = ta[col].apply(
-                    lambda uid: unwrap(self.obj_get(uid, conn=conn))
-                )
-        return ta
 
     @transaction()
     def get_vrefs(self, conn: Optional[Connection] = None) -> pd.DataFrame:
@@ -784,7 +769,7 @@ class RelAdapter(Transactable):
         To handle calls to stale functions, this passes through internal names
         to get the current UI names.
         """
-        if not len(calls) == len(set([call.uid for call in calls])):
+        if not len(calls) == len(set([call.full_uid for call in calls])):
             # something fishy may be going on
             raise InternalError("Calls must have unique UIDs")
         # split by operation *internal* name to group calls to the same op in
@@ -811,7 +796,7 @@ class RelAdapter(Transactable):
                 ) = self._get_current_names(sig, conn=conn)
                 # form the input UIDs
                 input_uids = {
-                    stale_to_true_input_mapping[k]: v.uid
+                    stale_to_true_input_mapping[k]: v.full_uid
                     for k, v in call.inputs.items()
                 }
                 # patch the input uids using the true signature. This is
@@ -822,12 +807,13 @@ class RelAdapter(Transactable):
                         input_uids[k] = v
                 row = {
                     Config.uid_col: call.uid,
+                    Config.causal_uid_col: call.causal_uid,
                     Config.content_version_col: call.content_version,
                     Config.semantic_version_col: call.semantic_version,
                     Config.transient_col: call.transient,
                     **input_uids,
                     **{
-                        dump_output_name(index=i): v.uid
+                        dump_output_name(index=i): v.full_uid
                         for i, v in enumerate(call.outputs)
                     },
                 }
@@ -843,6 +829,21 @@ class RelAdapter(Transactable):
         declarative queries.
         """
         if len(calls) > 0:  # avoid dealing with empty dataframes
+            ### upsert full ref uids
+            full_uids = set()
+            for call in calls:
+                full_uids.update({v.full_uid for v in call.inputs.values()})
+                full_uids.update({v.full_uid for v in call.outputs})
+            self.rel_storage.upsert(
+                relation=self.CAUSAL_VREF_TABLE,
+                ta=pa.Table.from_pydict(
+                    {
+                        Config.full_uid_col: list(full_uids),
+                    }
+                ),
+                conn=conn,
+            )
+            ### upsert calls
             for table_name, ta in self.tabulate_calls(calls).items():
                 self.rel_storage.upsert(relation=table_name, ta=ta, conn=conn)
                 # Write changes to the event log table
@@ -858,36 +859,45 @@ class RelAdapter(Transactable):
                 )
 
     @transaction()
-    def _query_call(self, call_uid: str, conn: Optional[Connection] = None) -> pa.Table:
+    def _query_call(
+        self, uid: str, by_causal: bool, conn: Optional[Connection] = None
+    ) -> pa.Table:
         # TODO: replace this by something more efficient
+        col = Config.causal_uid_col if by_causal else Config.uid_col
         all_tables = [
             Query.from_(table_name)
-            .where(Table(table_name)[Config.uid_col] == Parameter("$1"))
-            .select(Table(table_name)[Config.uid_col], LiteralValue(f"'{table_name}'"))
+            .where(Table(table_name)[col] == Parameter("$1"))
+            .select(
+                Table(table_name)[col],
+                LiteralValue(f"'{table_name}'"),
+            )
             for table_name in self.get_call_tables()
         ]
         query = "\nUNION\n".join([str(q) for q in all_tables])
         # query = sum(all_tables[1:], start=all_tables[0])
-        return self.rel_storage.execute_arrow(query, [call_uid], conn=conn)
+        return self.rel_storage.execute_arrow(query, [uid], conn=conn)
 
     @transaction()
-    def call_exists(self, call_uid: str, conn: Optional[Connection] = None) -> bool:
-        return len(self._query_call(call_uid, conn=conn)) > 0
+    def call_exists(
+        self, uid: str, by_causal: bool, conn: Optional[Connection] = None
+    ) -> bool:
+        return len(self._query_call(uid, by_causal=by_causal, conn=conn)) > 0
 
     @transaction()
-    def call_get_lazy(self, call_uid: str, conn: Optional[Connection] = None) -> Call:
+    def call_get_lazy(
+        self, uid: str, by_causal: bool, conn: Optional[Connection] = None
+    ) -> Call:
         """
         Return the call with the inputs/outputs as lazy value references.
         """
-        row = self._query_call(call_uid, conn=conn).take([0])
+        row = self._query_call(uid, by_causal=by_causal, conn=conn).take([0])
+        col = Config.causal_uid_col if by_causal else Config.uid_col
         table_name = row.column(1)[0]
         table = Table(table_name)
         query = (
-            Query.from_(table)
-            .where(table[Config.uid_col] == Parameter("$1"))
-            .select(table.star)
+            Query.from_(table).where(table[col] == Parameter("$1")).select(table.star)
         )
-        results = self.rel_storage.execute_arrow(query, [call_uid], conn=conn)
+        results = self.rel_storage.execute_arrow(query, [uid], conn=conn)
         # determine the signature for this call
         ui_name, version = Signature.parse_versioned_name(
             versioned_name=str(table_name)
@@ -987,12 +997,6 @@ class RelAdapter(Transactable):
         else:
             serializer = serialize
         serialized_refs = [serializer(vrefs[new_uid].dump()) for new_uid in new_uids]
-        # ta = pa.Table.from_pylist(
-        #     [
-        #         {Config.uid_col: new_uid, "value": value}
-        #         for new_uid, value in zip(new_uids, serialized_refs)
-        #     ]
-        # )
         # to get around the 2GB limit of pyarrow
         ta = pd.DataFrame(
             {

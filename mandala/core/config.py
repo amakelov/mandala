@@ -38,18 +38,22 @@ class Config:
     ### constants
     # used for columns containing UIDs of value references or calls
     uid_col = "__uid__"
+    causal_uid_col = "__causal_uid__"
+    full_uid_col = "__full_uid__"
     content_version_col = "__content_version__"
     semantic_version_col = "__semantic_version__"
     transient_col = "__transient__"
     # columns that are not inputs or outputs in a memoization table
     special_call_cols = [
         uid_col,
+        causal_uid_col,
         content_version_col,
         semantic_version_col,
         transient_col,
     ]
     # name for the table that holds the value reference UIDs
     vref_table = "__vrefs__"
+    causal_vref_table = "__causal_vrefs__"
     vref_value_col = "value"
     # name for the event log table
     event_log_table = "__event_log__"

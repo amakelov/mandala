@@ -2,7 +2,7 @@ from typing import Type
 import textwrap
 from .config import Config, parse_output_idx, dump_output_name, is_output_name, MODES
 from ..common_imports import *
-from .utils import Hashing, get_uid
+from .utils import Hashing, get_uid, get_full_uid, parse_full_uid
 from .sig import (
     Signature,
     _postprocess_outputs,
@@ -40,6 +40,7 @@ def is_transient_uid(uid: str) -> bool:
 class Ref:
     def __init__(self, uid: str, obj: Any, in_memory: bool, transient: bool):
         self.uid = uid
+        self._causal_uid = None
         self._obj = obj
         self.in_memory = in_memory
         self.transient = transient
@@ -47,8 +48,32 @@ class Ref:
         self._query: Optional[ValQuery] = None
 
     @property
+    def causal_uid(self) -> str:
+        return self._causal_uid
+
+    @causal_uid.setter
+    def causal_uid(self, causal_uid: str):
+        if self.causal_uid is not None and self.causal_uid != causal_uid:
+            raise ValueError("causal_uid already set")
+        self._causal_uid = causal_uid
+
+    @property
+    def full_uid(self) -> str:
+        return get_full_uid(uid=self.uid, causal_uid=self.causal_uid)
+
+    @staticmethod
+    def parse_full_uid(full_uid: str) -> Tuple[str, str]:
+        return parse_full_uid(full_uid=full_uid)
+
+    @property
     def obj(self) -> Any:
         return self._obj
+
+    @staticmethod
+    def from_full_uid(full_uid: str) -> "Ref":
+        uid, causal_uid = Ref.parse_full_uid(full_uid=full_uid)
+        res = Ref.from_uid(uid=uid)
+        return res
 
     @staticmethod
     def from_uid(uid: str) -> "Ref":
@@ -84,20 +109,12 @@ class Ref:
             assert context.storage is not None
             storage = context.storage
             storage.rel_adapter.mattach(vrefs=[self], shallow=shallow)
-            if isinstance(self, (ListRef, DictRef, SetRef)):
-                inputs_list = Builtins.get_inputs_list(ref=self)
-                calls = Builtins._make_calls(
-                    builtin_id=self.builtin_id, wrapped_inputs_list=inputs_list
-                )
-                for call in calls:
-                    call.link(
-                        orientation=StructOrientations.destruct,
-                    )
+            causify_down(ref=self, start=self.causal_uid, stop_at_causal=False)
 
     def detached(self) -> "Ref":
         return self.__class__(uid=self.uid, obj=None, in_memory=False)
 
-    def unlinked(self) -> "Ref":
+    def unlinked(self, keep_causal: bool) -> "Ref":
         raise NotImplementedError
 
     @property
@@ -128,9 +145,9 @@ class Ref:
     def pin(self, *values):
         assert self._query is not None
         if len(values) == 0:
-            constraint = [self.uid]
+            constraint = [self.full_uid]
         else:
-            constraint = [wrap_atom(v).uid for v in values]
+            constraint = self.query.get_constraint(*values)
         self._query.constraint = constraint
 
     def unpin(self):
@@ -149,13 +166,16 @@ class ValueRef(Ref):
             uid=self.uid, obj=TransientObj(obj=None), in_memory=False, transient=True
         )
 
-    def unlinked(self) -> "Ref":
-        return ValueRef(
+    def unlinked(self, keep_causal: bool) -> "Ref":
+        res = ValueRef(
             uid=self.uid,
             obj=self.obj,
             in_memory=self.in_memory,
             transient=self.transient,
         )
+        if keep_causal:
+            res.causal_uid = self.causal_uid
+        return res
 
     ############################################################################
     ### magic methods forwarding
@@ -256,6 +276,8 @@ class ValueRef(Ref):
 ################################################################################
 ### calls
 ################################################################################
+
+
 class Call:
     def __init__(
         self,
@@ -264,17 +286,32 @@ class Call:
         outputs: List[Ref],
         func_op: "FuncOp",
         transient: bool,
+        causal_uid: Optional[str] = None,
         semantic_version: Optional[str] = None,
         content_version: Optional[str] = None,
     ):
+        self.func_op = func_op.detached()
         self.uid = uid
         self.semantic_version = semantic_version
         self.content_version = content_version
         self.inputs = inputs
         self.outputs = outputs
         self.transient = transient  # if outputs contain transient objects
-        self.func_op = func_op.detached()
+        if causal_uid is None:
+            input_uids = {k: v.uid for k, v in self.inputs.items()}
+            input_causal_uids = {k: v.causal_uid for k, v in self.inputs.items()}
+            assert all([v is not None for v in input_causal_uids.values()])
+            causal_uid = self.func_op.get_call_causal_uid(
+                input_uids=input_uids,
+                input_causal_uids=input_causal_uids,
+                semantic_version=semantic_version,
+            )
+        self.causal_uid = causal_uid
         self._func_query = None
+
+    @property
+    def full_uid(self) -> str:
+        return f"{self.uid}.{self.causal_uid}"
 
     def link(
         self,
@@ -342,14 +379,16 @@ class Call:
         process_boolean = lambda x: True if x == "1" else False
         return Call(
             uid=row.column(Config.uid_col)[0].as_py(),
+            causal_uid=row.column(Config.causal_uid_col)[0].as_py(),
             semantic_version=row.column(Config.semantic_version_col)[0].as_py(),
             content_version=row.column(Config.content_version_col)[0].as_py(),
             transient=process_boolean(row.column(Config.transient_col)[0].as_py()),
             inputs={
-                k: Ref.from_uid(uid=row.column(k)[0].as_py()) for k in input_columns
+                k: Ref.from_full_uid(full_uid=row.column(k)[0].as_py())
+                for k in input_columns
             },
             outputs=[
-                Ref.from_uid(uid=row.column(k)[0].as_py())
+                Ref.from_full_uid(full_uid=row.column(k)[0].as_py())
                 for k in sorted(output_columns, key=parse_output_idx)
             ],
             func_op=func_op,
@@ -376,6 +415,7 @@ class Call:
     def detached(self) -> "Call":
         return Call(
             uid=self.uid,
+            causal_uid=self.causal_uid,
             inputs={k: v.detached() for k, v in self.inputs.items()},
             outputs=[v.detached() for v in self.outputs],
             func_op=self.func_op,
@@ -509,18 +549,51 @@ class FuncOp:
         result.py_sig = self.py_sig  # signature objects are immutable
         return result
 
-    def get_call_uid(self, wrapped_inputs: Dict[str, Ref]) -> str:
-        # get call UID using *internal names* to guarantee the same UID will be
-        # assigned regardless of renamings
-        hashable_input_uids = {}
-        for k, v in wrapped_inputs.items():
-            # ignore the inputs that were added to the function and have their
-            # default values
+    def get_active_inputs(self, input_uids: Dict[str, str]) -> Dict[str, str]:
+        """
+        Return a dict of external -> internal input names for inputs that are
+        not set to their default values.
+        """
+        res = {}
+        for k, v in input_uids.items():
             internal_k = self.sig.ui_to_internal_input_map[k]
             if internal_k in self.sig._new_input_defaults_uids:
-                if self.sig._new_input_defaults_uids[internal_k] == v.uid:
+                internal_uid = Ref.parse_full_uid(
+                    full_uid=self.sig._new_input_defaults_uids[internal_k]
+                )[0]
+                if internal_uid == v:
                     continue
-            hashable_input_uids[internal_k] = v.uid
+            res[k] = internal_k
+        return res
+
+    def get_call_causal_uid(
+        self,
+        input_uids: Dict[str, str],
+        input_causal_uids: Dict[str, str],
+        semantic_version: Optional[str],
+    ) -> str:
+        active_inputs = self.get_active_inputs(input_uids=input_uids)
+        return Hashing.get_content_hash(
+            obj=[
+                {
+                    active_inputs[k]: v
+                    for k, v in input_causal_uids.items()
+                    if k in active_inputs.keys()
+                },
+                semantic_version,
+                self.sig.versioned_internal_name,
+            ]
+        )
+
+    def get_pre_call_uid(self, input_uids: Dict[str, str]) -> str:
+        # get call UID using *internal names* to guarantee the same UID will be
+        # assigned regardless of renamings
+        active_inputs = self.get_active_inputs(input_uids=input_uids)
+        hashable_input_uids = {
+            active_inputs[k]: v
+            for k, v in input_uids.items()
+            if k in active_inputs.keys()
+        }
         call_uid = Hashing.get_content_hash(
             obj=[
                 hashable_input_uids,
@@ -528,6 +601,9 @@ class FuncOp:
             ]
         )
         return call_uid
+
+    def get_call_uid(self, pre_call_uid: str, semantic_version: Optional[str]) -> str:
+        return Hashing.get_content_hash((pre_call_uid, semantic_version))
 
 
 ################################################################################
@@ -563,3 +639,4 @@ def wrap_atom(obj: Any, uid: Optional[str] = None) -> ValueRef:
 from .builtins_ import ListRef, DictRef, SetRef, Builtins
 from ..queries.weaver import ValQuery, StructOrientations, FuncQuery, prepare_query
 from ..ui.contexts import GlobalContext
+from .wrapping import causify_down, causify_atom
