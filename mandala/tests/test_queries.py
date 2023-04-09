@@ -227,13 +227,13 @@ def test_queries_filter_duplicates():
         y = Q().named("y")
         z = inc(x).named("z")
         w = add(z, y).named("w")
-        df_1 = storage.df(x, z, drop_duplicates=True, include_context=False)
-        df_2 = storage.df(x, z, drop_duplicates=False, include_context=False)
+        df_1 = storage.df(x, z, drop_duplicates=True, context=False)
+        df_2 = storage.df(x, z, drop_duplicates=False, context=False)
         df_3 = storage.df(
             x,
             z,
             drop_duplicates=True,
-            include_context=False,
+            context=False,
             engine="naive",
             _visualize_steps_at=OUTPUT_ROOT,
         )
@@ -241,7 +241,7 @@ def test_queries_filter_duplicates():
             x,
             z,
             drop_duplicates=False,
-            include_context=False,
+            context=False,
             engine="naive",
             _visualize_steps_at=OUTPUT_ROOT,
         )
@@ -344,7 +344,7 @@ def test_generalized():
             nums = create_list(x)
             for i in [2, 4, 6, 8, 10]:
                 res = consume_list(nums[:i])
-    df = storage.df_back(res)
+    df = storage.similar(res)
     assert df.shape[0] == 300
 
     with storage.query():

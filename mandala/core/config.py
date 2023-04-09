@@ -33,6 +33,7 @@ class Config:
     spillover_threshold_mb = 50
     db_backend = "sqlite"
     query_engine: Literal["sql", "naive", "_test"] = "sql"
+    verbose_queries: bool = True
     func_interface_cls_name = "FuncInterface"
 
     ### constants

@@ -29,7 +29,7 @@ from ..core.tps import Type, AnyType, ListType, DictType, SetType
 from ..core.sig import Signature
 from ..core.utils import get_uid, Hashing, OpKey
 
-from ..deps.tracers import TracerABC, SysTracer
+from ..deps.tracers import TracerABC, SysTracer, DecTracer
 from ..deps.versioner import Versioner, CodeState
 from ..deps.utils import get_dep_key_from_func, extract_func_obj
 from ..deps.model import DepKey, TerminalData
@@ -163,7 +163,7 @@ class Storage(Transactable):
             else:
                 versioner = Versioner(
                     paths=roots,
-                    TracerCls=SysTracer if tracer_impl is None else tracer_impl,
+                    TracerCls=DecTracer if tracer_impl is None else tracer_impl,
                     strict=_strict_deps,
                     track_methods=track_methods,
                     package_name=deps_package,
@@ -846,7 +846,7 @@ class Storage(Transactable):
             start = time.time()
             sql_uids_df = self.rel_storage.execute_df(query=str(query), conn=conn)
             end = time.time()
-            logger.info(f"SQL query took {round(end - start, 3)} seconds")
+            logger.debug(f"SQL query took {round(end - start, 3)} seconds")
             rename_cols(df=sql_uids_df, selection=selection, names=names)
             uids_df = sql_uids_df
         if engine in ["naive", "_test"]:
@@ -938,12 +938,12 @@ class Storage(Transactable):
         )
 
     @transaction()
-    def df_back(
+    def similar(
         self,
         *objs: Union[Ref, ValQuery],
         values: Literal["objs", "refs", "uids", "lazy"] = "objs",
-        include_context: bool = True,
-        verbose: bool = True,
+        context: bool = False,
+        verbose: Optional[bool] = None,
         local: bool = False,
         drop_duplicates: bool = True,
         engine: Literal["sql", "naive", "_test"] = None,
@@ -956,7 +956,7 @@ class Storage(Transactable):
             direction="backward",
             scope=scope,
             values=values,
-            include_context=include_context,
+            context=context,
             skip_objs=False,
             verbose=verbose,
             local=local,
@@ -972,9 +972,9 @@ class Storage(Transactable):
         *objs: Union[Ref, ValQuery],
         direction: Literal["forward", "backward", "both"] = "both",
         values: Literal["objs", "refs", "uids", "lazy"] = "objs",
-        include_context: bool = False,
+        context: bool = False,
         skip_objs: bool = False,
-        verbose: bool = True,
+        verbose: Optional[bool] = None,
         local: bool = False,
         drop_duplicates: bool = True,
         engine: Literal["sql", "naive", "_test"] = None,
@@ -986,6 +986,8 @@ class Storage(Transactable):
         Universal query method over computational graphs, both imperative and
         declarative.
         """
+        if verbose is None:
+            verbose = Config.verbose_queries
         if not all(isinstance(obj, (Ref, ValQuery)) for obj in objs):
             raise ValueError(
                 "All arguments to df() must be either `Ref`s or `ValQuery`s."
@@ -1004,7 +1006,7 @@ class Storage(Transactable):
             vqs=vqs, fqs=fqs, selection=selection, name_hints=name_hints
         )
         target_vqs, target_fqs = set(v_map.values()), set(f_map.values())
-        if include_context:
+        if context:
             g = InducedSubgraph(vqs=target_vqs, fqs=target_fqs)
             _, _, topsort = g.canonicalize()
             target_selection = [vq for vq in topsort if isinstance(vq, ValQuery)]
