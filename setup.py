@@ -43,6 +43,7 @@ packages = [
     "mandala",
     "mandala.core",
     "mandala.deps",
+    "mandala.deps.tracers",
     "mandala.queries",
     "mandala.storages",
     "mandala.storages.rel_impls",
