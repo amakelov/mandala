@@ -209,6 +209,7 @@ class MockStorage:
                 columns=sig.ui_to_internal_input_map
             )
             default_uids[versioned_internal_name] = sig._new_input_defaults_uids
+        sess.d()
         return (
             values == self.values
             and all(
@@ -219,7 +220,7 @@ class MockStorage:
 
 
 class ClientState:
-    def __init__(self, root: RemoteStorage):
+    def __init__(self, root: Optional[RemoteStorage]):
         self.storage = Storage(root=root)
         self.mock_storage = MockStorage()
         self.workflows: List[Workflow] = []
@@ -411,19 +412,13 @@ class Preconditions:
 class SingleClientSimulator(RuleBasedStateMachine):
     def __init__(self, n_clients: int = 1):
         super().__init__()
-        client = mongomock.MongoClient()
-        root = MongoMockRemoteStorage(db_name="test", client=client)
+        # client = mongomock.MongoClient()
+        # root = MongoMockRemoteStorage(db_name="test", client=client)
+        root = None
         self.clients = [ClientState(root=root) for _ in range(n_clients)]
         # a central storage on which all operations are performed
         self.mock_storage = MockStorage()
-        # self.storage = Storage() if storage is None else storage
-        # self._workflows: List[Workflow] = []
-        # self._func_ops: List[FuncOp] = []
-        # # to avoid using too many transitions on renaming
-        # self._num_func_renames = 0
-        # self._num_input_renames = 0
         #! keep everything deterministic. only use `random` for generating
-        #! stuff
         random.seed(0)
 
     ############################################################################

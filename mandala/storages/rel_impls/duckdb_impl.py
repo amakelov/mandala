@@ -5,13 +5,14 @@ from pypika import Query, Column
 
 from .bases import RelStorage
 from .utils import Transactable, transaction
+from ...core.config import Config
 from ...core.utils import get_uid
 from ...common_imports import *
 
 
 class DuckDBRelStorage(RelStorage, Transactable):
     UID_DTYPE = "VARCHAR"  # TODO - change this
-    TEMP_ARROW_TABLE = "__arrow__"
+    TEMP_ARROW_TABLE = Config.temp_arrow_table
 
     def __init__(self, address: Optional[str] = None, _read_only: bool = False):
         self.in_memory = address is None

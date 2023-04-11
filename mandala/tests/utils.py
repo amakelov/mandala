@@ -1,4 +1,3 @@
-import mongomock
 import uuid
 import pytest
 
@@ -7,10 +6,10 @@ from mandala.all import *
 from mandala.ui.storage import Storage
 from mandala.ui.storage import MODES
 from mandala.core.config import Config, is_output_name
-from mandala.core.model import Ref
 from mandala.core.wrapping import compare_dfs_as_relations
-from mandala.storages.remote_impls.mongo_impl import MongoRemoteStorage
-from mandala.storages.remote_impls.mongo_mock import MongoMockRemoteStorage
+
+# from mandala.storages.remote_impls.mongo_impl import MongoRemoteStorage
+# from mandala.storages.remote_impls.mongo_mock import MongoMockRemoteStorage
 from mandala.storages.rels import RelAdapter
 
 

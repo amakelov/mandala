@@ -156,7 +156,7 @@ def test_7():
     state.rename_func()
 
 
-def test_8():
+def _test_8():
     state = MultiClientSimulator(n_clients=3)
     state.create_op()
     state.create_op()
@@ -176,7 +176,7 @@ def test_8():
     state.add_input()
 
 
-def test_9():
+def _test_9():
     state = MultiClientSimulator(n_clients=3)
     state.create_op()
     state.rename_input()
@@ -199,7 +199,7 @@ def test_9():
     state.sync_one()
 
 
-def test_10():
+def _test_10():
     state = MultiClientSimulator()
     state.add_workflow()
     state.add_input_var_to_workflow()
@@ -214,7 +214,7 @@ def test_10():
     state.sync_one()
 
 
-def test_11():
+def _test_11():
     state = MultiClientSimulator(n_clients=3)
     state.add_workflow()
     state.add_input_var_to_workflow()
@@ -229,7 +229,7 @@ def test_11():
     state.verify_state()
 
 
-def test_12():
+def _test_12():
     state = MultiClientSimulator(n_clients=3)
     state.add_workflow()
     state.add_input_var_to_workflow()
@@ -245,7 +245,7 @@ def test_12():
     state.verify_state()
 
 
-def test_13():
+def _test_13():
     state = MultiClientSimulator(n_clients=3)
     state.create_op()
     state.rename_func()

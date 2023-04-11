@@ -14,8 +14,11 @@ from ..core.wrapping import unwrap
 from ..core.sig import Signature
 from ..deps.versioner import Versioner
 from ..utils import serialize, deserialize, _rename_cols
-from .rel_impls.duckdb_impl import DuckDBRelStorage
+
+if Config.has_duckdb:
+    from .rel_impls.duckdb_impl import DuckDBRelStorage
 from .rel_impls.utils import Transactable, transaction
+from .rel_impls.bases import RelStorage
 
 
 # {internal table name -> serialized (internally named) table}
@@ -573,15 +576,6 @@ class SigAdapter(Transactable):
         return result
 
 
-# class ProvTable:
-#     call_uid = "call_uid"
-#     internal_name = "internal_name"
-#     version = "version"
-#     vref_uid = "vref_uid"
-#     io_name = "io_name"
-#     direction = "direction"
-
-
 class RelAdapter(Transactable):
     EVENT_LOG_TABLE = Config.event_log_table
     VREF_TABLE = Config.vref_table
@@ -592,7 +586,7 @@ class RelAdapter(Transactable):
     # tables to be excluded from certain operations
     SPECIAL_TABLES = (
         EVENT_LOG_TABLE,
-        DuckDBRelStorage.TEMP_ARROW_TABLE,
+        Config.temp_arrow_table,
         SIGNATURES_TABLE,
         DEPS_TABLE,
         PROVENANCE_TABLE,
@@ -600,7 +594,7 @@ class RelAdapter(Transactable):
 
     def __init__(
         self,
-        rel_storage: DuckDBRelStorage,
+        rel_storage: RelStorage,
         spillover_dir: Optional[Path] = None,
         spillover_threshold_mb: Optional[float] = None,
     ):

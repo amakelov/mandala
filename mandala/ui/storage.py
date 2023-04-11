@@ -4,13 +4,6 @@ from pypika import Query, Table
 import pyarrow.parquet as pq
 from typing import Literal
 
-from ..storages.rel_impls.utils import Transactable, transaction
-from ..storages.kv import InMemoryStorage, MultiProcInMemoryStorage, KVStore
-from ..storages.rel_impls.duckdb_impl import DuckDBRelStorage
-from ..storages.rel_impls.sqlite_impl import SQLiteRelStorage
-from ..storages.rels import RelAdapter, RemoteEventLogEntry, VersionAdapter
-from ..storages.sigs import SigSyncer
-from ..storages.remote_storage import RemoteStorage
 from ..common_imports import *
 from ..core.config import Config
 from ..core.model import Ref, Call, FuncOp, ValueRef, Delayed
@@ -29,6 +22,15 @@ from ..core.tps import Type, AnyType, ListType, DictType, SetType
 from ..core.sig import Signature
 from ..core.utils import get_uid, Hashing, OpKey
 
+from ..storages.rel_impls.utils import Transactable, transaction
+from ..storages.kv import InMemoryStorage, MultiProcInMemoryStorage, KVStore
+
+if Config.has_duckdb:
+    from ..storages.rel_impls.duckdb_impl import DuckDBRelStorage
+from ..storages.rel_impls.sqlite_impl import SQLiteRelStorage
+from ..storages.rels import RelAdapter, RemoteEventLogEntry, VersionAdapter
+from ..storages.sigs import SigSyncer
+from ..storages.remote_storage import RemoteStorage
 from ..deps.tracers import TracerABC, SysTracer, DecTracer
 from ..deps.versioner import Versioner, CodeState
 from ..deps.utils import get_dep_key_from_func, extract_func_obj
@@ -121,9 +123,10 @@ class Storage(Transactable):
         self.db_path = db_path
         self.db_backend = db_backend
         self.evict_on_commit = evict_on_commit
-        DBImplementation = (
-            SQLiteRelStorage if db_backend == "sqlite" else DuckDBRelStorage
-        )
+        if Config.has_duckdb and db_backend == "duckdb":
+            DBImplementation = DuckDBRelStorage
+        else:
+            DBImplementation = SQLiteRelStorage
         self.rel_storage = DBImplementation(
             address=None if db_path is None else str(db_path),
             _read_only=_read_only,

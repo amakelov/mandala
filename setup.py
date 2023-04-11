@@ -5,10 +5,8 @@ install_requires = [
     "numpy >= 1.18",
     "pandas >= 1.0",
     "joblib >= 1.0",
-    "duckdb >= 0.4",
     "pypika >= 0.48",
     "pyarrow >= 8.0.0",
-    "pymongo",
 ]
 
 extras_require = {
@@ -19,7 +17,7 @@ extras_require = {
     "integrations": [
         "dask[complete]",
     ],
-    "terminal_ui": [
+    "ui": [
         "rich",
     ],
     "test": [
@@ -27,10 +25,14 @@ extras_require = {
         "hypothesis >= 6.0.0",
         "ipython",
         "mongomock",
+        "duckdb >= 0.6",
     ],
     "demos": [
         "torch",
         "scikit-learn",
+    ],
+    "server": [
+        "pymongo",
     ],
 }
 

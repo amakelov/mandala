@@ -56,6 +56,7 @@ class Config:
     vref_table = "__vrefs__"
     causal_vref_table = "__causal_vrefs__"
     vref_value_col = "value"
+    temp_arrow_table = "__arrow__"
     # name for the event log table
     event_log_table = "__event_log__"
     # todo: currently unused?
@@ -96,6 +97,13 @@ class Config:
         has_pil = True
     except ImportError:
         has_pil = False
+
+    try:
+        import duckdb
+
+        has_duckdb = True
+    except ImportError:
+        has_duckdb = False
 
     try:
         import rich
