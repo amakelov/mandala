@@ -47,7 +47,7 @@ pip install git+https://github.com/amakelov/mandala
 
 ## Video walkthroughs
 ### Incrementally grow a project with memoization
-https://user-images.githubusercontent.com/1467702/230775562-d4bb4af6-f84c-45bd-b506-3818ba1b3423.mp4
+![mem](https://user-images.githubusercontent.com/1467702/231246050-21855bb2-6ce0-43d6-b7c0-3e0ed2a68f28.gif)
 
 Decorate the functions you want to memoize with `@op`, and compose programs
 out of them by chaining their inputs and outputs using ordinary control flow and
@@ -57,7 +57,7 @@ data structures. Every such program is **end-to-end memoized**, which
   without ever re-doing work
 
 ### Query by directly pattern-matching Python code
-https://user-images.githubusercontent.com/1467702/230775616-773ffd7f-47f1-478d-92f2-8b2d45f9d4b1.mp4
+![query](https://user-images.githubusercontent.com/1467702/231246102-276d7ae9-3a7f-46f8-9899-ae9dcf4f0484.gif)
 
 Any computation in a `with storage.run():` block is also a
 **declarative query interface** to analogous computations in the entire storage:
@@ -72,7 +72,7 @@ initial parameters.
   storage.query():` context manager. For more on how this works, see [below](#explicit-declarative-queries-with-storagequery)
 
 ### Automatic per-call versioning and dependency tracking
-https://user-images.githubusercontent.com/1467702/230776548-a3bcb88f-8bc1-4c15-9658-1ea6c48badd6.mp4
+![deps](https://user-images.githubusercontent.com/1467702/231246159-fc8996a1-0987-4cec-9f0d-f0408609886e.gif)
 
 `mandala` comes with a very fine-grained versioning system:
 - **per-call dependency tracking**: automatically track the functions and global
