@@ -93,6 +93,12 @@ means that:
 This is a quick guide on how to get up to speed with the core features and avoid
 common pitfalls.
 
+- [defining storages and memoized functions](#storage-and-the-op-decorator)
+- [memoization basics](#compute--memoize-with-storagerun)
+- [query storage directly from computational code](#implicit-declarative-queries)
+- [explicit query interface](#explicit-declarative-queries-with-storagequery)
+- [versioning and dependency tracking](#versioning-and-dependency-tracking)
+
 ### `Storage` and the `@op` decorator
 A `Storage` instance holds all the data (saved calls and metadata) for a
 collection of memoized functions. In a given project, you should have just one
@@ -114,6 +120,12 @@ The `@op` decorator marks a function `f` as memoizable. Some notes apply:
   arguments can always be added backward-compatibly)
 - `f` must have a **fixed number of return values**, and this must be annotated in
   the function signature **or** declared as `@op(nout=...)`
+- `f` must have a **compatible interface** throughout its life. 
+  - **The only way to change `f`'s interface once it already has memoized calls
+  is to add new arguments with default values.**
+  - if you want to change the interface in an incompatible way, you should
+    either just make a new function (under a new name), or increment the
+    `@op(version=...)` argument.
 - the `list`, `dict` and `set` collections, when used as argument/return
   annotations, cause elements of these collections to be stored separately. To
   avoid confusion, `tuple`s are reserved for specifying the number of outputs.
@@ -400,12 +412,13 @@ non-semantic. Then the newly extracted function may in reality be a dependency
 of the existing calls, but this goes unnoticed by the system.
 
 ## Other gotchas
+
 - **under development**: the biggest gotcha is that this project is under active
 development, which means things can change unpredictably.
 - **slow**: it hasn't been optimized for performance, so many things are quite
 inefficient
 - **pure functions**: you should probably only use it for functions with a
-  deterministic input-output behavior if you're not experienced:
+  deterministic input-output behavior if you're new to this project:
     - **changing a `Ref`'s object in-place will generally break things**. If you
     really need to update an object in-place, wrap the update in an `@op` so
     that you get instead a new `Ref` (with updated metadata) pointing to the
@@ -419,7 +432,12 @@ inefficient
 - **don't rename anything (yet)**: there isn't good support yet for renaming
 functions, or moving functions around files. It's possible to rename functions
 and their arguments, but this is still undocumented.
-- **deletion**: no interfaces are currently exposed for deleting results
+- **deletion**: no interfaces are currently exposed for deleting results.
+- **examine complex queries manually**: the color refinement algorithm used to
+  extract a declarative query from a computational graph can in rare cases fail
+  to realize that two vertices have different roles in the computational graph
+  when projecting to the query. When in doubt, you should examine the printout
+  of the query and tweak it if necessary. 
 
 ## Tutorials 
 - see the ["Hello world!"
@@ -427,4 +445,51 @@ and their arguments, but this is still undocumented.
   for a 2-minute introduction to the library's main features
 - See [this notebook](https://github.com/amakelov/mandala/blob/master/tutorials/01_logistic.ipynb)
 for a more realistic example of a machine learning project managed by Mandala.
-- [dependency tracking](https://github.com/amakelov/mandala/blob/master/tutorials/02_dependencies.ipynb) tutorial
+- [dependency
+  tracking](https://github.com/amakelov/mandala/blob/master/tutorials/02_dependencies.ipynb)
+  tutorial
+
+## Related work
+`mandala` combines ideas from, and shares similarities with, many technologies.
+Here are some useful points of comparison:
+- **memoization**: 
+  - standard Python memoization solutions are [`joblib.Memory`](https://joblib.readthedocs.io/en/latest/generated/joblib.Memory.html)
+  and
+  [`functools.lru_cache`](https://docs.python.org/3/library/functools.html#functools.lru_cache).
+  `mandala` uses `joblib` serialization and hashing under the hood.
+  - [`incpy`](https://github.com/pajju/IncPy) is a project that integrates
+    memoization with the python interpreter itself. 
+  - [`funsies`](https://github.com/aspuru-guzik-group/funsies) is a
+    memoization-based distributed workflow executor that uses an analogous notion
+    of hashing to `mandala` to keep track of which computations have already been done. It
+    works on the level of scripts (not functions), and lacks queriability and
+    versioning.
+  - [`koji`](https://arxiv.org/abs/1901.01908) is a design for an incremental
+    computation data processing framework that unifies over different resource
+    types (files or services). It also uses an analogous notion of hashing to
+    keep track of computations. 
+- **queries**:
+  - all queries in `mandala` are [conjunctive queries](https://en.wikipedia.org/wiki/Conjunctive_query), a
+    fundamental class of queries in relational algebra.
+  - conjunctive queries are also related to category theory, see e.g.
+    [here](https://blog.algebraicjulia.org/post/2020/12/cset-conjunctive-queries/). 
+  - the [color refinement
+    algorithm](https://en.wikipedia.org/wiki/Colour_refinement_algorithm) used
+    to extract a query from an arbitrary computational graph is a standard tool
+    for finding similar substructure in graphs and testing for graph
+    isomorphism.
+- **versioning**:
+  - the revision history of each function in the codebase is organized in a "mini-[`git`](https://git-scm.com/) repository" that shares only the most basic
+    features with `git`: it is a
+    [content-addressable](https://en.wikipedia.org/wiki/Content-addressable_storage)
+    tree, where each edge tracks a diff from the content at one endpoint to that
+    at the other. Additional metadata indicates equivalence classes of
+    semantically equivalent contents.
+  - [semantic versioning](https://semver.org/) is another popular code
+    versioning system. `mandala` is similar to `semver` in that it allows you to
+    make backward-compatible changes to the interface and logic of dependencies.
+    It is different in that versions are still labeled by content, instead of by
+    "non-canonical" numbers.
+  - the [unison programming
+    language](https://www.unison-lang.org/learn/the-big-idea/) represents
+    functions by the hash of their content (syntax tree, to be exact).
