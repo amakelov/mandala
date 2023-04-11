@@ -51,7 +51,7 @@ class Versioner:
     def __init__(
         self,
         paths: List[Path],
-        TracerCls: type[TracerABC],
+        TracerCls: type,
         strict,
         track_methods,
         package_name: Optional[str] = None,

@@ -95,7 +95,7 @@ class Storage(Transactable):
         deps_package: Optional[str] = None,
         track_methods: bool = True,
         _strict_deps: bool = True,  # for testing only
-        tracer_impl: Optional[type[TracerABC]] = None,
+        tracer_impl: Optional[type] = None,
     ):
         self.root = root
         if call_cache is None:
