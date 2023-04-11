@@ -4,29 +4,36 @@
   <br>
 <a href="#install">Install</a> |
 <a href="#features">Features</a> |
-<a href="#video-walkthroughs">Videos</a> |
-<a href="#usage">Usage</a> |
+<a href="#video-walkthroughs">Demos</a> |
+<a href="#basic-usage">Usage</a> |
+<a href="#other-gotchas">Gotchas</a> |
 <a href="#tutorials">Tutorials</a> |
 <a href="https://amakelov.github.io/blog/pl/">Blog post</a> |
-<a href="#why-mandala">Why mandala?</a> 
 </div>
 
 # Computations that save, query and version themselves
+
 https://user-images.githubusercontent.com/1467702/230719928-1981bd7b-3dbd-4a5c-891e-4b45c3e51aba.mp4
 
-`mandala` is a memoization cache on steroids: shared and queriable across
-function/data structure compositions, dependency-tracked and versioned, all
-through a single decorator. Its primary use case is experiment data management.
+<br>
 
-It works by turning Python function calls and collections into interlinked pieces of data that
-are automatically co-evolved with your codebase, and can be used to query
-artifacts based on relationships. This unlocks extremely flexible yet simple
-patterns of data management over computational artifacts.
+Your code and its execution traces contain enough information to save, query and
+version computations without extra boilerplate. [`mandala`](https://github.com/amakelov/mandala)
+is a persistent memoization cache on steroids that lets you tap into this
+information using a single decorator. It
+- turns Python programs - composed of function calls, collections and control
+flow - into interlinked, persistent data as they execute.
+- can be queried by directly pattern-matching against such programs, returning
+tables of values in the cache satisfying the computational relationships
+  of the program
+- tracks the dependencies of each memoized function call, automatically
+detecting when a change in the code may require recomputation.
 
 ## Features
-- **simple and Python-native**: write computations in ordinary Python code, and
-  they're automatically queriable and versioned. Data structures and control flow work just fine! 
-- **fine-grained incremental computation**: with per-call dependency tracking,
+- **simple and Python-native**: just write computations in ordinary Python code -
+including data structures and control flow - and they're automatically queriable
+and versioned. 
+- **fine-grained versioning and incremental computation**: with per-call dependency tracking,
 changes in the code are automatically detected, and only the calls that
 actually accessed the changed code are recomputed.
 - **pattern-matching queries**: produce tables by directly pointing to
@@ -53,40 +60,34 @@ data structures. Every such program is **end-to-end memoized**, which
 https://user-images.githubusercontent.com/1467702/230775616-773ffd7f-47f1-478d-92f2-8b2d45f9d4b1.mp4
 
 Any computation in a `with storage.run():` block is also a
-**declarative query interface** to analogous computations in the entire storage.
-For example, `storage.similar(x, y, ...)` returns a table of all values in the
+**declarative query interface** to analogous computations in the entire storage:
+- for example, `storage.similar(x, y, ...)` returns a table of all values in the
 storage computed in the same way as `x, y, ...`, but possibly from different
 initial parameters.
-
-**Queries propagate relationships through collections (list, dict and set)**,
-where only the qualitative composition of the elements matters (so, a list
-variable can match e.g. a list where each element is of the form `f(i, g(j))`,
-regardless of the length). The qualitative query is extracted from a concrete
-computation in a principled way using a modified [color refinement
-algorithm](https://en.wikipedia.org/wiki/Colour_refinement_algorithm). Note that
-such queries have not been optimized for performance, and are likely to be slow
-for large computational graphs (e.g. 1000+ calls).
-
-A more expressive and explicit declarative interface is available via the `with
-storage.query():` context manager. For more on how this works, see below #TODO.
+- queries propagate relationships through collections (list, dict and set),
+  where only the qualitative composition of the collection matters (e.g.,
+  matching to a list where each element is of the form `f(i)` regardless of the
+  length).
+- A more expressive and explicit declarative interface is available via the `with
+  storage.query():` context manager. For more on how this works, see [below](#explicit-declarative-queries-with-storagequery)
 
 ### Automatic per-call versioning and dependency tracking
 https://user-images.githubusercontent.com/1467702/230776548-a3bcb88f-8bc1-4c15-9658-1ea6c48badd6.mp4
 
-Code changes to memoized functions or their dependencies (other memoized
-functions, non-memoized functions and class methods decorated with `@track`, and
-global variables in your codebase) are automatically tracked, and you can choose
-whether they require recomputation of dependents (e.g., changes to core logic)
-or not (e.g., refactoring, logging or backward-compatible extension of
-functionality). 
-
-**Every call** to a memoized function records *which* dependencies it accessed
-and their versions. This fine-grained tracking means that a code change will
-cause a recomputation only of the calls affected by it, instead of all calls to
-a given memoized function. 
-
-All code is **content-addressed**, meaning that restoring a previous state of
-the codebase will reinterpret all memoized functions accordingly.
+`mandala` comes with a very fine-grained versioning system:
+- **per-call dependency tracking**: automatically track the functions and global
+variables accessed by each memoized call, and alert you to changes in them, so
+you can (carefully) choose whether a change to a dependency requires
+recomputation of dependent calls
+- **content-addressable versions**: use the current state of each dependency in
+your codebase to automatically determine the currently compatible versions of
+each memoized function to use in computation and queries. In particular, this
+means that:
+  - **you can go "back in time"** and access the storage relative to an earlier
+  state of the code (or even branch away in a new direction like in `git`) by
+  just restoring this state
+  - **the code is the truth**: when in doubt about the meaning of a result, you
+  can just look at the current code.
 
 ## Basic usage
 This is a quick guide on how to get up to speed with the core features and avoid
@@ -169,6 +170,18 @@ with storage.run():
             acc = get_acc(model, X, y)
             print(acc)
 ```
+```python
+ValueRef(0.66, uid=15a...)
+ValueRef(0.73, uid=79e...)
+ValueRef(0.81, uid=5a4...)
+ValueRef(0.84, uid=6c4...)
+ValueRef(0.89, uid=fb8...)
+ValueRef(0.93, uid=c3d...)
+ValueRef(1.0, uid=b67...)
+ValueRef(1.0, uid=b67...)
+ValueRef(1.0, uid=b67...)
+```
+
 Memoized functions return `Ref` instances (`ValueRef`, `ListRef`,
 ...), which bundle the actual return value with storage metadata. To get the
 return value itself, use `unwrap`. It works recursively on collections (lists,
@@ -185,6 +198,10 @@ with storage.run():
         model = train_model(X, y, n_estimators=n_estimators)
         acc = get_acc(model, X, y)
         print(unwrap(acc))
+```
+```python
+0.84
+0.93
 ```
 ### Implicit declarative queries
 You can point to local variables in memoized code, and get a table of all values
@@ -204,23 +221,31 @@ with storage.run():
         model = train_model(X, y, n_estimators=n_estimators)
         acc = get_acc(model, X, y)
     
-df = storage.similar(n_class, n_estimators, acc)
+storage.similar(n_class, n_estimators, acc)
 ```
-When `verbose=True` in `storage.similar` (the default), you'll see the
-computational graph that was inferred from the query:
-
 ```python
 Pattern-matching to the following computational graph (all constraints apply):
+    n_estimators = Q() # input to computation; can match anything
     n_class = Q() # input to computation; can match anything
     X, y = load_data(n_class=n_class)
-    n_estimators = Q() # input to computation; can match anything
     model = train_model(X=X, y=y, n_estimators=n_estimators)
     acc = get_acc(model=model, X=X, y=y)
     result = storage.df(n_class, n_estimators, acc)
+   n_class  n_estimators       acc
+1       10            5       0.66
+0       10            10      0.73
+2       10            20      0.81
+7       5             5       0.84
+6       5             10      0.89
+8       5             20      0.93
+4       2             5       1.00
+3       2             10      1.00
+5       2             20      1.00
 ```
-This is also a good starting point for running an explicit query where you
-directly provide the computational graph instead of extracting it from a
-program.
+
+The computational graph printed out by the query (default `verbose=True`) is
+also a good starting point for running an explicit query where you directly
+provide the computational graph instead of extracting it from a program.
 
 ### Explicit declarative queries `with storage.query():`
 The kind of printout above can be directly copy-pasted into a `with
@@ -250,7 +275,6 @@ principle match any value in the storage.
 where each row is a matching of values to the respective variables that
 satisfies **all** the constraints.
 
-#### A warning about queries
 **The query implementation has not been optimized for performance at this point**. Keep in mind that 
 - if your query is not sufficiently constrained, there may be a combinatorial
 explosion of results;
@@ -356,11 +380,9 @@ For each change to the content of some dependency (the source code of a function
 or the value of a global variable), you can choose whether this content change
 is also a **semantic** change. A semantic change will cause all calls that
 have accessed this dependency to not appear memoized **with respect to the new
-state of the code**. 
-
-The content versions of a single dependency are organized in a `git`-like DAG
-(currently, tree) that can be inspected using `storage.sources(f)` for
-functions. 
+state of the code**. The content versions of a single dependency are organized
+in a `git`-like DAG (currently, tree) that can be inspected using
+`storage.sources(f)` for functions. 
 
 #### Going back in time
 Since the versioning system is content-based, simply restoring an old state of
@@ -377,6 +399,28 @@ suppose you factor a function out of some dependency and mark the change
 non-semantic. Then the newly extracted function may in reality be a dependency
 of the existing calls, but this goes unnoticed by the system.
 
+## Other gotchas
+- **under development**: the biggest gotcha is that this project is under active
+development, which means things can change unpredictably.
+- **slow**: it hasn't been optimized for performance, so many things are quite
+inefficient
+- **pure functions**: you should probably only use it for functions with a
+  deterministic input-output behavior if you're not experienced:
+    - **changing a `Ref`'s object in-place will generally break things**. If you
+    really need to update an object in-place, wrap the update in an `@op` so
+    that you get instead a new `Ref` (with updated metadata) pointing to the
+    same (changed) object, and discard the old `Ref`.
+    - if a function does not have a deterministic set of dependencies
+    it invokes for each given call, this may break the versioning system's
+    invariants.
+- **avoid long (e.g. > 50) chains of calls in queries**: you should keep your
+  workflows relatively shallow for queries to be efficient. This means e.g. no
+  long recursive chains of calling a function repeatedly on its output
+- **don't rename anything (yet)**: there isn't good support yet for renaming
+functions, or moving functions around files. It's possible to rename functions
+and their arguments, but this is still undocumented.
+- **deletion**: no interfaces are currently exposed for deleting results
+
 ## Tutorials 
 - see the ["Hello world!"
   tutorial](https://github.com/amakelov/mandala/blob/master/tutorials/00_hello.ipynb)
@@ -384,24 +428,3 @@ of the existing calls, but this goes unnoticed by the system.
 - See [this notebook](https://github.com/amakelov/mandala/blob/master/tutorials/01_logistic.ipynb)
 for a more realistic example of a machine learning project managed by Mandala.
 - [dependency tracking](https://github.com/amakelov/mandala/blob/master/tutorials/02_dependencies.ipynb) tutorial
-
-## Related work
-`mandala` brings together several ideas into a coherent whole:
-- **memoization**: 
-  - `functools.lru_cache` and `joblib.Memory` are standard Python
-  solutions for a memoization cache, with the latter offering persistence.
-  - memoization-related projects in the Python ecosystem and beyond are
-    [funsies](https://github.com/aspuru-guzik-group/funsies) and [koji](https://arxiv.org/abs/1901.01908)
-- **queries**: 
-  - the concept of [conjunctive
-  queries](https://en.wikipedia.org/wiki/Conjunctive_query) from relational
-  databases is the workhorse of the query system. 
-  - to extract a query from an arbitrary computational graph involving
-    collections and function calls, a modified [color refinement
-algorithm](https://en.wikipedia.org/wiki/Colour_refinement_algorithm) is used
-- **versioning**: 
-  - it is primarily a content-addressable, "truth-of-code" system (like `git`)
-  - it shares some features with [semantic versioning](https://semver.org/), in
-    particular the ability to mark changes as backward compatible. However,
-    unlike semantic versioning it does not use human-annotated numbers, but
-    content hashes.

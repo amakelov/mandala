@@ -142,6 +142,7 @@ def get_graph_repr(
                         idx_label = names[idx]
                     rhs = f"{names[struct]}[{idx_label}] # {names[elt]} will match any element of a match for {names[struct]} at index matching {idx_label}"
                     res.append(f"{lhs} = {rhs}")
+    sess.d()
     if selection is not None:
         res.append(f"result = storage.df({', '.join([names[vq] for vq in selection])})")
     res = [textwrap.indent(line, "    ") for line in res]

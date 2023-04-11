@@ -893,23 +893,25 @@ class Storage(Transactable):
             final_vqs = set(v_proj.values())
             final_fqs = set(f_proj.values())
         else:
+            v_proj = {vq: vq for vq in vqs}
+            f_proj = {fq: fq for fq in fqs}
             names = get_names(
                 hints=hints,
                 canonical_order=get_canonical_order(vqs=set(vqs), fqs=set(fqs)),
             )
             final_vqs = vqs
             final_fqs = fqs
-        return final_vqs, final_fqs, names
+        return final_vqs, final_fqs, names, v_proj, f_proj
 
-    def draw(
+    def draw_graph(
         self,
         *objs: Union[Ref, ValQuery],
-        traverse: Literal["forward", "backward", "both"] = "both",
+        traverse: Literal["forward", "backward", "both"] = "backward",
         project: bool = False,
         show_how: Literal["none", "browser", "inline", "open"] = "browser",
     ):
         scope = inspect.currentframe().f_back.f_locals
-        vqs, fqs, names = self._get_graph_and_names(
+        vqs, fqs, names, v_proj, f_proj = self._get_graph_and_names(
             objs,
             direction=traverse,
             scope=scope,
@@ -917,14 +919,14 @@ class Storage(Transactable):
         )
         visualize_graph(vqs, fqs, names=names, show_how=show_how)
 
-    def print(
+    def print_graph(
         self,
         *objs: Union[Ref, ValQuery],
         project: bool = False,
-        traverse: Literal["forward", "backward", "both"] = "both",
+        traverse: Literal["forward", "backward", "both"] = "backward",
     ):
         scope = inspect.currentframe().f_back.f_locals
-        vqs, fqs, names = self._get_graph_and_names(
+        vqs, fqs, names, v_proj, f_proj = self._get_graph_and_names(
             objs,
             direction=traverse,
             scope=scope,
@@ -934,7 +936,9 @@ class Storage(Transactable):
             vqs=vqs,
             fqs=fqs,
             names=names,
-            selection=[obj.query if isinstance(obj, Ref) else obj for obj in objs],
+            selection=[
+                v_proj[obj.query] if isinstance(obj, Ref) else obj for obj in objs
+            ],
         )
 
     @transaction()

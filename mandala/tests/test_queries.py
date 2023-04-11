@@ -184,8 +184,8 @@ def test_queries_visualization():
         h(z=a, w=b)
         x, y, z = f(x=d, y=e)
         x.named("x"), y.named("y"), z.named("z")
-        storage.draw(a, b, c, d, e, traverse="both", show_how="none")
-        storage.print(a, b, c, d, e, traverse="both")
+        storage.draw_graph(a, b, c, d, e, traverse="both", show_how="none")
+        storage.print_graph(a, b, c, d, e, traverse="both")
 
 
 def test_queries_exceptions():
@@ -344,7 +344,7 @@ def test_generalized():
             nums = create_list(x)
             for i in [2, 4, 6, 8, 10]:
                 res = consume_list(nums[:i])
-    df = storage.similar(res)
+    df = storage.similar(res, context=True)
     assert df.shape[0] == 300
 
     with storage.query():
