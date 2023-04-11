@@ -1,10 +1,9 @@
 import pyarrow as pa
-from duckdb import DuckDBPyConnection as Connection
 
 from ..common_imports import *
 from ..core.config import Config, dump_output_name
 from ..core.sig import Signature
-from .rel_impls.utils import Transactable, transaction
+from .rel_impls.utils import Transactable, transaction, Connection
 from .rels import RelAdapter, serialize, SigAdapter
 from .remote_storage import RemoteStorage
 

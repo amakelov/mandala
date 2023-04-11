@@ -1,7 +1,14 @@
 from ...common_imports import *
+from ...core.config import Config
 from abc import ABC, abstractmethod
 import functools
-from duckdb import DuckDBPyConnection as Connection
+
+if Config.has_duckdb:
+    from duckdb import DuckDBPyConnection as Connection
+else:
+
+    class Connection:
+        pass
 
 
 class Transactable(ABC):

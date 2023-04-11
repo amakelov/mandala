@@ -4,7 +4,6 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 from pypika import Query, Table, Parameter
 from pypika.terms import LiteralValue
-from duckdb import DuckDBPyConnection as Connection
 
 from ..common_imports import *
 from ..core.config import Config, dump_output_name
@@ -17,7 +16,7 @@ from ..utils import serialize, deserialize, _rename_cols
 
 if Config.has_duckdb:
     from .rel_impls.duckdb_impl import DuckDBRelStorage
-from .rel_impls.utils import Transactable, transaction
+from .rel_impls.utils import Transactable, transaction, Connection
 from .rel_impls.bases import RelStorage
 
 

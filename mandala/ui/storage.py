@@ -1,4 +1,3 @@
-from duckdb import DuckDBPyConnection as Connection
 import datetime
 from pypika import Query, Table
 import pyarrow.parquet as pq
@@ -22,7 +21,7 @@ from ..core.tps import Type, AnyType, ListType, DictType, SetType
 from ..core.sig import Signature
 from ..core.utils import get_uid, Hashing, OpKey
 
-from ..storages.rel_impls.utils import Transactable, transaction
+from ..storages.rel_impls.utils import Transactable, transaction, Connection
 from ..storages.kv import InMemoryStorage, MultiProcInMemoryStorage, KVStore
 
 if Config.has_duckdb:
