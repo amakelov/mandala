@@ -13,7 +13,7 @@
 
 # Computations that save, query and version themselves
 
-https://user-images.githubusercontent.com/1467702/230719928-1981bd7b-3dbd-4a5c-891e-4b45c3e51aba.mp4
+![tldr](https://user-images.githubusercontent.com/1467702/231244639-f318af0e-3993-4ad1-8822-e8d889003dc1.gif)
 
 <br>
 
