@@ -2,13 +2,14 @@
   <br>
     <img src="assets/logo-no-background.png" height=128 alt="logo" align="center">
   <br>
+<a href="https://amakelov.github.io/blog/pl/">Blog post</a> |
 <a href="#install">Install</a> |
+<a href="#testimonials">Testimonials</a> |
 <a href="#features">Features</a> |
 <a href="#video-walkthroughs">Demos</a> |
 <a href="#basic-usage">Usage</a> |
 <a href="#other-gotchas">Gotchas</a> |
-<a href="#tutorials">Tutorials</a> |
-<a href="https://amakelov.github.io/blog/pl/">Blog post</a> |
+<a href="#tutorials">Tutorials</a>
 </div>
 
 # Computations that save, query and version themselves
@@ -45,31 +46,44 @@ actually accessed the changed code are recomputed.
 pip install git+https://github.com/amakelov/mandala
 ```
 
+## Testimonials
+
+> "`mandala` addresses a core challenge in my notebook workflow: being able to
+> explore data with code, without having to worry about losing the results of
+> expensive calculations." - *Adam Jermyn, Member of Technical Staff, Anthropic*
+
+
 ## Video walkthroughs
-### Incrementally grow a project with memoization
+### Rapidly iterate on a project with memoization
 ![mem](https://user-images.githubusercontent.com/1467702/231246050-21855bb2-6ce0-43d6-b7c0-3e0ed2a68f28.gif)
 
-Decorate the functions you want to memoize with `@op`, and compose programs
-out of them by chaining their inputs and outputs using ordinary control flow and
-data structures. Every such program is **end-to-end memoized**, which 
-- turns it into an "imperative query interface" to its own results
-- makes it simple to iterate on a project by growing a single piece of code
-  without ever re-doing work
+Decorate the functions you want to memoize with `@op`, and compose programs out
+of them by chaining their inputs and outputs using ordinary **control flow** and
+**collections**. Every such program is **end-to-end memoized**:
+- it becomes an **imperative query interface** to its own results by
+  (quickly) re-executing the same code, or parts of it
+- it is **incrementally extensible** with new logic and parameters in-place,
+  which makes it both easy and efficient to interact with experiments
 
 ### Query by directly pattern-matching Python code
 ![query](https://user-images.githubusercontent.com/1467702/231246102-276d7ae9-3a7f-46f8-9899-ae9dcf4f0484.gif)
 
 Any computation in a `with storage.run():` block is also a
 **declarative query interface** to analogous computations in the entire storage:
-- for example, `storage.similar(x, y, ...)` returns a table of all values in the
-storage computed in the same way as `x, y, ...`, but possibly from different
-initial parameters.
-- queries propagate relationships through collections (list, dict and set),
-  where only the qualitative composition of the collection matters (e.g.,
-  matching to a list where each element is of the form `f(i)` regardless of the
-  length).
-- A more expressive and explicit declarative interface is available via the `with
-  storage.query():` context manager. For more on how this works, see [below](#explicit-declarative-queries-with-storagequery)
+- **get a table of all values with the same computational history**:
+`storage.similar(x, y, ...)` returns a table of all values in the storage that
+were computed in the same ways as `x, y, ...`, but possibly starting from
+different inputs
+- **query through collections**: queries propagate provenance from a collection
+  to its elements and vice-versa. This means you can query through operations
+  that aggregate many objects into one, or produce many objects from a fixed
+  number. 
+  - **NOTE**: a collection in a computation can pattern-match any collection in
+  the storage with the same *kinds* of elements (as given by their computational
+  history), but not necessarily in the same order or quantity. This ensures that
+  you don't only match to the specific computation you have, but all *analogous*
+  computations too.
+- **define queries explicitly**: for full control, use the `with storage.query():` context manager. For more on how this works, see [below](#explicit-declarative-queries-with-storagequery)
 
 ### Automatic per-call versioning and dependency tracking
 ![deps](https://user-images.githubusercontent.com/1467702/231246159-fc8996a1-0987-4cec-9f0d-f0408609886e.gif)
@@ -78,13 +92,14 @@ initial parameters.
 - **per-call dependency tracking**: automatically track the functions and global
 variables accessed by each memoized call, and alert you to changes in them, so
 you can (carefully) choose whether a change to a dependency requires
-recomputation of dependent calls
-- **content-addressable versions**: use the current state of each dependency in
-your codebase to automatically determine the currently compatible versions of
-each memoized function to use in computation and queries. In particular, this
-means that:
+recomputation of dependent calls (like bug fixes and changes to logic) or not
+(like refactoring, comments, and logging)
+- **the code determines all versions automatically**: use the current state of
+each dependency in your codebase to automatically determine the currently
+compatible versions of each memoized function to use in computation and queries.
+In particular, this means that:
   - **you can go "back in time"** and access the storage relative to an earlier
-  state of the code (or even branch away in a new direction like in `git`) by
+  state of the code (or even branch in a new direction like in `git`) by
   just restoring this state
   - **the code is the truth**: when in doubt about the meaning of a result, you
   can just look at the current code.
@@ -423,7 +438,7 @@ inefficient
     really need to update an object in-place, wrap the update in an `@op` so
     that you get instead a new `Ref` (with updated metadata) pointing to the
     same (changed) object, and discard the old `Ref`.
-    - if a function does not have a deterministic set of dependencies
+    - if a function does not have a **deterministic set of dependencies**
     it invokes for each given call, this may break the versioning system's
     invariants.
 - **avoid long (e.g. > 50) chains of calls in queries**: you should keep your
