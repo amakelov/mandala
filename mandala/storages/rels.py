@@ -973,16 +973,18 @@ class RelAdapter(Transactable):
         conn: Optional[Connection] = None,
     ) -> None:
         self.obj_sets(vrefs={uid: value}, shallow=shallow, conn=conn)
-    
+
     @transaction()
     def obj_set_causal(
         self,
         full_uid: str,
         conn: Optional[Connection] = None,
     ) -> None:
-        self.rel_storage.upsert(relation=Config.causal_vref_table, 
-                                ta=pd.DataFrame({Config.full_uid_col: [full_uid]}),
-                                conn=conn)
+        self.rel_storage.upsert(
+            relation=Config.causal_vref_table,
+            ta=pd.DataFrame({Config.full_uid_col: [full_uid]}),
+            conn=conn,
+        )
 
     @transaction()
     def obj_sets(
