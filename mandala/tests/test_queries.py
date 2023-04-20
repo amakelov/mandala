@@ -357,3 +357,24 @@ def test_generalized():
         res = consume_list(nums=a1)
         result = storage.df(idx0, x, nums, a0, a1, res)
         assert result.shape[0] == 50
+
+
+def test_defaults():
+    storage = Storage()
+
+    @op
+    def inc(x: int) -> int:
+        return x + 1
+
+    with storage.run():
+        z = inc(23)
+
+    @op
+    def inc(x: int, amount: int = 1) -> int:
+        return x + amount
+
+    with storage.run():
+        z = inc(23, 10)
+
+    df = storage.similar(z)
+    assert df.shape[0] == 2
