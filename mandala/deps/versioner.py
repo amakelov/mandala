@@ -75,6 +75,27 @@ class Versioner:
         ]
         self.df = pd.DataFrame(columns=columns)
 
+    def get_version_ids(
+        self,
+        pre_call_uid: str,
+        tracer_option: Optional[TracerABC],
+        is_recompute: bool,
+    ) -> Tuple[Optional[str], Optional[str]]:
+        """
+        Get the content and semantic IDs for the version corresponding to the
+        given pre-call uid.
+        """
+        assert tracer_option is not None
+        version = self.process_trace(
+            graph=tracer_option.graph,
+            pre_call_uid=pre_call_uid,
+            outputs=None,
+            is_recompute=is_recompute,
+        )
+        content_version = version.content_version
+        semantic_version = version.semantic_version
+        return content_version, semantic_version
+
     def update_global_topology(self, graph: DependencyGraph):
         for node in graph.nodes.values():
             if isinstance(node, (CallableNode, GlobalVarNode)):

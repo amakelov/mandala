@@ -162,6 +162,7 @@ class MODES:
     run = "run"
     query = "query"
     batch = "batch"
+    noop = "noop"
     define = "define"
     delete = "delete"
 

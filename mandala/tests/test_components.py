@@ -352,11 +352,11 @@ def test_get():
     storage.rel_adapter.mattach(vrefs=[factorizations_shallow.obj[0]])
     assert unwrap(factorizations_shallow.obj[0]) == [42]
 
-    result, call, wrapped_inputs = storage.call_run(
-        func_op=get_factorizations.func_op,
-        inputs={"n": 42},
-        _call_depth=0,
-    )
+    # result, call, wrapped_inputs = storage.call_run(
+    #     func_op=get_factorizations.func_op,
+    #     inputs={"n": 42},
+    #     _call_depth=0,
+    # )
 
 
 def test_persistent():

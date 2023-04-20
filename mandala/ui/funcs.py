@@ -2,13 +2,13 @@ from functools import wraps
 from ..common_imports import *
 from ..core.model import FuncOp, TransientObj, Call
 from ..core.utils import unwrap_decorators
-from ..core.sig import Signature
+from ..core.sig import Signature, _postprocess_outputs
 from ..core.tps import AnyType
 from ..queries.weaver import ValQuery, qwrap, call_query
 from ..deps.tracers.dec_impl import DecTracer
 
 from . import contexts
-from .utils import wrap_inputs, bind_inputs, format_as_outputs, MODES
+from .utils import bind_inputs, format_as_outputs, MODES, wrap_atom
 
 
 def Q(pattern: Optional[Any] = None) -> "pattern":
@@ -87,7 +87,6 @@ class FuncInterface:
             raise RuntimeError(
                 "This function has been invalidated due to a change in the signature, and cannot be called"
             )
-        # if not self.func_op.sig.has_internal_data:
         # synchronize if necessary
         storage.synchronize(self)
         # synchronize(func=self, storage=context.storage)
@@ -95,109 +94,73 @@ class FuncInterface:
         mode = context.mode
         return inputs, mode, storage, context
 
-    def __call__(self, *args, **kwargs) -> Union[None, Any, Tuple[Any]]:
-        logger.debug(f"Calling {self.func_op.sig.ui_name}")
-        context = contexts.GlobalContext.current
-        if context is None:
-            # mandala is completely disabled when not in a context
-            return self.func_op.func(*args, **kwargs)
-        inputs, mode, storage, context = self._preprocess_call(*args, **kwargs)
-        if mode == MODES.run:
-            if self.executor == "python":
-                context._call_depth += 1
-                outputs, call, wrapped_inputs = storage.call_run(
-                    func_op=self.func_op,
-                    inputs=inputs,
-                    allow_calls=context.allow_calls,
-                    debug_calls=context.debug_calls,
-                    recompute_transient=context.recompute_transient,
-                    lazy=context.lazy,
-                    _call_depth=context._call_depth,
-                    _code_state=context._code_state,
-                    _versioner=context._cached_versioner,
-                )
-                sig = self.func_op.sig
-                context._call_uids[(sig.internal_name, sig.version)].append(call.uid)
-                context._call_depth -= 1
-                if context._attach_call_to_outputs:
-                    for output in outputs:
-                        output._call = call.detached()
-
-                return format_as_outputs(outputs=outputs)
-            # elif self.executor == 'asyncio' or inspect.iscoroutinefunction(self.func_op.func):
-            elif self.executor == "dask":
-                assert (
-                    not storage.rel_storage.in_memory
-                ), "Dask executor only works with a persistent storage"
-
-                def daskop_f(*args, __data__, **kwargs):
-                    call_cache, obj_cache, db_path = __data__
-                    temp_storage = Storage(db_path=db_path, _read_only=True)
-                    temp_storage.call_cache = call_cache
-                    temp_storage.obj_cache = obj_cache
-                    inputs = bind_inputs(
-                        func_op=self.func_op, args=args, kwargs=kwargs, mode=MODES.run
-                    )
-                    outputs, _ = temp_storage.call_run(
-                        func_op=self.func_op, inputs=inputs, mode=mode
-                    )
-                    return format_as_outputs(outputs=outputs)
-
-                __data__ = (
-                    storage.call_cache_by_causal,
-                    storage.obj_cache,
-                    storage.db_path,
-                )
-                nout = self.func_op.sig.n_outputs
-                return delayed(daskop_f, nout=nout)(*args, __data__=__data__, **kwargs)
+    def call(self, args, kwargs) -> Tuple[Union[None, Any, Tuple[Any]], Optional[Call]]:
+        # low-level API for more control over internal machinery
+        r = runner.Runner(context=contexts.GlobalContext.current, func_op=self.func_op)
+        # inputs, mode, storage, context = self._preprocess_call(*args,
+        # **kwargs)
+        if r.storage is not None:
+            r.storage.synchronize(self)
+        if r.mode == MODES.run:
+            func_op = r.func_op
+            r.preprocess(args, kwargs)
+            if r.must_execute:
+                r.pre_execute(conn=None)
+                if r.tracer_option is not None:
+                    tracer = r.tracer_option
+                    with tracer:
+                        if isinstance(tracer, DecTracer):
+                            node = tracer.register_call(func=func_op.func)
+                        result = func_op.func(**r.func_inputs)
+                        if isinstance(tracer, DecTracer):
+                            tracer.register_return(node=node)
+                else:
+                    result = func_op.func(**r.func_inputs)
+                outputs = _postprocess_outputs(sig=func_op.sig, result=result)
+                call = r.post_execute(outputs=outputs)
             else:
-                raise NotImplementedError()
-        elif mode == MODES.query:
-            return format_as_outputs(
-                outputs=call_query(func_op=self.func_op, inputs=inputs)
-            )
-        elif mode == MODES.batch:
-            assert self.executor == "python"
-            wrapped_inputs = wrap_inputs(inputs)
-            outputs, call_struct = storage.call_batch(
-                func_op=self.func_op, inputs=wrapped_inputs
-            )
-            context._call_structs.append(call_struct)
-            return format_as_outputs(outputs=outputs)
-        else:
-            raise ValueError()
+                call = r.load_call(conn=None)
+            return r.postprocess(call=call), call
+        return r.process_other_modes(args, kwargs), None
+
+    def __call__(self, *args, **kwargs) -> Union[None, Any, Tuple[Any]]:
+        return self.call(args, kwargs)[0]
 
 
-class AsyncioFuncInterface(FuncInterface):
+class AsyncFuncInterface(FuncInterface):
+    async def call(
+        self, args, kwargs
+    ) -> Tuple[Union[None, Any, Tuple[Any]], Optional[Call]]:
+        # low-level API for more control over internal machinery
+        r = runner.Runner(context=contexts.GlobalContext.current, func_op=self.func_op)
+        # inputs, mode, storage, context = self._preprocess_call(*args,
+        # **kwargs)
+        if r.storage is not None:
+            r.storage.synchronize(self)
+        if r.mode == MODES.run:
+            func_op = r.func_op
+            r.preprocess(args, kwargs)
+            if r.must_execute:
+                r.pre_execute(conn=None)
+                if r.tracer_option is not None:
+                    tracer = r.tracer_option
+                    with tracer:
+                        if isinstance(tracer, DecTracer):
+                            node = tracer.register_call(func=func_op.func)
+                        result = await func_op.func(**r.func_inputs)
+                        if isinstance(tracer, DecTracer):
+                            tracer.register_return(node=node)
+                else:
+                    result = await func_op.func(**r.func_inputs)
+                outputs = _postprocess_outputs(sig=func_op.sig, result=result)
+                call = r.post_execute(outputs=outputs)
+            else:
+                call = r.load_call(conn=None)
+            return r.postprocess(call=call), call
+        return r.process_other_modes(args, kwargs), None
+
     async def __call__(self, *args, **kwargs) -> Union[None, Any, Tuple[Any]]:
-        context = contexts.GlobalContext.current
-        if context is None:
-            # mandala is completely disabled when not in a context
-            return self.func_op.func(*args, **kwargs)
-        inputs, mode, storage, context = self._preprocess_call(*args, **kwargs)
-        if mode == MODES.run:
-
-            async def async_f(*args, __data__, **kwargs):
-                call_cache, obj_cache, db_path = __data__
-                temp_storage = Storage(db_path=db_path, _read_only=True)
-                temp_storage.call_cache = call_cache
-                temp_storage.obj_cache = obj_cache
-                inputs = bind_inputs(
-                    func_op=self.func_op, args=args, kwargs=kwargs, mode=MODES.run
-                )
-                outputs, _ = await temp_storage.call_run_async(
-                    func_op=self.func_op, inputs=inputs
-                )
-                return format_as_outputs(outputs=outputs)
-
-            __data__ = (
-                storage.call_cache_by_causal,
-                storage.obj_cache,
-                storage.db_path,
-            )
-            return await async_f(*args, __data__=__data__, **kwargs)
-        else:
-            return super().__call__(*args, **kwargs)
+        return (await self.call(args, kwargs))[0]
 
 
 class FuncDecorator:
@@ -218,7 +181,7 @@ class FuncDecorator:
             is_super=self.kwargs.get("is_super", False),
         )
         if inspect.iscoroutinefunction(func):
-            InterfaceCls = AsyncioFuncInterface
+            InterfaceCls = AsyncFuncInterface
         else:
             InterfaceCls = FuncInterface
         return wraps(func)(
@@ -241,7 +204,7 @@ def op(
         # func = unwrap_decorators(func, strict=True)
         func_op = FuncOp(func=func, n_outputs_override=nout)
         if inspect.iscoroutinefunction(func):
-            return wraps(func)(AsyncioFuncInterface(func_op=func_op))
+            return wraps(func)(AsyncFuncInterface(func_op=func_op))
         else:
             return wraps(func)(FuncInterface(func_op=func_op))
     else:
@@ -266,7 +229,7 @@ def superop(
         # is_super=True)
         func_op = FuncOp(func=func, is_super=True)
         if inspect.iscoroutinefunction(func):
-            return AsyncioFuncInterface(func_op=func_op)
+            return AsyncFuncInterface(func_op=func_op)
         else:
             return FuncInterface(func_op=func_op)
     else:
@@ -277,3 +240,4 @@ def superop(
 
 
 from . import storage
+from . import runner

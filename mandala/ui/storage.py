@@ -1,7 +1,10 @@
 import datetime
-from pypika import Query, Table
-import pyarrow.parquet as pq
 from typing import Literal
+
+from .viz import _get_colorized_diff
+from .utils import MODES, debug_call, get_terminal_data, check_determinism
+from .remote_utils import RemoteManager
+from . import contexts
 
 from ..common_imports import *
 from ..core.config import Config
@@ -19,7 +22,7 @@ from ..core.wrapping import (
 )
 from ..core.tps import Type, AnyType, ListType, DictType, SetType
 from ..core.sig import Signature
-from ..core.utils import get_uid, Hashing, OpKey
+from ..core.utils import get_uid, OpKey
 
 from ..storages.rel_impls.utils import Transactable, transaction, Connection
 from ..storages.kv import InMemoryStorage, MultiProcInMemoryStorage, KVStore
@@ -30,14 +33,12 @@ from ..storages.rel_impls.sqlite_impl import SQLiteRelStorage
 from ..storages.rels import RelAdapter, RemoteEventLogEntry, VersionAdapter
 from ..storages.sigs import SigSyncer
 from ..storages.remote_storage import RemoteStorage
-from ..deps.tracers import TracerABC, SysTracer, DecTracer
+from ..deps.tracers import TracerABC, DecTracer
 from ..deps.versioner import Versioner, CodeState
 from ..deps.utils import get_dep_key_from_func, extract_func_obj
 from ..deps.model import DepKey, TerminalData
-from .viz import write_output, _get_colorized_diff
-from .utils import MODES, debug_call
 
-from ..queries.workflow import CallStruct, Workflow
+from ..queries.workflow import CallStruct
 from ..queries.weaver import (
     ValQuery,
     FuncQuery,
@@ -45,22 +46,13 @@ from ..queries.weaver import (
     StructOrientations,
 )
 from ..queries.viz import (
-    graph_to_dot,
     visualize_graph,
     print_graph,
     get_names,
     extract_names_from_scope,
 )
 from ..queries.main import Querier
-from ..queries.graphs import get_canonical_order, get_deps, InducedSubgraph
-
-
-if Config.has_rich:
-    from rich.panel import Panel
-    from rich.syntax import Syntax
-
-
-from . import contexts
+from ..queries.graphs import get_canonical_order, InducedSubgraph
 
 
 class Storage(Transactable):
@@ -173,6 +165,17 @@ class Storage(Transactable):
                 self.version_adapter.dump_state(state=versioner)
         else:
             self._versioned = False
+
+        if root is not None:
+            self.remote_manager = RemoteManager(
+                rel_adapter=self.rel_adapter,
+                sig_adapter=self.sig_adapter,
+                rel_storage=self.rel_storage,
+                sig_syncer=self.sig_syncer,
+                root=self.root,
+            )
+        else:
+            self.remote_manager = None
 
         # set up builtins
         for func_op in Builtins.OPS.values():
@@ -317,6 +320,39 @@ class Storage(Transactable):
         self.call_cache_by_causal.dirty_entries.clear()
 
     @transaction()
+    def eval_df(
+        self,
+        full_uids_df: pd.DataFrame,
+        drop_duplicates: bool = False,
+        values: Literal["objs", "refs", "uids", "lazy"] = "objs",
+        conn: Optional[Connection] = None,
+    ) -> pd.DataFrame:
+        uids_df = full_uids_df.applymap(lambda uid: uid.rsplit(".", 1)[0])
+        if values in ("objs", "refs"):
+            uids_to_collect = [
+                item for _, column in uids_df.items() for _, item in column.items()
+            ]
+            self.preload_objs(uids_to_collect, conn=conn)
+            if values == "objs":
+                result = uids_df.applymap(
+                    lambda uid: unwrap(self.obj_get(uid, conn=conn))
+                )
+            else:
+                result = uids_df.applymap(lambda uid: self.obj_get(uid, conn=conn))
+        elif values == "uids":
+            result = uids_df
+        elif values == "lazy":
+            result = uids_df.applymap(lambda uid: Ref.from_uid(uid=uid))
+        else:
+            raise ValueError(
+                f"Invalid value for `values`: {values}. Must be one of "
+                "['objs', 'refs', 'uids', 'lazy']"
+            )
+        if drop_duplicates:
+            result = result.drop_duplicates()
+        return result
+
+    @transaction()
     def get_table(
         self,
         func_interface: Union["funcs.FuncInterface", Any],
@@ -359,6 +395,10 @@ class Storage(Transactable):
     def synchronize(
         self, f: Union["funcs.FuncInterface", Any], conn: Optional[Connection] = None
     ):
+        if f._is_invalidated:
+            raise RuntimeError(
+                "This function has been invalidated due to a change in the signature, and cannot be called"
+            )
         if f._is_synchronized:
             if f._storage_id != id(self):
                 raise RuntimeError(
@@ -368,189 +408,6 @@ class Storage(Transactable):
         self.synchronize_op(func_op=f.func_op, conn=conn)
         f._is_synchronized = True
         f._storage_id = id(self)
-
-    ############################################################################
-    ### refactoring
-    ############################################################################
-    def _check_rename_precondition(self, func: "funcs.FuncInterface"):
-        """
-        In order to rename function data, the function must be synced with the
-        storage, and the storage must be clean
-        """
-        if not func._is_synchronized:
-            raise RuntimeError("Cannot rename while function is not synchronized.")
-        if not self.is_clean:
-            raise RuntimeError("Cannot rename while there is uncommited work.")
-
-    @transaction()
-    def rename_func(
-        self,
-        func: "funcs.FuncInterface",
-        new_name: str,
-        conn: Optional[Connection] = None,
-    ) -> Signature:
-        """
-        Rename a memoized function.
-
-        What happens here:
-            - check renaming preconditions
-            - check there is no name clash with the new name
-            - rename the memoization table
-            - update signature object
-            - invalidate the function (making it impossible to compute with it)
-        """
-        self._check_rename_precondition(func=func)
-        sig = self.sig_syncer.sync_rename_sig(
-            sig=func.func_op.sig, new_name=new_name, conn=conn
-        )
-        func.invalidate()
-        return sig
-
-    @transaction()
-    def rename_arg(
-        self,
-        func: "funcs.FuncInterface",
-        name: str,
-        new_name: str,
-        conn: Optional[Connection] = None,
-    ) -> Signature:
-        """
-        Rename memoized function argument.
-
-        What happens here:
-            - check renaming preconditions
-            - update signature object
-            - rename table
-            - invalidate the function (making it impossible to compute with it)
-        """
-        self._check_rename_precondition(func=func)
-        sig = self.sig_syncer.sync_rename_input(
-            sig=func.func_op.sig, input_name=name, new_input_name=new_name, conn=conn
-        )
-        func.invalidate()
-        return sig
-
-    ############################################################################
-    ### remote sync operations
-    ############################################################################
-    @transaction()
-    def bundle_to_remote(
-        self, conn: Optional[Connection] = None
-    ) -> RemoteEventLogEntry:
-        """
-        Collect the new calls according to the event log, and pack them into a
-        dict of binary blobs to be sent off to the remote server.
-
-        NOTE: this also renames tables and columns to their immutable internal
-        names.
-        """
-        # Bundle event log and referenced calls into tables.
-        event_log_df = self.rel_adapter.get_event_log(conn=conn)
-        tables_with_changes = {}
-        table_names_with_changes = event_log_df["table"].unique()
-
-        event_log_table = Table(self.rel_adapter.EVENT_LOG_TABLE)
-        for table_name in table_names_with_changes:
-            table = Table(table_name)
-            tables_with_changes[table_name] = self.rel_storage.execute_arrow(
-                query=Query.from_(table)
-                .join(event_log_table)
-                .on(table[Config.uid_col] == event_log_table[Config.uid_col])
-                .select(table.star),
-                conn=conn,
-            )
-        # pass to internal names
-        tables_with_changes = self.sig_adapter.rename_tables(
-            tables_with_changes, to="internal", conn=conn
-        )
-        output = {}
-        for table_name, table in tables_with_changes.items():
-            buffer = io.BytesIO()
-            pq.write_table(table, buffer)
-            output[table_name] = buffer.getvalue()
-        return output
-
-    @transaction()
-    def apply_from_remote(
-        self, changes: List[RemoteEventLogEntry], conn: Optional[Connection] = None
-    ):
-        """
-        Apply new calls from the remote server.
-
-        NOTE: this also renames tables and columns to their UI names.
-        """
-        for raw_changeset in changes:
-            changeset_data = {}
-            for table_name, serialized_table in raw_changeset.items():
-                buffer = io.BytesIO(serialized_table)
-                deserialized_table = pq.read_table(buffer)
-                changeset_data[table_name] = deserialized_table
-            # pass to UI names
-            changeset_data = self.sig_adapter.rename_tables(
-                tables=changeset_data, to="ui", conn=conn
-            )
-            for table_name, deserialized_table in changeset_data.items():
-                self.rel_storage.upsert(table_name, deserialized_table, conn=conn)
-
-    @transaction()
-    def sync_from_remote(self, conn: Optional[Connection] = None):
-        """
-        Pull new calls from the remote server.
-
-        Note that the server's schema (i.e. signatures) can be a super-schema of
-        the local schema, but all local schema elements must be present in the
-        remote schema, because this is enforced by how schema updates are
-        performed.
-        """
-        if not isinstance(self.root, RemoteStorage):
-            return
-        # apply signature changes from the server first, because the new calls
-        # from the server may depend on the new schema.
-        self.sig_syncer.sync_from_remote(conn=conn)
-        # next, pull new calls
-        new_log_entries, timestamp = self.root.get_log_entries_since(
-            self.last_timestamp
-        )
-        self.apply_from_remote(new_log_entries, conn=conn)
-        self.last_timestamp = timestamp
-        logger.debug("synced from remote")
-
-    @transaction()
-    def sync_to_remote(self, conn: Optional[Connection] = None):
-        """
-        Send calls to the remote server.
-
-        As with `sync_from_remote`, the server may have a super-schema of the
-        local schema. The current signatures are first pulled and applied to the
-        local schema.
-        """
-        if not isinstance(self.root, RemoteStorage):
-            # todo: there should be a way to completely ignore the event log
-            # when there's no remote
-            self.rel_adapter.clear_event_log(conn=conn)
-        else:
-            # collect new work and send it to the server
-            changes = self.bundle_to_remote(conn=conn)
-            self.root.save_event_log_entry(changes)
-            # clear the event log only *after* the changes have been received
-            self.rel_adapter.clear_event_log(conn=conn)
-            logger.debug("synced to remote")
-
-    @transaction()
-    def sync_with_remote(self, conn: Optional[Connection] = None):
-        if not isinstance(self.root, RemoteStorage):
-            return
-        self.sync_to_remote(conn=conn)
-        self.sync_from_remote(conn=conn)
-
-    @property
-    def is_clean(self) -> bool:
-        """
-        Check that the storage has no uncommitted calls or objects.
-        """
-        return (
-            self.call_cache_by_causal.is_clean and self.obj_cache.is_clean
-        )  # and self.rel_adapter.event_log_is_clean()
 
     ############################################################################
     ### versioning
@@ -761,39 +618,6 @@ class Storage(Transactable):
                 result_ops[op_key] = set([v.semantic_version for v in versions])
                 result_deps[dep_key] = result_ops[op_key]
         return result_ops, result_deps
-
-    @transaction()
-    def eval_df(
-        self,
-        full_uids_df: pd.DataFrame,
-        drop_duplicates: bool = False,
-        values: Literal["objs", "refs", "uids", "lazy"] = "objs",
-        conn: Optional[Connection] = None,
-    ) -> pd.DataFrame:
-        uids_df = full_uids_df.applymap(lambda uid: uid.rsplit(".", 1)[0])
-        if values in ("objs", "refs"):
-            uids_to_collect = [
-                item for _, column in uids_df.items() for _, item in column.items()
-            ]
-            self.preload_objs(uids_to_collect, conn=conn)
-            if values == "objs":
-                result = uids_df.applymap(
-                    lambda uid: unwrap(self.obj_get(uid, conn=conn))
-                )
-            else:
-                result = uids_df.applymap(lambda uid: self.obj_get(uid, conn=conn))
-        elif values == "uids":
-            result = uids_df
-        elif values == "lazy":
-            result = uids_df.applymap(lambda uid: Ref.from_uid(uid=uid))
-        else:
-            raise ValueError(
-                f"Invalid value for `values`: {values}. Must be one of "
-                "['objs', 'refs', 'uids', 'lazy']"
-            )
-        if drop_duplicates:
-            result = result.drop_duplicates()
-        return result
 
     @transaction()
     def execute_query(
@@ -1087,252 +911,6 @@ class Storage(Transactable):
             return self.call_get(uid=call_uid, by_causal=False, lazy=lazy, conn=conn)
         return None
 
-    def get_version_ids(
-        self,
-        pre_call_uid: str,
-        tracer_option: Optional[TracerABC],
-        is_recompute: bool,
-        versioner: Optional[Versioner] = None,
-    ) -> Tuple[Optional[str], Optional[str]]:
-        if self.versioned:
-            assert tracer_option is not None
-            version = versioner.process_trace(
-                graph=tracer_option.graph,
-                pre_call_uid=pre_call_uid,
-                outputs=None,
-                is_recompute=is_recompute,
-            )
-            content_version = version.content_version
-            semantic_version = version.semantic_version
-        else:
-            content_version = None
-            semantic_version = None
-        return content_version, semantic_version
-
-    @transaction()
-    def call_run(
-        self,
-        func_op: FuncOp,
-        inputs: Dict[str, Union[Any, Ref]],
-        _call_depth: int,
-        recompute_transient: bool = False,
-        allow_calls: bool = True,
-        debug_calls: bool = False,
-        lazy: bool = False,
-        _collect_calls: bool = False,
-        _recurse: bool = False,
-        _call_buffer: Optional[List[Call]] = None,
-        _code_state: Optional[CodeState] = None,
-        _versioner: Optional[Versioner] = None,
-        conn: Optional[Connection] = None,
-    ) -> Tuple[List[Ref], Call, Dict[str, Ref]]:
-        linking_on = _call_depth == 1
-
-        if self.versioned:
-            suspended_trace_obj = _versioner.TracerCls.get_active_trace_obj()
-            _versioner.TracerCls.set_active_trace_obj(trace_obj=None)
-
-        wrapped_inputs, input_calls = wrap_inputs(
-            objs=inputs,
-            annotations=func_op.input_annotations,
-        )
-        if linking_on:
-            for input_call in input_calls:
-                input_call.link(
-                    orientation=StructOrientations.construct,
-                )
-        pre_call_uid = func_op.get_pre_call_uid(
-            input_uids={k: v.uid for k, v in wrapped_inputs.items()}
-        )
-        call_option = self.lookup_call(
-            func_op=func_op,
-            pre_call_uid=pre_call_uid,
-            input_uids={k: v.uid for k, v in wrapped_inputs.items()},
-            input_causal_uids={k: v.causal_uid for k, v in wrapped_inputs.items()},
-            conn=conn,
-            lazy=lazy,
-            code_state=_code_state,
-            versioner=_versioner,
-        )
-        tracer_option = _versioner.make_tracer() if self.versioned else None
-
-        # condition determining whether we will actually call the underlying function
-        must_execute = (
-            call_option is None
-            or (_recurse and func_op.is_super)
-            or (
-                call_option is not None
-                and call_option.transient
-                and recompute_transient
-            )
-        )
-        if must_execute:
-            is_recompute = (
-                call_option is not None
-                and call_option.transient
-                and recompute_transient
-            )
-            needs_input_values = (
-                call_option is None or call_option is not None and call_option.transient
-            )
-            pass_inputs_unwrapped = Config.autounwrap_inputs and not func_op.is_super
-            must_save = call_option is None
-            if not (_recurse and func_op.is_super) and not allow_calls:
-                raise ValueError(
-                    f"Call to {func_op.sig.ui_name} not found in call storage."
-                )
-            if needs_input_values:
-                self.rel_adapter.mattach(vrefs=list(wrapped_inputs.values()), conn=conn)
-                if any(
-                    contains_not_in_memory(ref=ref) for ref in wrapped_inputs.values()
-                ):
-                    msg = (
-                        "Cannot execute function whose inputs are transient values "
-                        "that are not in memory. "
-                        "Use `recompute_transient=True` to force recomputation of these inputs."
-                    )
-                    raise ValueError(msg)
-            if pass_inputs_unwrapped:
-                func_inputs = unwrap(obj=wrapped_inputs, through_collections=True)
-            else:
-                func_inputs = wrapped_inputs
-            outputs, tracer_option = func_op.compute(
-                inputs=func_inputs, tracer=tracer_option
-            )
-            if tracer_option is not None:
-                # check the trace against the code state hypothesis
-                _versioner.apply_state_hypothesis(
-                    hypothesis=_code_state, trace_result=tracer_option.graph.nodes
-                )
-                # update the global topology and code state
-                _versioner.update_global_topology(graph=tracer_option.graph)
-                _code_state.add_globals_from(graph=tracer_option.graph)
-
-            content_version, semantic_version = self.get_version_ids(
-                pre_call_uid=pre_call_uid,
-                tracer_option=tracer_option,
-                is_recompute=is_recompute,
-                versioner=_versioner,
-            )
-            call_uid = func_op.get_call_uid(
-                pre_call_uid=pre_call_uid, semantic_version=semantic_version
-            )
-            wrapped_outputs, output_calls = wrap_outputs(
-                objs=outputs,
-                annotations=func_op.output_annotations,
-            )
-            transient = any(contains_transient(ref) for ref in wrapped_outputs)
-            if is_recompute:
-                # check deterministic behavior
-                if call_option.semantic_version != semantic_version:
-                    raise ValueError(
-                        f"Detected non-deterministic dependencies for function "
-                        f"{func_op.sig.ui_name} after recomputation of transient values."
-                    )
-                if len(call_option.outputs) != len(wrapped_outputs):
-                    raise ValueError(
-                        f"Detected non-deterministic number of outputs for function "
-                        f"{func_op.sig.ui_name} after recomputation of transient values."
-                    )
-                if not all(
-                    v.uid == w.uid for v, w in zip(call_option.outputs, wrapped_outputs)
-                ):
-                    raise ValueError(
-                        f"Detected non-deterministic outputs for function "
-                        f"{func_op.sig.ui_name} after recomputation of transient values. "
-                        f"{[v.uid for v in call_option.outputs]} != {[w.uid for w in wrapped_outputs]}"
-                    )
-            if linking_on:
-                wrapped_outputs = [
-                    x.unlinked(keep_causal=True) for x in wrapped_outputs
-                ]
-            call = Call(
-                uid=call_uid,
-                func_op=func_op,
-                inputs=wrapped_inputs,
-                outputs=wrapped_outputs,
-                content_version=content_version,
-                semantic_version=semantic_version,
-                transient=transient,
-            )
-            for outp in wrapped_outputs:
-                decausify(ref=outp)  # for now, a "clean slate" approach
-            causify_outputs(refs=wrapped_outputs, call_causal_uid=call.causal_uid)
-            if linking_on:
-                call.link(orientation=None)
-                output_calls = [Builtins.collect_all_calls(x) for x in wrapped_outputs]
-                output_calls = [x for y in output_calls for x in y]
-                for output_call in output_calls:
-                    output_call.link(
-                        orientation=StructOrientations.destruct,
-                    )
-            if must_save:
-                for constituent_call in itertools.chain(
-                    [call], input_calls, output_calls
-                ):
-                    self.cache_call_and_objs(call=constituent_call)
-        else:
-            assert call_option is not None
-            if not lazy:
-                self.preload_objs([v.uid for v in call_option.outputs], conn=conn)
-                wrapped_outputs = [
-                    self.obj_get(v.uid, conn=conn) for v in call_option.outputs
-                ]
-            else:
-                wrapped_outputs = [v for v in call_option.outputs]
-            # recreate call
-            call = Call(
-                uid=call_option.uid,
-                func_op=func_op,
-                inputs=wrapped_inputs,
-                outputs=wrapped_outputs,
-                content_version=call_option.content_version,
-                semantic_version=call_option.semantic_version,
-                transient=call_option.transient,
-            )
-            if linking_on:
-                call.outputs = [x.unlinked(keep_causal=False) for x in call.outputs]
-                causify_outputs(refs=call.outputs, call_causal_uid=call.causal_uid)
-                if not lazy:
-                    output_calls = [Builtins.collect_all_calls(x) for x in call.outputs]
-                    output_calls = [x for y in output_calls for x in y]
-
-                else:
-                    output_calls = []
-                call.link(orientation=None)
-                for output_call in output_calls:
-                    output_call.link(
-                        orientation=StructOrientations.destruct,
-                    )
-            else:
-                causify_outputs(refs=call.outputs, call_causal_uid=call.causal_uid)
-            if call.causal_uid != call_option.causal_uid:
-                # this is a new call causally; must save it and its constituents
-                output_calls = [Builtins.collect_all_calls(x) for x in call.outputs]
-                output_calls = [x for y in output_calls for x in y]
-                for constituent_call in itertools.chain(
-                    input_calls, [call], output_calls
-                ):
-                    self.cache_call_and_objs(call=constituent_call)
-        if self.versioned and suspended_trace_obj is not None:
-            _versioner.TracerCls.set_active_trace_obj(trace_obj=suspended_trace_obj)
-            terminal_data = self._make_terminal_data(func_op=func_op, call=call)
-            # Tracer.leaf_signal(data=terminal_data)
-            _versioner.TracerCls.register_leaf_event(
-                trace_obj=suspended_trace_obj, data=terminal_data
-            )
-            # self.tracer_impl.suspended_tracer.register_leaf(data=terminal_data)
-        if debug_calls:
-            debug_call(
-                func_name=func_op.sig.ui_name,
-                memoized=call_option is not None,
-                wrapped_inputs=wrapped_inputs,
-                wrapped_outputs=wrapped_outputs,
-            )
-        if _collect_calls:
-            _call_buffer.append(call)
-        return call.outputs, call, wrapped_inputs
-
     def call_batch(
         self, func_op: FuncOp, inputs: Dict[str, Ref]
     ) -> Tuple[List[Ref], CallStruct]:
@@ -1377,9 +955,6 @@ class Storage(Transactable):
             **updates,
         )
 
-    def delete(self, **updates) -> contexts.Context:
-        return self._nest(storage=self, mode=MODES.delete, **updates)
-
     def query(self, **updates) -> contexts.Context:
         # spawn a context to define a query
         return self._nest(
@@ -1396,13 +971,92 @@ class Storage(Transactable):
             **updates,
         )
 
-    def define(self, **updates) -> contexts.Context:
-        # spawn a context to define ops. Needed for dependency tracking.
-        return self._nest(
-            storage=self,
-            mode=MODES.define,
-            **updates,
+    ############################################################################
+    ### remote sync operations
+    ############################################################################
+    @transaction()
+    def sync_from_remote(self, conn: Optional[Connection] = None):
+        if self.remote_manager is not None:
+            self.remote_manager.sync_from_remote(conn=conn)
+
+    @transaction()
+    def sync_to_remote(self, conn: Optional[Connection] = None):
+        if self.remote_manager is not None:
+            self.remote_manager.sync_to_remote(conn=conn)
+
+    @transaction()
+    def sync_with_remote(self, conn: Optional[Connection] = None):
+        if self.remote_manager is not None:
+            self.sync_to_remote(conn=conn)
+            self.sync_from_remote(conn=conn)
+
+    ############################################################################
+    ### refactoring
+    ############################################################################
+    @property
+    def is_clean(self) -> bool:
+        """
+        Check that the storage has no uncommitted calls or objects.
+        """
+        return self.call_cache_by_causal.is_clean and self.obj_cache.is_clean
+
+    def _check_rename_precondition(self, func: "funcs.FuncInterface"):
+        """
+        In order to rename function data, the function must be synced with the
+        storage, and the storage must be clean
+        """
+        if not func._is_synchronized:
+            raise RuntimeError("Cannot rename while function is not synchronized.")
+        if not self.is_clean:
+            raise RuntimeError("Cannot rename while there is uncommited work.")
+
+    @transaction()
+    def rename_func(
+        self,
+        func: "funcs.FuncInterface",
+        new_name: str,
+        conn: Optional[Connection] = None,
+    ) -> Signature:
+        """
+        Rename a memoized function.
+
+        What happens here:
+            - check renaming preconditions
+            - check there is no name clash with the new name
+            - rename the memoization table
+            - update signature object
+            - invalidate the function (making it impossible to compute with it)
+        """
+        self._check_rename_precondition(func=func)
+        sig = self.sig_syncer.sync_rename_sig(
+            sig=func.func_op.sig, new_name=new_name, conn=conn
         )
+        func.invalidate()
+        return sig
+
+    @transaction()
+    def rename_arg(
+        self,
+        func: "funcs.FuncInterface",
+        name: str,
+        new_name: str,
+        conn: Optional[Connection] = None,
+    ) -> Signature:
+        """
+        Rename memoized function argument.
+
+        What happens here:
+            - check renaming preconditions
+            - update signature object
+            - rename table
+            - invalidate the function (making it impossible to compute with it)
+        """
+        self._check_rename_precondition(func=func)
+        sig = self.sig_syncer.sync_rename_input(
+            sig=func.func_op.sig, input_name=name, new_input_name=new_name, conn=conn
+        )
+        func.invalidate()
+        return sig
 
 
 from . import funcs

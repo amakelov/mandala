@@ -503,7 +503,7 @@ class FuncOp:
         self,
         inputs: Dict[str, Any],
         tracer: Optional[TracerABC] = None,
-    ) -> Tuple[List[Any], Optional[TracerABC]]:
+    ) -> List[Any]:
         if tracer is not None:
             with tracer:
                 if isinstance(tracer, DecTracer):
@@ -513,7 +513,7 @@ class FuncOp:
                     tracer.register_return(node=node)
         else:
             result = self.func(**inputs)
-        return _postprocess_outputs(sig=self.sig, result=result), tracer
+        return _postprocess_outputs(sig=self.sig, result=result)
 
     @staticmethod
     def _from_data(

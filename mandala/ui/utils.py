@@ -1,12 +1,50 @@
 from ..common_imports import *
-from ..core.model import FuncOp, Ref, wrap_atom
+from ..core.model import FuncOp, Ref, wrap_atom, Call
 from ..core.wrapping import unwrap, causify_atom
 from ..core.config import Config, MODES
 from ..queries.weaver import ValQuery, qwrap, prepare_query
+from ..deps.model import TerminalData
+from ..deps.utils import get_dep_key_from_func
 from textwrap import shorten
 
 
 T = TypeVar("T")
+
+
+def check_determinism(
+    observed_semver: Optional[str],
+    stored_semver: Optional[str],
+    stored_output_uids: List[str],
+    observed_output_uids: List[str],
+    func_op: FuncOp,
+):
+    # check deterministic behavior
+    if stored_semver != observed_semver:
+        raise ValueError(
+            f"Detected non-deterministic dependencies for function "
+            f"{func_op.sig.ui_name} after recomputation of transient values."
+        )
+    if len(stored_output_uids) != len(observed_output_uids):
+        raise ValueError(
+            f"Detected non-deterministic number of outputs for function "
+            f"{func_op.sig.ui_name} after recomputation of transient values."
+        )
+    if observed_output_uids != stored_output_uids:
+        raise ValueError(
+            f"Detected non-deterministic outputs for function "
+            f"{func_op.sig.ui_name} after recomputation of transient values. "
+            f"{observed_output_uids} != {stored_output_uids}"
+        )
+
+
+def get_terminal_data(func_op: FuncOp, call: Call) -> TerminalData:
+    return TerminalData(
+        op_internal_name=func_op.sig.internal_name,
+        op_version=func_op.sig.version,
+        call_content_version=call.content_version,
+        call_semantic_version=call.semantic_version,
+        dep_key=get_dep_key_from_func(func=func_op.func),
+    )
 
 
 def wrap_ui(obj: T, recurse: bool = True) -> T:
@@ -26,15 +64,6 @@ def wrap_ui(obj: T, recurse: bool = True) -> T:
         res = wrap_atom(obj)
         causify_atom(ref=res)
         return res
-
-
-def wrap_inputs(inputs: Dict[str, Any]) -> Dict[str, Ref]:
-    # check if we allow implicit wrapping
-    if Config.autowrap_inputs:
-        return {k: wrap_atom(v) for k, v in inputs.items()}
-    else:
-        assert all(isinstance(v, Ref) for v in inputs.values())
-        return inputs
 
 
 def bind_inputs(args, kwargs, mode: str, func_op: FuncOp) -> Dict[str, Any]:

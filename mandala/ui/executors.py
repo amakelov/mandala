@@ -2,6 +2,7 @@ from ..common_imports import *
 from ..queries.workflow import Workflow
 from abc import ABC, abstractmethod
 from ..core.model import Call
+from ..core.config import MODES
 from ..core.wrapping import unwrap
 
 
@@ -24,11 +25,16 @@ class SimpleWorkflowExecutor(WorkflowExecutor):
                 )
                 assert all([not inp.is_delayed() for inp in inputs.values()])
                 inputs = unwrap(inputs)
-                vref_outputs, call, _ = storage.call_run(
-                    func_op=func_op,
-                    inputs=inputs,
-                    _call_depth=0,
-                )
+                fi = funcs.FuncInterface(func_op=func_op)
+                with storage.run():
+                    _, call = fi.call(args=tuple(), kwargs=inputs)
+                vref_outputs = call.outputs
+                # vref_outputs, call, _ = r.call(args=tuple(), kwargs=inputs, conn=None)
+                # vref_outputs, call, _ = storage.call_run(
+                #     func_op=func_op,
+                #     inputs=inputs,
+                #     _call_depth=0,
+                # )
                 # overwrite things
                 for output, vref_output in zip(outputs, vref_outputs):
                     output._obj = vref_output.obj
@@ -41,3 +47,6 @@ class SimpleWorkflowExecutor(WorkflowExecutor):
 
 
 from . import storage
+from . import runner
+from . import contexts
+from . import funcs
