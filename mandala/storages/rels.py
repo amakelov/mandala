@@ -426,6 +426,7 @@ class SigAdapter(Transactable):
             default_uid, _ = Ref.parse_full_uid(full_uid=full_default_uid)
             default_vref = ValueRef(uid=default_uid, obj=default_value, in_memory=True)
             self.rel_adapter.obj_set(uid=default_uid, value=default_vref, conn=conn)
+            self.rel_adapter.obj_set_causal(full_uid=full_default_uid, conn=conn)
         # update the outputs in the database, if this is allowed
         n_rows = self.rel_storage.get_count(table=new_sig.versioned_ui_name, conn=conn)
         if n_rows > 0 and n_outputs_new != n_outputs_old:
@@ -972,6 +973,16 @@ class RelAdapter(Transactable):
         conn: Optional[Connection] = None,
     ) -> None:
         self.obj_sets(vrefs={uid: value}, shallow=shallow, conn=conn)
+    
+    @transaction()
+    def obj_set_causal(
+        self,
+        full_uid: str,
+        conn: Optional[Connection] = None,
+    ) -> None:
+        self.rel_storage.upsert(relation=Config.causal_vref_table, 
+                                ta=pd.DataFrame({Config.full_uid_col: [full_uid]}),
+                                conn=conn)
 
     @transaction()
     def obj_sets(
