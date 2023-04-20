@@ -540,3 +540,14 @@ def test_batching_unit():
     all_data = storage.rel_storage.get_all_data()
     assert all_data[Config.vref_table].shape[0] == 2
     assert all_data[inc.func_op.sig.versioned_ui_name].shape[0] == 1
+
+
+def test_exclude_arg():
+    storage = Storage()
+
+    @op
+    def inc(x: int, __excluded__=False) -> int:
+        return x + 1
+
+    with storage.run():
+        y = inc(23)

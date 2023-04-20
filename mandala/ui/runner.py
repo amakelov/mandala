@@ -1,5 +1,4 @@
 from ..common_imports import *
-from ..core.wrapping import wrap_inputs
 from ..core.model import Call, Ref
 from ..core.sig import _postprocess_outputs
 from ..core.config import Config
