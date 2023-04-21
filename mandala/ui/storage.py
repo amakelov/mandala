@@ -2,22 +2,17 @@ import datetime
 from typing import Literal
 
 from .viz import _get_colorized_diff
-from .utils import MODES, debug_call, get_terminal_data, check_determinism
+from .utils import MODES
 from .remote_utils import RemoteManager
 from . import contexts
+from .context_cache import Cache
 
 from ..common_imports import *
 from ..core.config import Config
 from ..core.model import Ref, Call, FuncOp, ValueRef, Delayed
 from ..core.builtins_ import Builtins, ListRef, DictRef, SetRef
 from ..core.wrapping import (
-    wrap_inputs,
-    wrap_outputs,
-    causify_outputs,
-    decausify,
     unwrap,
-    contains_transient,
-    contains_not_in_memory,
     compare_dfs_as_relations,
 )
 from ..core.tps import Type, AnyType, ListType, DictType, SetType
@@ -25,15 +20,15 @@ from ..core.sig import Signature
 from ..core.utils import get_uid, OpKey
 
 from ..storages.rel_impls.utils import Transactable, transaction, Connection
-from ..storages.kv import InMemoryStorage, MultiProcInMemoryStorage, KVStore
+from ..storages.kv import InMemoryStorage, MultiProcInMemoryStorage, KVCache
 
 if Config.has_duckdb:
     from ..storages.rel_impls.duckdb_impl import DuckDBRelStorage
 from ..storages.rel_impls.sqlite_impl import SQLiteRelStorage
-from ..storages.rels import RelAdapter, RemoteEventLogEntry, VersionAdapter
+from ..storages.rels import RelAdapter, VersionAdapter
 from ..storages.sigs import SigSyncer
 from ..storages.remote_storage import RemoteStorage
-from ..deps.tracers import TracerABC, DecTracer
+from ..deps.tracers import DecTracer
 from ..deps.versioner import Versioner, CodeState
 from ..deps.utils import get_dep_key_from_func, extract_func_obj
 from ..deps.model import DepKey, TerminalData
@@ -43,7 +38,6 @@ from ..queries.weaver import (
     ValQuery,
     FuncQuery,
     traverse_all,
-    StructOrientations,
 )
 from ..queries.viz import (
     visualize_graph,
@@ -76,9 +70,7 @@ class Storage(Transactable):
         root: Optional[Union[Path, RemoteStorage]] = None,
         timestamp: Optional[datetime.datetime] = None,
         multiproc: bool = False,
-        evict_on_commit: bool = Config.evict_on_commit,
-        call_cache: Optional[KVStore] = None,
-        obj_cache: Optional[KVStore] = None,
+        evict_on_commit: bool = None,
         signatures: Optional[Dict[Tuple[str, int], Signature]] = None,
         _read_only: bool = False,
         ### dependency tracking config
@@ -89,16 +81,6 @@ class Storage(Transactable):
         tracer_impl: Optional[type] = None,
     ):
         self.root = root
-        if call_cache is None:
-            call_cache = MultiProcInMemoryStorage() if multiproc else InMemoryStorage()
-        call_cache_by_uid = (
-            MultiProcInMemoryStorage() if multiproc else InMemoryStorage()
-        )
-        self.call_cache_by_causal = call_cache  # by causal_uid
-        self.call_cache_by_uid = call_cache_by_uid  # by uid only for fast lookup
-        if obj_cache is None:
-            obj_cache = MultiProcInMemoryStorage() if multiproc else InMemoryStorage()
-        self.obj_cache = obj_cache
         # all objects (inputs and outputs to operations, defaults) are saved here
         # stores the memoization tables
         if db_path is None and Config._persistent_storage_testing:
@@ -113,7 +95,9 @@ class Storage(Transactable):
             ).resolve()
         self.db_path = db_path
         self.db_backend = db_backend
-        self.evict_on_commit = evict_on_commit
+        self.evict_on_commit = (
+            Config.evict_on_commit if evict_on_commit is None else evict_on_commit
+        )
         if Config.has_duckdb and db_backend == "duckdb":
             DBImplementation = DuckDBRelStorage
         else:
@@ -129,6 +113,9 @@ class Storage(Transactable):
             spillover_dir=Path(spillover_dir) if spillover_dir is not None else None,
             spillover_threshold_mb=spillover_threshold_mb,
         )
+
+        self.cache = Cache(rel_adapter=self.rel_adapter)
+
         # self.versions_adapter = VersionAdapter(rel_adapter=rel_adapter)
         self.sig_adapter = self.rel_adapter.sig_adapter
         self.sig_syncer = SigSyncer(sig_adapter=self.sig_adapter, root=self.root)
@@ -205,84 +192,6 @@ class Storage(Transactable):
     def _end_transaction(self, conn: Connection):
         return self.rel_storage._end_transaction(conn=conn)
 
-    ############################################################################
-    ### interacting with the caches and the database
-    ############################################################################
-    @transaction()
-    def call_exists(
-        self, uid: str, by_causal: bool, conn: Optional[Connection] = None
-    ) -> bool:
-        if by_causal:
-            return self.call_cache_by_causal.exists(
-                uid
-            ) or self.rel_adapter.call_exists(uid=uid, by_causal=True, conn=conn)
-        else:
-            return self.call_cache_by_uid.exists(uid) or self.rel_adapter.call_exists(
-                uid=uid, by_causal=False, conn=conn
-            )
-
-    @transaction()
-    def call_get(
-        self, uid: str, by_causal: bool, lazy: bool, conn: Optional[Connection] = None
-    ) -> Call:
-        if by_causal and self.call_cache_by_causal.exists(uid):
-            return self.call_cache_by_causal.get(uid)
-        elif not by_causal and self.call_cache_by_uid.exists(uid):
-            return self.call_cache_by_uid.get(uid)
-        else:
-            lazy_call = self.rel_adapter.call_get_lazy(
-                uid=uid, by_causal=by_causal, conn=conn
-            )
-            if not lazy:
-                # load the values of the inputs and outputs
-                inputs = {
-                    k: self.obj_get(v.uid, conn=conn)
-                    for k, v in lazy_call.inputs.items()
-                }
-                outputs = [self.obj_get(v.uid, conn=conn) for v in lazy_call.outputs]
-                call_without_outputs = lazy_call.set_input_values(inputs=inputs)
-                call = call_without_outputs.set_output_values(outputs=outputs)
-                return call
-            else:
-                return lazy_call
-
-    def cache_call_and_objs(self, call: Call) -> None:
-        for vref in itertools.chain(call.inputs.values(), call.outputs):
-            self.cache_obj(vref.uid, vref)
-        self.cache_call(causal_uid=call.causal_uid, call=call)
-
-    def cache_call(self, causal_uid: str, call: Call) -> None:
-        self.call_cache_by_causal.set(causal_uid, call)
-        self.call_cache_by_uid.set(call.uid, call)
-
-    @transaction()
-    def obj_get(self, obj_uid: str, conn: Optional[Connection] = None) -> Ref:
-        if self.obj_cache.exists(obj_uid):
-            return self.obj_cache.get(obj_uid)
-        return self.rel_adapter.obj_get(uid=obj_uid, conn=conn)
-
-    def cache_obj(self, obj_uid: str, vref: Ref) -> None:
-        vref = vref.unlinked(keep_causal=False)
-        self.obj_cache.set(obj_uid, vref)
-
-    @transaction()
-    def preload_objs(self, uids: List[str], conn: Optional[Connection] = None):
-        """
-        Put the objects with the given UIDs in the cache.
-        """
-        uids_not_in_cache = [uid for uid in uids if not self.obj_cache.exists(uid)]
-        for uid, vref in zip(
-            uids_not_in_cache,
-            self.rel_adapter.obj_gets(uids=uids_not_in_cache, conn=conn),
-        ):
-            self.obj_cache.set(k=uid, v=vref)
-
-    def evict_caches(self):
-        for k in self.call_cache_by_causal.keys():
-            self.call_cache_by_causal.delete(k=k)
-        for k in self.obj_cache.keys():
-            self.obj_cache.delete(k=k)
-
     @transaction()
     def commit(
         self,
@@ -293,31 +202,12 @@ class Storage(Transactable):
         """
         Flush calls and objs from the cache that haven't yet been written to the database.
         """
-        if calls is None:
-            new_objs = {
-                key: self.obj_cache.get(key) for key in self.obj_cache.dirty_entries
-            }
-            new_calls = [
-                self.call_cache_by_causal.get(key)
-                for key in self.call_cache_by_causal.dirty_entries
-            ]
-        else:
-            new_objs = {}
-            for call in calls:
-                for vref in itertools.chain(call.inputs.values(), call.outputs):
-                    new_objs[vref.uid] = vref
-            new_calls = calls
-        self.rel_adapter.obj_sets(new_objs, conn=conn)
-        self.rel_adapter.upsert_calls(new_calls, conn=conn)
-        if self.evict_on_commit:
-            self.evict_caches()
-
-        if versioner is not None:
-            self.version_adapter.dump_state(state=versioner, conn=conn)
-
-        # Remove dirty bits from cache.
-        self.obj_cache.dirty_entries.clear()
-        self.call_cache_by_causal.dirty_entries.clear()
+        self.cache.commit(
+            calls=calls,
+            versioner=versioner,
+            version_adapter=self.version_adapter,
+            conn=conn,
+        )
 
     @transaction()
     def eval_df(
@@ -332,13 +222,11 @@ class Storage(Transactable):
             uids_to_collect = [
                 item for _, column in uids_df.items() for _, item in column.items()
             ]
-            self.preload_objs(uids_to_collect, conn=conn)
+            self.cache.preload_objs(uids_to_collect, conn=conn)
             if values == "objs":
-                result = uids_df.applymap(
-                    lambda uid: unwrap(self.obj_get(uid, conn=conn))
-                )
+                result = uids_df.applymap(lambda uid: unwrap(self.cache.obj_get(uid)))
             else:
-                result = uids_df.applymap(lambda uid: self.obj_get(uid, conn=conn))
+                result = uids_df.applymap(lambda uid: self.cache.obj_get(uid))
         elif values == "uids":
             result = uids_df
         elif values == "lazy":
@@ -880,11 +768,14 @@ class Storage(Transactable):
         pre_call_uid: str,
         input_uids: Dict[str, str],
         input_causal_uids: Dict[str, str],
-        lazy: bool,
         code_state: Optional[CodeState] = None,
         versioner: Optional[Versioner] = None,
         conn: Optional[Connection] = None,
     ) -> Optional[Call]:
+        """
+        Return a *detached* call for the given function and inputs, if it
+        exists.
+        """
         if not self.versioned:
             semantic_version = None
         else:
@@ -902,13 +793,13 @@ class Storage(Transactable):
             input_causal_uids=input_causal_uids,
             semantic_version=semantic_version,
         )
-        if self.call_exists(uid=causal_uid, by_causal=True, conn=conn):
-            return self.call_get(uid=causal_uid, by_causal=True, lazy=lazy, conn=conn)
+        if self.cache.call_exists(uid=causal_uid, by_causal=True):
+            return self.cache.call_get(uid=causal_uid, by_causal=True, lazy=True)
         call_uid = func_op.get_call_uid(
             pre_call_uid=pre_call_uid, semantic_version=semantic_version
         )
-        if self.call_exists(uid=call_uid, by_causal=False, conn=conn):
-            return self.call_get(uid=call_uid, by_causal=False, lazy=lazy, conn=conn)
+        if self.cache.call_exists(uid=call_uid, by_causal=False):
+            return self.cache.call_get(uid=call_uid, by_causal=False, lazy=True)
         return None
 
     def call_batch(
@@ -998,7 +889,9 @@ class Storage(Transactable):
         """
         Check that the storage has no uncommitted calls or objects.
         """
-        return self.call_cache_by_causal.is_clean and self.obj_cache.is_clean
+        return (
+            self.cache.call_cache_by_causal.is_clean and self.cache.obj_cache.is_clean
+        )
 
     def _check_rename_precondition(self, func: "funcs.FuncInterface"):
         """

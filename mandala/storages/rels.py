@@ -7,9 +7,10 @@ from pypika.terms import LiteralValue
 
 from ..common_imports import *
 from ..core.config import Config, dump_output_name
-from ..core.model import Call, FuncOp, Ref, ValueRef
-from ..core.builtins_ import ListRef, DictRef, SetRef, Builtins
+from ..core.model import Call, FuncOp, Ref, ValueRef, collect_detached
+from ..core.builtins_ import ListRef, DictRef, SetRef, Builtins, StructRef
 from ..core.wrapping import unwrap
+from ..core.utils import get_fibers_as_lists
 from ..core.sig import Signature
 from ..deps.versioner import Versioner
 from ..utils import serialize, deserialize, _rename_cols
@@ -819,8 +820,8 @@ class RelAdapter(Transactable):
     @transaction()
     def upsert_calls(self, calls: List[Call], conn: Optional[Connection] = None):
         """
-        Upserts calls in the relational storage so that they will show up in
-        declarative queries.
+        Upserts *detached* calls in the relational storage so that they will
+        show up in declarative queries.
         """
         if len(calls) > 0:  # avoid dealing with empty dataframes
             ### upsert full ref uids
@@ -1066,6 +1067,7 @@ class RelAdapter(Transactable):
                 output = pd.concat([output, atoms_df])
             return output.set_index(Config.uid_col).loc[uids, "value"].tolist()
         elif depth is None:
+            print("THIS IS HAPPENING")
             results = [Ref.from_uid(uid=uid) for uid in uids]
             self.mattach(
                 vrefs=results, shallow=False, _attach_atoms=_attach_atoms, conn=conn
@@ -1102,45 +1104,21 @@ class RelAdapter(Transactable):
         Note that some objects may already be attached.
         """
         ### pass to the vrefs that need to be attached
-        detached_vrefs = []
-        for vref in vrefs:
-            if isinstance(vref, Ref) and not vref.in_memory:
-                detached_vrefs.append(vref)
-            elif isinstance(vref, ListRef) and vref.in_memory:
-                detached_vrefs.extend([elt for elt in vref.obj if not elt.in_memory])
-            elif isinstance(vref, DictRef) and vref.in_memory:
-                detached_vrefs.extend(
-                    [elt for elt in vref.obj.values() if not elt.in_memory]
-                )
-            elif isinstance(vref, SetRef) and vref.in_memory:
-                detached_vrefs.extend([elt for elt in vref.obj if not elt.in_memory])
-            else:
-                continue
+        detached_vrefs = collect_detached(refs=vrefs, include_transient=False)
         vrefs = detached_vrefs
         ### group the vrefs by uid
-        uids: List[str] = []
-        vrefs_by_uid: Dict[str, List[Ref]] = {}
-        for vref in vrefs:
-            uid = vref.uid
-            if uid not in vrefs_by_uid:
-                uids.append(uid)
-                vrefs_by_uid[uid] = [vref]
-            else:
-                vrefs_by_uid[uid].append(vref)
+        vrefs_by_uid = get_fibers_as_lists(mapping={vref: vref.uid for vref in vrefs})
+        unique_uids = list(vrefs_by_uid.keys())
         ### load one level of the unique vrefs
         vals = self.obj_gets(
-            uids=uids, depth=1, _attach_atoms=_attach_atoms, conn=conn
+            uids=unique_uids, depth=1, _attach_atoms=_attach_atoms, conn=conn
         )  #! this can be optimized
-        for i, uid in enumerate(uids):
+        print(vals)
+        for i, uid in enumerate(unique_uids):
             for obj in vrefs_by_uid[uid]:
                 if vals[i].in_memory:
                     obj.attach(reference=vals[i])
         if not shallow:
-            residues = [
-                elt
-                for vref in vals
-                if isinstance(vref, (ListRef, DictRef, SetRef))
-                for elt in vref.obj
-            ]
+            residues = collect_detached(refs=vals, include_transient=False)
             if len(residues) > 0:
                 self.mattach(vrefs=residues, shallow=False, conn=conn)

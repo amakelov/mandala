@@ -108,13 +108,21 @@ class Ref:
                 return
             assert context.storage is not None
             storage = context.storage
-            storage.rel_adapter.mattach(vrefs=[self], shallow=shallow)
+            storage.cache.mattach(vrefs=[self], shallow=shallow)
+            # storage.rel_adapter.mattach(vrefs=[self], shallow=shallow)
             causify_down(ref=self, start=self.causal_uid, stop_at_causal=False)
 
-    def detached(self) -> "Ref":
-        return self.__class__(uid=self.uid, obj=None, in_memory=False)
+    def detached(self, keep_causal: bool = True) -> "Ref":
+        res = self.__class__(uid=self.uid, obj=None, in_memory=False)
+        if keep_causal:
+            res.causal_uid = self.causal_uid
+        return res
 
     def unlinked(self, keep_causal: bool) -> "Ref":
+        """
+        Produce a copy unlinked from the computational graph that preserves the
+        `in_memory` status and all other properties.
+        """
         raise NotImplementedError
 
     @property
@@ -636,7 +644,28 @@ def wrap_atom(obj: Any, uid: Optional[str] = None) -> ValueRef:
         return ValueRef(uid=uid, obj=obj.obj, in_memory=True, transient=True)
 
 
-from .builtins_ import ListRef, DictRef, SetRef, Builtins
+def collect_detached(refs: Iterable[Ref], include_transient: bool) -> List[Ref]:
+    """
+    Recursively get all detached `Ref`s present in `refs`
+    """
+    detached_vrefs = []
+    for ref in refs:
+        if (
+            isinstance(ref, Ref)
+            and not ref.in_memory
+            and (include_transient or not ref.transient)
+        ):
+            detached_vrefs.append(ref)
+        elif isinstance(ref, StructRef) and ref.in_memory:
+            detached_vrefs.extend(
+                collect_detached(ref.children(), include_transient=include_transient)
+            )
+        else:
+            continue
+    return detached_vrefs
+
+
+from .builtins_ import ListRef, DictRef, SetRef, Builtins, StructRef
 from ..queries.weaver import ValQuery, StructOrientations, FuncQuery, prepare_query
 from ..ui.contexts import GlobalContext
 from .wrapping import causify_down, causify_atom

@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from ...common_imports import *
+from .utils import Connection
 import pyarrow as pa
 
 
@@ -38,7 +39,7 @@ class RelStorage(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    def upsert(self, name: str, df: pa.Table):
+    def upsert(self, relation: str, ta: pa.Table, conn: Optional[Connection] = None):
         """
         Upsert rows in a table based on index
         """

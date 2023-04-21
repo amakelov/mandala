@@ -144,16 +144,6 @@ def is_output_name(name: str) -> bool:
     )
 
 
-class Prov:
-    relname = "__provenance__"
-    call_uid = "call_uid"
-    op_name = "op_name"
-    op_version = "op_version"
-    vref_name = "vref_name"
-    vref_uid = "vref_uid"
-    is_input = "is_input"
-
-
 if Config.has_torch:
     import torch
 
@@ -166,4 +156,4 @@ class MODES:
     define = "define"
     delete = "delete"
 
-    all_ = (run, query, batch, define, delete)
+    all_ = (run, query, batch, noop, define, delete)

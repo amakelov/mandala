@@ -174,7 +174,7 @@ class ListRef(StructRef, Sequence):
         return len(self.obj)
 
 
-class DictRef(StructRef, Mapping):
+class DictRef(StructRef):  # don't inherit from Mapping because it's not hashable
     """
     Immutable string-keyed dict of Refs.
     """
@@ -245,7 +245,7 @@ class DictRef(StructRef, Mapping):
         return len(self.obj)
 
 
-class SetRef(StructRef, SetABC):
+class SetRef(StructRef):  # don't subclass from set, because it's not hashable
     """
     Immutable set of Refs.
     """

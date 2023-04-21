@@ -1,26 +1,19 @@
 from ..common_imports import *
 from ..core.model import Call, Ref
-from ..core.sig import _postprocess_outputs
 from ..core.config import Config
 from ..core.builtins_ import StructOrientations
-from .storage import Storage, FuncOp, Connection
+from .storage import FuncOp, Connection
 from .utils import bind_inputs, format_as_outputs, wrap_atom
 from .contexts import Context
 
 from ..queries.weaver import call_query
 
-import datetime
-from typing import Literal
-
-from .viz import _get_colorized_diff
 from .utils import MODES, debug_call, get_terminal_data, check_determinism
-from .remote_utils import RemoteManager
-from . import contexts
 
 from ..common_imports import *
 from ..core.config import Config
-from ..core.model import Ref, Call, FuncOp, ValueRef, Delayed
-from ..core.builtins_ import Builtins, ListRef, DictRef, SetRef
+from ..core.model import Ref, Call, FuncOp
+from ..core.builtins_ import Builtins
 from ..core.wrapping import (
     wrap_inputs,
     wrap_outputs,
@@ -29,41 +22,14 @@ from ..core.wrapping import (
     unwrap,
     contains_transient,
     contains_not_in_memory,
-    compare_dfs_as_relations,
 )
-from ..core.tps import Type, AnyType, ListType, DictType, SetType
-from ..core.sig import Signature
-from ..core.utils import get_uid, OpKey
 
 from ..storages.rel_impls.utils import Transactable, transaction, Connection
-from ..storages.kv import InMemoryStorage, MultiProcInMemoryStorage, KVStore
 
-if Config.has_duckdb:
-    from ..storages.rel_impls.duckdb_impl import DuckDBRelStorage
-from ..storages.rel_impls.sqlite_impl import SQLiteRelStorage
-from ..storages.rels import RelAdapter, RemoteEventLogEntry, VersionAdapter
-from ..storages.sigs import SigSyncer
-from ..storages.remote_storage import RemoteStorage
-from ..deps.tracers import TracerABC, DecTracer
-from ..deps.versioner import Versioner, CodeState
-from ..deps.utils import get_dep_key_from_func, extract_func_obj
-from ..deps.model import DepKey, TerminalData
+from ..deps.tracers import TracerABC
+from ..deps.versioner import Versioner
 
-from ..queries.workflow import CallStruct
-from ..queries.weaver import (
-    ValQuery,
-    FuncQuery,
-    traverse_all,
-    StructOrientations,
-)
-from ..queries.viz import (
-    visualize_graph,
-    print_graph,
-    get_names,
-    extract_names_from_scope,
-)
-from ..queries.main import Querier
-from ..queries.graphs import get_canonical_order, InducedSubgraph
+from ..queries.weaver import StructOrientations
 
 
 class Runner(Transactable):  # this is terrible
@@ -157,7 +123,6 @@ class Runner(Transactable):  # this is terrible
             input_uids={k: v.uid for k, v in wrapped_inputs.items()},
             input_causal_uids={k: v.causal_uid for k, v in wrapped_inputs.items()},
             conn=conn,
-            lazy=self.context.lazy,
             code_state=self.code_state,
             versioner=self.versioner,
         )
@@ -203,9 +168,7 @@ class Runner(Transactable):  # this is terrible
                 f"Call to {func_op.sig.ui_name} not found in call storage."
             )
         if needs_input_values:
-            self.storage.rel_adapter.mattach(
-                vrefs=list(wrapped_inputs.values()), conn=conn
-            )
+            self.storage.cache.mattach(vrefs=list(wrapped_inputs.values()))
             if any(contains_not_in_memory(ref=ref) for ref in wrapped_inputs.values()):
                 msg = (
                     "Cannot execute function whose inputs are transient values "
@@ -283,7 +246,7 @@ class Runner(Transactable):  # this is terrible
                 )
         if self.must_save:
             for constituent_call in itertools.chain([call], input_calls, output_calls):
-                self.storage.cache_call_and_objs(call=constituent_call)
+                self.storage.cache.cache_call_and_objs(call=constituent_call)
         return call
 
     @transaction()
@@ -296,9 +259,11 @@ class Runner(Transactable):  # this is terrible
         assert call_option is not None
 
         if not self.context.lazy:
-            self.storage.preload_objs([v.uid for v in call_option.outputs], conn=conn)
+            self.storage.cache.preload_objs(
+                [v.uid for v in call_option.outputs], conn=conn
+            )
             wrapped_outputs = [
-                self.storage.obj_get(v.uid, conn=conn) for v in call_option.outputs
+                self.storage.cache.obj_get(v.uid) for v in call_option.outputs
             ]
         else:
             wrapped_outputs = [v for v in call_option.outputs]
@@ -333,7 +298,7 @@ class Runner(Transactable):  # this is terrible
             output_calls = [Builtins.collect_all_calls(x) for x in call.outputs]
             output_calls = [x for y in output_calls for x in y]
             for constituent_call in itertools.chain(input_calls, [call], output_calls):
-                self.storage.cache_call_and_objs(call=constituent_call)
+                self.storage.cache.cache_call_and_objs(call=constituent_call)
         return call
 
     def postprocess(

@@ -19,7 +19,7 @@ def test_unit():
     with storage.run(attach_call_to_outputs=True):
         a = f(42)
         call: Call = a._call
-    assert not a.in_memory
+    # assert not a.in_memory - no longer true b/c caching
     assert a.transient
     assert call.transient
 
@@ -49,6 +49,8 @@ def test_composition():
 
     with storage.run():
         a = f(23)
+
+    storage.cache.evict_all()
 
     try:
         with storage.run():

@@ -27,6 +27,17 @@ def parse_full_uid(full_uid: str) -> Tuple[str, str]:
     return uid, causal_uid
 
 
+_KT = TypeVar("_KT")
+_VT = TypeVar("_VT")
+
+
+def get_fibers_as_lists(mapping: Dict[_KT, _VT]) -> Dict[_VT, List[_KT]]:
+    fibers = defaultdict(list)
+    for vq, name in mapping.items():
+        fibers[name].append(vq)
+    return fibers
+
+
 def is_subdict(a: Dict, b: Dict) -> bool:
     """
     Check that all keys in `a` are in `b` with the same value.

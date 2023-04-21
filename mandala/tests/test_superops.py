@@ -62,6 +62,18 @@ def test_unit(storage):
         z = workflow(a=23, b=42, c=10)
         w = super_workflow(a=a, b=b)
 
+    with storage.run():
+        a = f(23, 42)
+        b = f(4, 8)
+        c = f(15, 16)
+        avg = mean([a, b, c])
+        sames = repeat(num=23, times=5)
+        elt = sames[3]
+        dict_avg = dictmean({"a": 23, "b": 42})
+        dct = make_dict(a=23, b=42)
+        z = workflow(a=23, b=42, c=10)
+        w = super_workflow(a=a, b=b)
+
 
 @pytest.mark.parametrize("storage", generate_storages())
 def test_mutual_recursion(storage):

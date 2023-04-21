@@ -165,7 +165,7 @@ def unwrap(obj: Union[T, Ref], through_collections: bool = True) -> T:
                 "Cannot unwrap a Ref with `in_memory=False` outside a context"
             )
         storage = GlobalContext.current.storage
-        storage.rel_adapter.mattach(vrefs=[obj])
+        storage.cache.mattach(vrefs=[obj])
     if isinstance(obj, ValueRef):
         return obj.obj
     elif isinstance(obj, StructRef):
