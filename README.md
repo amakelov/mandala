@@ -12,6 +12,8 @@
 <a href="#tutorials">Tutorials</a>
 </div>
 
+[![Gitter](https://img.shields.io/gitter/room/amakelov/mandala)](https://app.gitter.im/#/room/#mandala:gitter.im)
+
 # Computations that save, query and version themselves
 
 ![tldr](https://user-images.githubusercontent.com/1467702/231244639-f318af0e-3993-4ad1-8822-e8d889003dc1.gif)
