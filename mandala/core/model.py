@@ -165,6 +165,7 @@ class Ref:
 
 class ValueRef(Ref):
     def __init__(self, uid: str, obj: Any, in_memory: bool, transient: bool = False):
+        Config.init_counter += 1
         super().__init__(uid=uid, obj=obj, in_memory=in_memory, transient=transient)
 
     def dump(self) -> "ValueRef":

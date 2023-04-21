@@ -24,6 +24,21 @@ class Cache(Transactable):
         # uid -> unlinked ref without causal
         self.obj_cache = InMemoryStorage()
 
+    def mcache_call_and_objs(self, calls: List[Call]) -> None:
+        # a more efficient version of `cache_call_and_objs` for multiple calls
+        # that avoids calling `unlinked` multiple times on the same object,
+        # which could be expensive for large collections.
+        unique_vrefs = {}
+        unique_calls = {}
+        for call in calls:
+            for vref in itertools.chain(call.inputs.values(), call.outputs):
+                unique_vrefs[vref.uid] = vref
+            unique_calls[call.causal_uid] = call
+        for vref in unique_vrefs.values():
+            self.obj_cache[vref.uid] = vref.unlinked(keep_causal=False)
+        for call in unique_calls.values():
+            self.cache_call(causal_uid=call.causal_uid, call=call)
+
     def cache_call_and_objs(self, call: Call) -> None:
         for vref in itertools.chain(call.inputs.values(), call.outputs):
             self.obj_cache[vref.uid] = vref.unlinked(keep_causal=False)

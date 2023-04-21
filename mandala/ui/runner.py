@@ -245,8 +245,9 @@ class Runner(Transactable):  # this is terrible
                     orientation=StructOrientations.destruct,
                 )
         if self.must_save:
-            for constituent_call in itertools.chain([call], input_calls, output_calls):
-                self.storage.cache.cache_call_and_objs(call=constituent_call)
+            self.storage.cache.mcache_call_and_objs(
+                calls=[call] + input_calls + output_calls
+            )
         return call
 
     @transaction()
@@ -297,8 +298,9 @@ class Runner(Transactable):  # this is terrible
             # this is a new call causally; must save it and its constituents
             output_calls = [Builtins.collect_all_calls(x) for x in call.outputs]
             output_calls = [x for y in output_calls for x in y]
-            for constituent_call in itertools.chain(input_calls, [call], output_calls):
-                self.storage.cache.cache_call_and_objs(call=constituent_call)
+            self.storage.cache.mcache_call_and_objs(
+                calls=[call] + input_calls + output_calls
+            )
         return call
 
     def postprocess(
