@@ -5,7 +5,6 @@
 <a href="https://amakelov.github.io/blog/pl/">Blog post</a> |
 <a href="#install">Install</a> |
 <a href="#testimonials">Testimonials</a> |
-<a href="#features">Features</a> |
 <a href="#video-walkthroughs">Demos</a> |
 <a href="#basic-usage">Usage</a> |
 <a href="#other-gotchas">Gotchas</a> |
@@ -20,28 +19,28 @@
 
 <br>
 
-Your code and its execution traces contain enough information to save, query and
-version computations without extra boilerplate. [`mandala`](https://github.com/amakelov/mandala)
-is a persistent memoization cache on steroids that lets you tap into this
-information using a single decorator. It
-- turns Python programs - composed of function calls, collections and control
-flow - into interlinked, persistent data as they execute.
-- can be queried by directly pattern-matching against such programs, returning
-tables of values in the cache satisfying the computational relationships
-  of the program
-- tracks the dependencies of each memoized function call, automatically
-detecting when a change in the code may require recomputation.
+`mandala` is a framework for experiment tracking and [incremental
+computing](https://en.wikipedia.org/wiki/Incremental_computing) with a simple
+plain-Python interface. It automates away the pain of experiment data management
+(*did I run this already? what's in this file? where's the result of that
+computation?* ...) with the following mix of features:
+- **plain-Python**: decorate the functions whose calls you want to save, and
+  just write ordinary Python code using them - including data structures
+and control flow. The results are automatically accessible upon a
+re-run, queriable, and versioned. No need to save, load, or name anything by yourself
+- **never compute the same thing twice**: `mandala` saves the result of each
+  function call, and (hashes of) the inputs and the dependencies
+  (functions/globals) accessed by the call. If later the inputs and dependencies
+  are the same, it just loads the results from storage.
+- **query by pattern-matching directly to computational code**: your code
+  already knows the relationships between variables in your project! `mandala`
+  lets you produce tables relating any variables by [directly pointing to
+  the code establishing the wanted relationship between them](#query-by-directly-pattern-matching-python-code).
+- **fine-grained versioning that's under your control**: each function's source
+  code has its own "mini git repo" behind the scenes, and each call tracks the
+  versions of all dependencies that went into it. You can decide when a change
+  to a dependency (e.g. refactoring a function to improve readability) doesn't change its semantics (so calls dependent on it won't be recomputed). 
 
-## Features
-- **simple and Python-native**: just write computations in ordinary Python code -
-including data structures and control flow - and they're automatically queriable
-and versioned. 
-- **fine-grained versioning and incremental computation**: with per-call dependency tracking,
-changes in the code are automatically detected, and only the calls that
-actually accessed the changed code are recomputed.
-- **pattern-matching queries**: produce tables by directly pointing to
-  variables in Python code; the rows will contain all values in storage that
-  have the same functional relationships as the variables in the code.
 
 ## Install
 ```
