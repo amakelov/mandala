@@ -4,6 +4,7 @@
   <br>
 <a href="https://amakelov.github.io/blog/pl/">Blog post</a> |
 <a href="#install">Install</a> |
+<a href="#quickstart">Quickstart</a> |
 <a href="#testimonials">Testimonials</a> |
 <a href="#video-walkthroughs">Demos</a> |
 <a href="#basic-usage">Usage</a> |
@@ -104,6 +105,65 @@ In particular, this means that:
   just restoring this state
   - **the code is the truth**: when in doubt about the meaning of a result, you
   can just look at the current code.
+
+## Quickstart
+```python
+from mandala.imports import *
+
+# the storage saves calls and tracks dependencies, versions, etc.
+storage = Storage( 
+    deps_path='__main__' # track dependencies in current session
+    ) 
+
+@op # memoization (and more) decorator
+def increment(x: int) -> int: # always indicate number of outputs in return type
+  print('hi from increment!')
+  return x + 1
+
+increment(23) # function acts normally
+
+with storage.run(): # context manager that triggers `mandala`
+  y = increment(23) # now it's memoized w.r.t. this version of `increment`
+
+print(y) # result wrapped with metadata. 
+print(unwrap(y)) # `unwrap` gets the raw value
+
+with storage.run():
+  y = increment(23) # loads result from `storage`; doesn't execute `increment`
+
+@op # type-annotate data structures to store elts separately
+def average(nums: list) -> float: 
+  print('hi from average!')
+  return sum(nums) / len(nums)
+
+# memoized functions are designed to be composed!
+with storage.run(): 
+    # sliding averages of `increment`'s results over 3 elts
+    nums = [increment(i) for i in range(5)]
+    for i in range(3):
+        result = average(nums[i:i+3])
+
+# get a table of all values similar to `result` in `storage`,
+# i.e., computed as average([increment(something), ...])
+# read the message this prints out!
+print(storage.similar(result, context=True))
+
+# change implementation of `increment` and re-run
+# you'll be asked if the change requires recomputing dependencies (say yes)
+@op
+def increment(x: int) -> int:
+  print('hi from new increment!')
+  return x + 2
+
+with storage.run(): 
+    nums = [increment(i) for i in range(5)]
+    for i in range(3):
+        # only one call to `average` is executed!
+        result = average(nums[i:i+3])
+
+# query is ran against the *new* version of `increment`
+print(storage.similar(result, context=True))
+```
 
 ## Basic usage
 This is a quick guide on how to get up to speed with the core features and avoid
