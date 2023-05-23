@@ -8,7 +8,7 @@ from mandala.queries.viz import *
 OUTPUT_ROOT = Path(__file__).parent / "output/"
 
 
-def get_graph(vqs: Set[ValQuery]) -> InducedSubgraph:
+def get_graph(vqs: Set[ValNode]) -> InducedSubgraph:
     vqs, fqs = traverse_all(vqs=vqs, direction="both")
     return InducedSubgraph(vqs=vqs, fqs=fqs)
 

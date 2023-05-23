@@ -2,7 +2,7 @@ from collections import Counter
 from ..common_imports import *
 from ..core.utils import OpKey
 from ..core.config import parse_output_idx
-from .weaver import ValQuery, FuncQuery
+from .weaver import ValNode, CallNode
 from .compiler import Compiler
 from .solver import NaiveQueryEngine
 from .viz import get_names
@@ -16,8 +16,8 @@ from .graphs import (
 class Querier:
     @staticmethod
     def check_df(
-        vqs: Set[ValQuery],
-        fqs: Set[FuncQuery],
+        vqs: Set[ValNode],
+        fqs: Set[CallNode],
         df: pd.DataFrame,
         funcs: Dict[str, Callable],
     ):
@@ -47,9 +47,9 @@ class Querier:
 
     @staticmethod
     def execute_naive(
-        vqs: Set[ValQuery],
-        fqs: Set[FuncQuery],
-        selection: List[ValQuery],
+        vqs: Set[ValNode],
+        fqs: Set[CallNode],
+        selection: List[ValNode],
         memoization_tables: Dict[str, pd.DataFrame],
         filter_duplicates: bool,
         table_evaluator: Callable,
@@ -78,9 +78,9 @@ class Querier:
 
     @staticmethod
     def compile(
-        selection: List[ValQuery],
-        vqs: Set[ValQuery],
-        fqs: Set[FuncQuery],
+        selection: List[ValNode],
+        vqs: Set[ValNode],
+        fqs: Set[CallNode],
         version_constraints: Optional[Dict[OpKey, Optional[Set[str]]]],
         filter_duplicates: bool = True,
         call_uids: Optional[Dict[Tuple[str, int], List[str]]] = None,
@@ -99,7 +99,7 @@ class Querier:
 
     @staticmethod
     def add_fq_constraints(
-        fqs: Set[FuncQuery], call_uids: Optional[Dict[Tuple[str, int], List[str]]]
+        fqs: Set[CallNode], call_uids: Optional[Dict[Tuple[str, int], List[str]]]
     ):
         if call_uids is None:
             return
@@ -112,10 +112,10 @@ class Querier:
 
     @staticmethod
     def validate_query(
-        vqs: Set[ValQuery],
-        fqs: Set[FuncQuery],
-        selection: List[ValQuery],
-        names: Dict[ValQuery, str],
+        vqs: Set[ValNode],
+        fqs: Set[CallNode],
+        selection: List[ValNode],
+        names: Dict[ValNode, str],
     ):
         if not selection:  # empty selection
             raise ValueError("Empty selection")
@@ -130,10 +130,10 @@ class Querier:
 
     @staticmethod
     def prepare_projection_query(
-        vqs: Set[ValQuery],
-        fqs: Set[FuncQuery],
-        selection: List[ValQuery],
-        name_hints: Dict[ValQuery, str],
+        vqs: Set[ValNode],
+        fqs: Set[CallNode],
+        selection: List[ValNode],
+        name_hints: Dict[ValNode, str],
     ):
         graph = InducedSubgraph(vqs=vqs, fqs=fqs)
         v_map, f_map, _ = graph.project()
@@ -153,18 +153,16 @@ class Querier:
         }
         target_names = get_names(
             hints=target_name_hints,
-            canonical_order=[
-                vq for vq in canonical_topsort if isinstance(vq, ValQuery)
-            ],
+            canonical_order=[vq for vq in canonical_topsort if isinstance(vq, ValNode)],
         )
         assert set(target_names.keys()) == set(v_map.values())
         return v_map, f_map, target_selection, target_names
 
 
 def validate_projection(
-    source_selection: List[ValQuery],
-    v_map: Dict[ValQuery, ValQuery],
-    source_selection_names: Dict[ValQuery, str],
+    source_selection: List[ValNode],
+    v_map: Dict[ValNode, ValNode],
+    source_selection_names: Dict[ValNode, str],
 ):
     """
     Check that the selected nodes in the source project to distinct nodes in the

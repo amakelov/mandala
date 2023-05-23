@@ -2,7 +2,7 @@ from ..common_imports import *
 from ..core.model import FuncOp, Ref, wrap_atom, Call
 from ..core.wrapping import unwrap, causify_atom
 from ..core.config import Config, MODES
-from ..queries.weaver import ValQuery, qwrap, prepare_query
+from ..queries.weaver import ValNode, qwrap, prepare_query
 from ..deps.model import TerminalData
 from ..deps.utils import get_dep_key_from_func
 from textwrap import shorten
@@ -88,7 +88,7 @@ def bind_inputs(args, kwargs, mode: str, func_op: FuncOp) -> Dict[str, Any]:
 
 
 def format_as_outputs(
-    outputs: Union[List[Ref], List[ValQuery]]
+    outputs: Union[List[Ref], List[ValNode]]
 ) -> Union[None, Any, Tuple[Any]]:
     if len(outputs) == 0:
         return None

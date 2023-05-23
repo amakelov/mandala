@@ -146,7 +146,7 @@ class SQLiteRelStorage(RelStorage, Transactable):
         name: str,
         columns: List[Tuple[str, Optional[str]]],  # [(col name, type), ...]
         defaults: Dict[str, Any],  # {col name: default value, ...}
-        primary_key: Optional[str] = None,
+        primary_key: Optional[Union[str, List[str]]] = None,
         if_not_exists: bool = True,
         conn: Optional[sqlite3.Connection] = None,
     ):
@@ -171,7 +171,10 @@ class SQLiteRelStorage(RelStorage, Transactable):
         if if_not_exists:
             query = query.if_not_exists()
         if primary_key is not None:
-            query = query.primary_key(primary_key)
+            if isinstance(primary_key, str):
+                query = query.primary_key(primary_key)
+            else:
+                query = query.primary_key(*primary_key)
         conn.execute(str(query))
         logger.debug(
             f'Created table "{name}" with columns {[elt[0] for elt in columns]}'

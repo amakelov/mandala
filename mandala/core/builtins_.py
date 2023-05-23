@@ -119,8 +119,8 @@ class ListRef(StructRef, Sequence):
     ### list interface
     ############################################################################
     def __getitem__(
-        self, idx: Union[int, "ValQuery", Ref, slice]
-    ) -> Union[Ref, "ValQuery"]:
+        self, idx: Union[int, "ValNode", Ref, slice]
+    ) -> Union[Ref, "ValNode"]:
         self._auto_attach()
         if isinstance(idx, Ref):
             prepare_query(ref=idx, tp=AnyType())
@@ -128,7 +128,7 @@ class ListRef(StructRef, Sequence):
             res = self.obj[idx.obj].unlinked(keep_causal=True)
             res._query = res_query
             return res
-        elif isinstance(idx, ValQuery):
+        elif isinstance(idx, ValNode):
             res = BuiltinQueries.GetListItemQuery(lst=self.query, idx=idx)
             return res
         elif isinstance(idx, int):
@@ -215,7 +215,7 @@ class DictRef(StructRef):  # don't inherit from Mapping because it's not hashabl
     ############################################################################
     ### dict interface
     ############################################################################
-    def __getitem__(self, key: Union[str, "ValQuery", Ref]) -> Union[Ref, "ValQuery"]:
+    def __getitem__(self, key: Union[str, "ValNode", Ref]) -> Union[Ref, "ValNode"]:
         self._auto_attach()
         if isinstance(key, str):
             if (
@@ -230,7 +230,7 @@ class DictRef(StructRef):  # don't inherit from Mapping because it's not hashabl
             res = self.obj[key.obj].unlinked(keep_causal=True)
             res._query = res_query
             return res
-        elif isinstance(key, ValQuery):
+        elif isinstance(key, ValNode):
             res = BuiltinQueries.GetDictItemQuery(dct=self.query, key=key)
             return res
         else:
@@ -403,6 +403,6 @@ class Builtins:
             raise ValueError(f"Unexpected ref type: {type(ref)}")
 
 
-from ..queries.weaver import ValQuery, BuiltinQueries, prepare_query, StructOrientations
+from ..queries.weaver import ValNode, BuiltinQueries, prepare_query, StructOrientations
 from ..ui.contexts import GlobalContext
 from .wrapping import causify_atom

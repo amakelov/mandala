@@ -553,3 +553,70 @@ def test_exclude_arg():
 
     with storage.run():
         y = inc(23)
+
+
+def test_provenance():
+    storage = Storage()
+
+    @op
+    def inc(x: int) -> int:
+        return x + 1
+
+    with storage.run():
+        y = inc(23)
+    storage.prov(y)
+    storage.print_graph(y)
+
+    ### struct inputs
+    @op
+    def avg_list(nums: List[int]) -> float:
+        return sum(nums) / len(nums)
+
+    @op
+    def avg_dict(nums: Dict[str, int]) -> float:
+        return sum(nums.values()) / len(nums)
+
+    @op
+    def avg_set(nums: Set[int]) -> float:
+        return sum(nums) / len(nums)
+
+    with storage.run():
+        x = avg_list([1, 2, 3])
+        y = avg_dict({"a": 1, "b": 2, "c": 3})
+        z = avg_set({1, 2, 3})
+    for v in [x, y, z]:
+        storage.prov(v)
+        storage.print_graph(v)
+
+    ### struct outputs
+    @op
+    def get_list() -> List[int]:
+        return [1, 2, 3]
+
+    @op
+    def get_dict() -> Dict[str, int]:
+        return {"a": 1, "b": 2, "c": 3}
+
+    @op
+    def get_set() -> Set[int]:
+        return {1, 2, 3}
+
+    with storage.run():
+        x = get_list()
+        y = get_dict()
+        z = get_set()
+        a = x[0]
+        b = y["a"]
+    for v in [x, y, z, a, b]:
+        storage.prov(v)
+        storage.print_graph(v)
+
+    ### a mess of stuff
+    with storage.run():
+        a = get_list()
+        x = avg_list(a[:2])
+        y = avg_dict(get_dict())
+        z = avg_set(get_set())
+    for v in [a, x, y, z]:
+        storage.prov(v)
+        storage.print_graph(v)

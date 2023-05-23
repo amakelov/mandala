@@ -2,8 +2,9 @@ from typing import Literal
 from collections import deque
 from ..core.utils import Hashing, invert_dict
 from ..core.tps import StructType
+from ..core.config import Provenance
 from ..common_imports import *
-from .weaver import ValQuery, FuncQuery, Node
+from .weaver import ValNode, CallNode, Node
 
 
 def get_deps(nodes: Set[Node]) -> Set[Node]:
@@ -21,13 +22,13 @@ def get_deps(nodes: Set[Node]) -> Set[Node]:
 
 
 def prune(
-    vqs: Set[ValQuery], fqs: Set[FuncQuery], selection: List[ValQuery]
-) -> Tuple[Set[ValQuery], Set[FuncQuery]]:
+    vqs: Set[ValNode], fqs: Set[CallNode], selection: List[ValNode]
+) -> Tuple[Set[ValNode], Set[CallNode]]:
     # remove vqs of degree 1 that are not in selection
     pass
 
 
-def is_connected(val_queries: Set[ValQuery], func_queries: Set[FuncQuery]) -> bool:
+def is_connected(val_queries: Set[ValNode], func_queries: Set[CallNode]) -> bool:
     """
     Check if the graph defined by these objects is a connected graph
     """
@@ -70,7 +71,7 @@ def hash_groups(groups: Dict[str, Set[Node]]) -> str:
 
 
 class InducedSubgraph:
-    def __init__(self, vqs: Set[ValQuery], fqs: Set[FuncQuery]):
+    def __init__(self, vqs: Set[ValNode], fqs: Set[CallNode]):
         self.vqs = vqs
         self.fqs = fqs
         self.nodes: Set[Node] = vqs.union(fqs)
@@ -80,16 +81,16 @@ class InducedSubgraph:
     ) -> Set[Node]:
         return {n for n in node.neighbors(direction=direction) if n in self.nodes}
 
-    def fq_inputs(self, fq: FuncQuery) -> Dict[str, ValQuery]:
+    def fq_inputs(self, fq: CallNode) -> Dict[str, ValNode]:
         return {k: v for k, v in fq.inputs.items() if v in self.vqs}
 
-    def fq_outputs(self, fq: FuncQuery) -> Dict[str, ValQuery]:
+    def fq_outputs(self, fq: CallNode) -> Dict[str, ValNode]:
         return {k: v for k, v in fq.outputs.items() if v in self.vqs}
 
-    def consumers(self, vq: ValQuery) -> List[Tuple[str, FuncQuery]]:
+    def consumers(self, vq: ValNode) -> List[Tuple[str, CallNode]]:
         return [(k, v) for k, v in zip(vq.consumed_as, vq.consumers) if v in self.fqs]
 
-    def creators(self, vq: ValQuery) -> List[Tuple[str, FuncQuery]]:
+    def creators(self, vq: ValNode) -> List[Tuple[str, CallNode]]:
         return [(k, v) for k, v in zip(vq.created_as, vq.creators) if v in self.fqs]
 
     def topsort(
@@ -124,11 +125,11 @@ class InducedSubgraph:
                         S = sorted(S, key=lambda x: canonical_labels[x])
         return res, sources, sinks
 
-    def digest_neighbors_fq(self, fq: FuncQuery, colors: Dict[Node, str]) -> str:
+    def digest_neighbors_fq(self, fq: CallNode, colors: Dict[Node, str]) -> str:
         neighs = {**self.fq_inputs(fq=fq), **self.fq_outputs(fq=fq)}
         return Hashing.hash_dict({k: colors[v] for k, v in neighs.items()})
 
-    def digest_neighbors_vq(self, vq: ValQuery, colors: Dict[Node, str]) -> str:
+    def digest_neighbors_vq(self, vq: ValNode, colors: Dict[Node, str]) -> str:
         creator_labels = [
             Hashing.hash_list([k, colors[v]]) for k, v in self.creators(vq=vq)
         ]
@@ -162,9 +163,9 @@ class InducedSubgraph:
                 logger.info(f"Color refinement: iteration {iteration}")
             new_colors = {}
             for node in self.nodes:
-                if isinstance(node, FuncQuery):
+                if isinstance(node, CallNode):
                     neighbors_digest = self.digest_neighbors_fq(fq=node, colors=colors)
-                elif isinstance(node, ValQuery):
+                elif isinstance(node, ValNode):
                     neighbors_digest = self.digest_neighbors_vq(vq=node, colors=colors)
                 else:
                     raise Exception(f"Unknown node type {type(node)}")
@@ -182,20 +183,20 @@ class InducedSubgraph:
     def is_homomorphism(
         s: "InducedSubgraph",
         t: "InducedSubgraph",
-        v_map: Dict[ValQuery, ValQuery],
-        f_map: Dict[FuncQuery, FuncQuery],
+        v_map: Dict[ValNode, ValNode],
+        f_map: Dict[CallNode, CallNode],
     ) -> bool:
         for svq, tvq in v_map.items():
-            if not isinstance(svq, ValQuery):
+            if not isinstance(svq, ValNode):
                 return False
-            if not isinstance(tvq, ValQuery):
+            if not isinstance(tvq, ValNode):
                 return False
             if not svq.tp == tvq.tp:
                 return False
         for sfq, tfq in f_map.items():
-            if not isinstance(sfq, FuncQuery):
+            if not isinstance(sfq, CallNode):
                 return False
-            if not isinstance(tfq, FuncQuery):
+            if not isinstance(tfq, CallNode):
                 return False
             if not sfq.func_op.sig == tfq.func_op.sig:
                 return False
@@ -233,19 +234,19 @@ class InducedSubgraph:
 
     def get_projections(
         self, colors: Dict[Node, str]
-    ) -> Tuple[Dict[ValQuery, ValQuery], Dict[FuncQuery, FuncQuery]]:
+    ) -> Tuple[Dict[ValNode, ValNode], Dict[CallNode, CallNode]]:
         v_groups = defaultdict(list)
         f_groups = defaultdict(list)
         for node, color in colors.items():
-            if isinstance(node, ValQuery):
+            if isinstance(node, ValNode):
                 v_groups[color].append(node)
-            elif isinstance(node, FuncQuery):
+            elif isinstance(node, CallNode):
                 f_groups[color].append(node)
-        v_map: Dict[ValQuery, ValQuery] = {}
-        f_map: Dict[FuncQuery, FuncQuery] = {}
+        v_map: Dict[ValNode, ValNode] = {}
+        f_map: Dict[CallNode, CallNode] = {}
         for color, gp in v_groups.items():
             representative = gp[0]
-            prototype = ValQuery(
+            prototype = ValNode(
                 tp=representative.tp, constraint=representative.constraint
             )
             with_constraint = [vq for vq in gp if vq.constraint is not None]
@@ -255,7 +256,7 @@ class InducedSubgraph:
                 representative_constraint = with_constraint[0].constraint
             else:
                 raise ValueError("Multiple constraints for a single value")
-            prototype = ValQuery(
+            prototype = ValNode(
                 tp=representative.tp, constraint=representative_constraint
             )
             for fq in gp:
@@ -264,7 +265,7 @@ class InducedSubgraph:
             representative = gp[0]
             rep_inps = self.fq_inputs(fq=representative)
             rep_outps = self.fq_outputs(fq=representative)
-            prototype = FuncQuery.link(
+            prototype = CallNode.link(
                 inputs={k: v_map[vq] for k, vq in rep_inps.items()},
                 outputs={k: v_map[vq] for k, vq in rep_outps.items()},
                 func_op=representative.func_op,
@@ -279,7 +280,7 @@ class InducedSubgraph:
 
     def canonicalize(
         self, strict: bool = False, method: str = "wl1"
-    ) -> Tuple[Dict[ValQuery, str], Dict[FuncQuery, str], List[Node]]:
+    ) -> Tuple[Dict[ValNode, str], Dict[CallNode, str], List[Node]]:
         """
         Return canonical labels for each node, as well as a canonical topological sort.
         """
@@ -301,31 +302,31 @@ class InducedSubgraph:
 
     def project(
         self,
-    ) -> Tuple[Dict[ValQuery, ValQuery], Dict[FuncQuery, FuncQuery], List[Node]]:
+    ) -> Tuple[Dict[ValNode, ValNode], Dict[CallNode, CallNode], List[Node]]:
         v_colors, f_colors, topsort = self.canonicalize()
         colors: Dict[Node, str] = {**v_colors, **f_colors}
         return *self.get_projections(colors=colors), topsort
 
 
-def get_canonical_order(vqs: Set[ValQuery], fqs: Set[FuncQuery]) -> List[ValQuery]:
+def get_canonical_order(vqs: Set[ValNode], fqs: Set[CallNode]) -> List[ValNode]:
     g = InducedSubgraph(vqs=vqs, fqs=fqs)
     _, _, canonical_topsort = g.canonicalize()
-    return [vq for vq in canonical_topsort if isinstance(vq, ValQuery)]
+    return [vq for vq in canonical_topsort if isinstance(vq, ValNode)]
 
 
 def copy_subgraph(
-    vqs: Set[ValQuery], fqs: Set[FuncQuery]
-) -> Tuple[Dict[ValQuery, ValQuery], Dict[FuncQuery, FuncQuery]]:
+    vqs: Set[ValNode], fqs: Set[CallNode]
+) -> Tuple[Dict[ValNode, ValNode], Dict[CallNode, CallNode]]:
     """
     Copy the subgraph supported on the given nodes. Return maps from the
     original nodes to their copies.
     """
-    v_map = {v: ValQuery(tp=v.tp, constraint=v.constraint, name=v.name) for v in vqs}
+    v_map = {v: ValNode(tp=v.tp, constraint=v.constraint, name=v.name) for v in vqs}
     f_map = {}
     for fq in fqs:
         inputs = {k: v_map[v] for k, v in fq.inputs.items() if v in vqs}
         outputs = {k: v_map[v] for k, v in fq.outputs.items() if v in vqs}
-        f_map[fq] = FuncQuery.link(
+        f_map[fq] = CallNode.link(
             inputs=inputs,
             outputs=outputs,
             func_op=fq.func_op,

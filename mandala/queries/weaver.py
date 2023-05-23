@@ -23,37 +23,37 @@ class Node(ABC):
         raise NotImplementedError
 
 
-class ValQuery(Node):
+class ValNode(Node):
     def __init__(
         self,
         constraint: Optional[List[str]],
         tp: Optional[Type],
-        creators: Optional[List["FuncQuery"]] = None,
+        creators: Optional[List["CallNode"]] = None,
         created_as: Optional[List[str]] = None,
         _label: Optional[str] = None,
         name: Optional[str] = None,
     ):
         self.creators = [] if creators is None else creators
         self.created_as = [] if created_as is None else created_as
-        self.consumers: List["FuncQuery"] = []
+        self.consumers: List["CallNode"] = []
         self.consumed_as: List[str] = []
         self.name = name
         self.constraint = constraint
         self.tp = tp
         self._label: Optional[str] = _label
 
-    def add_consumer(self, consumer: "FuncQuery", consumed_as: str):
+    def add_consumer(self, consumer: "CallNode", consumed_as: str):
         self.consumers.append(consumer)
         self.consumed_as.append(consumed_as)
 
-    def add_creator(self, creator: "FuncQuery", created_as: str):
+    def add_creator(self, creator: "CallNode", created_as: str):
         assert isinstance(created_as, str)
         self.creators.append(creator)
         self.created_as.append(created_as)
 
     def neighbors(
         self, direction: Literal["backward", "forward", "both"] = "both"
-    ) -> Set["FuncQuery"]:
+    ) -> Set["CallNode"]:
         backward = self.creators
         forward = self.consumers
         if direction == "backward":
@@ -67,14 +67,14 @@ class ValQuery(Node):
         self.name = name
         return self
 
-    def __getitem__(self, idx: Union[int, str, "ValQuery"]) -> "ValQuery":
+    def __getitem__(self, idx: Union[int, str, "ValNode"]) -> "ValNode":
         tp = self.tp or _infer_type(self)
         if isinstance(tp, ListType):
             return BuiltinQueries.GetListItemQuery(
                 lst=self, idx=qwrap(idx, tp=tp.elt_type)
             )
         elif isinstance(tp, DictType):
-            assert isinstance(idx, (ValQuery, str))
+            assert isinstance(idx, (ValNode, str))
             return BuiltinQueries.GetDictItemQuery(
                 dct=self, key=qwrap(idx, tp=tp.elt_type)
             )
@@ -83,9 +83,9 @@ class ValQuery(Node):
 
     def __repr__(self):
         if self.name is not None:
-            return f"ValQuery({self.name})"
+            return f"ValNode({self.name})"
         else:
-            return f"ValQuery({self.tp})"
+            return f"ValNode({self.tp})"
 
     def get_constraint(self, *values) -> List[str]:
         wrapped = [wrap_atom(v) for v in values]
@@ -103,8 +103,8 @@ class ValQuery(Node):
         self.constraint = None
 
 
-def copy(vq: ValQuery, label: Optional[str] = None) -> ValQuery:
-    return ValQuery(
+def copy(vq: ValNode, label: Optional[str] = None) -> ValNode:
+    return ValNode(
         constraint=vq.constraint,
         tp=vq.tp,
         creators=vq.creators,
@@ -113,12 +113,12 @@ def copy(vq: ValQuery, label: Optional[str] = None) -> ValQuery:
     )
 
 
-class FuncQuery(Node):
+class CallNode(Node):
     def __init__(
         self,
-        inputs: Dict[str, ValQuery],
+        inputs: Dict[str, ValNode],
         func_op: FuncOp,
-        outputs: Dict[str, ValQuery],
+        outputs: Dict[str, ValNode],
         constraint: Optional[List[str]],
         orientation: Optional[str] = None,
     ):
@@ -128,11 +128,11 @@ class FuncQuery(Node):
         self.orientation = orientation
         self.constraint = constraint
 
-    def set_outputs(self, outputs: Dict[str, ValQuery]):
+    def set_outputs(self, outputs: Dict[str, ValNode]):
         self.outputs = outputs
 
     @property
-    def returns(self) -> List[ValQuery]:
+    def returns(self) -> List[ValNode]:
         if self.func_op.is_builtin:
             raise NotImplementedError()
         else:
@@ -141,7 +141,7 @@ class FuncQuery(Node):
             return ord_outputs
 
     @property
-    def returns_interp(self) -> List[Optional[ValQuery]]:
+    def returns_interp(self) -> List[Optional[ValNode]]:
         if self.func_op.is_builtin:
             raise NotImplementedError()
         else:
@@ -168,7 +168,7 @@ class FuncQuery(Node):
 
     def neighbors(
         self, direction: Literal["backward", "forward", "both"] = "both"
-    ) -> Set[ValQuery]:
+    ) -> Set[ValNode]:
         backward = list(self.inputs.values())
         forward = list(self.outputs.values())
         if direction == "backward":
@@ -180,13 +180,13 @@ class FuncQuery(Node):
 
     @staticmethod
     def link(
-        inputs: Dict[str, ValQuery],
+        inputs: Dict[str, ValNode],
         func_op: FuncOp,
-        outputs: Dict[str, ValQuery],
+        outputs: Dict[str, ValNode],
         constraint: Optional[List[str]],
         orientation: Optional[str],
         include_indexing: bool = True,
-    ) -> "FuncQuery":
+    ) -> "CallNode":
         """
         Link a func query into the graph
         """
@@ -207,7 +207,7 @@ class FuncQuery(Node):
             assert orientation is None
             effective_inputs = inputs
             effective_outputs = outputs
-        result = FuncQuery(
+        result = CallNode(
             inputs=effective_inputs,
             func_op=func_op,
             outputs=effective_outputs,
@@ -239,19 +239,19 @@ class FuncQuery(Node):
         args_string = ", ".join(f"{k}={v}" for k, v in self.inputs.items())
         if self.orientation is not None:
             args_string += f", orientation={self.orientation}"
-        return f"FuncQuery({self.func_op.sig.ui_name}, {args_string})"
+        return f"CallNode({self.func_op.sig.ui_name}, {args_string})"
 
 
 def traverse_all(
-    vqs: Set[ValQuery],
+    vqs: Set[ValNode],
     direction: Literal["backward", "forward", "both"] = "both",
-) -> Tuple[Set[ValQuery], Set[FuncQuery]]:
+) -> Tuple[Set[ValNode], Set[CallNode]]:
     """
     Extend the given `ValQuery` objects to all objects connected to them through
     function inputs and/or outputs.
     """
     vqs_ = {_ for _ in vqs}
-    fqs_: Set[FuncQuery] = set()
+    fqs_: Set[CallNode] = set()
     found_new = True
     while found_new:
         found_new = False
@@ -273,18 +273,18 @@ def traverse_all(
 class BuiltinQueries:
     @staticmethod
     def ListQ(
-        elts: List[ValQuery], idxs: Optional[List[Optional[ValQuery]]] = None
-    ) -> ValQuery:
-        result = ValQuery(
+        elts: List[ValNode], idxs: Optional[List[Optional[ValNode]]] = None
+    ) -> ValNode:
+        result = ValNode(
             creators=[], created_as=[], tp=ListType(elt_type=AnyType()), constraint=None
         )
         if idxs is None:
             idxs = [
-                ValQuery(constraint=None, tp=AnyType(), creators=[], created_as=[])
+                ValNode(constraint=None, tp=AnyType(), creators=[], created_as=[])
                 for _ in elts
             ]
         for elt, idx in zip(elts, idxs):
-            FuncQuery.link(
+            CallNode.link(
                 inputs={"lst": result, "elt": elt, "idx": idx},
                 func_op=Builtins.list_op,
                 outputs={},
@@ -294,12 +294,12 @@ class BuiltinQueries:
         return result
 
     @staticmethod
-    def DictQ(dct: Dict[ValQuery, ValQuery]) -> ValQuery:
-        result = ValQuery(
+    def DictQ(dct: Dict[ValNode, ValNode]) -> ValNode:
+        result = ValNode(
             creators=[], created_as=[], tp=DictType(elt_type=AnyType()), constraint=None
         )
         for key, val in dct.items():
-            FuncQuery.link(
+            CallNode.link(
                 inputs={"dct": result, "key": key, "val": val},
                 func_op=Builtins.dict_op,
                 outputs={},
@@ -309,12 +309,12 @@ class BuiltinQueries:
         return result
 
     @staticmethod
-    def SetQ(elts: Set[ValQuery]) -> ValQuery:
-        result = ValQuery(
+    def SetQ(elts: Set[ValNode]) -> ValNode:
+        result = ValNode(
             creators=[], created_as=[], tp=SetType(elt_type=AnyType()), constraint=None
         )
         for elt in elts:
-            FuncQuery.link(
+            CallNode.link(
                 inputs={"st": result, "elt": elt},
                 func_op=Builtins.set_op,
                 outputs={},
@@ -324,10 +324,10 @@ class BuiltinQueries:
         return result
 
     @staticmethod
-    def GetListItemQuery(lst: ValQuery, idx: Optional[ValQuery] = None) -> ValQuery:
+    def GetListItemQuery(lst: ValNode, idx: Optional[ValNode] = None) -> ValNode:
         elt_tp = lst.tp.elt_type if isinstance(lst.tp, ListType) else None
-        result = ValQuery(creators=[], created_as=[], tp=elt_tp, constraint=None)
-        FuncQuery.link(
+        result = ValNode(creators=[], created_as=[], tp=elt_tp, constraint=None)
+        CallNode.link(
             inputs={"lst": lst, "elt": result, "idx": idx},
             func_op=Builtins.list_op,
             outputs={},
@@ -337,10 +337,10 @@ class BuiltinQueries:
         return result
 
     @staticmethod
-    def GetDictItemQuery(dct: ValQuery, key: Optional[ValQuery] = None) -> ValQuery:
+    def GetDictItemQuery(dct: ValNode, key: Optional[ValNode] = None) -> ValNode:
         val_tp = dct.tp.elt_type if isinstance(dct.tp, DictType) else None
-        result = ValQuery(creators=[], created_as=[], tp=val_tp, constraint=None)
-        FuncQuery.link(
+        result = ValNode(creators=[], created_as=[], tp=val_tp, constraint=None)
+        CallNode.link(
             inputs={"dct": dct, "key": key, "val": result},
             func_op=Builtins.dict_op,
             outputs={},
@@ -356,19 +356,19 @@ class BuiltinQueries:
     def is_pattern(obj: Any) -> bool:
         if type(obj) is list and Ellipsis in obj:
             return all(
-                BuiltinQueries.is_pattern(elt) or isinstance(elt, ValQuery)
+                BuiltinQueries.is_pattern(elt) or isinstance(elt, ValNode)
                 for elt in obj
                 if elt is not Ellipsis
             )
         elif type(obj) is dict and Ellipsis in obj:
             return all(
-                BuiltinQueries.is_pattern(elt) or isinstance(elt, ValQuery)
+                BuiltinQueries.is_pattern(elt) or isinstance(elt, ValNode)
                 for elt in obj.values()
                 if elt is not Ellipsis
             )
         elif type(obj) is set:
             return all(
-                BuiltinQueries.is_pattern(elt) or isinstance(elt, ValQuery)
+                BuiltinQueries.is_pattern(elt) or isinstance(elt, ValNode)
                 for elt in obj
                 if elt is not Ellipsis
             )
@@ -376,25 +376,25 @@ class BuiltinQueries:
             return False
 
     @staticmethod
-    def link_pattern(obj: Union[list, dict, set, ValQuery]) -> ValQuery:
-        if isinstance(obj, ValQuery):
+    def link_pattern(obj: Union[list, dict, set, ValNode]) -> ValNode:
+        if isinstance(obj, ValNode):
             return obj
         elif type(obj) is list:
             elts = [
                 BuiltinQueries.link_pattern(elt) for elt in obj if elt is not Ellipsis
             ]
-            result = ValQuery(
+            result = ValNode(
                 creators=[],
                 created_as=[],
                 tp=ListType(elt_type=AnyType()),
                 constraint=None,
             )
             for elt in elts:
-                FuncQuery.link(
+                CallNode.link(
                     inputs={
                         "lst": result,
                         "elt": elt,
-                        "idx": ValQuery(
+                        "idx": ValNode(
                             constraint=None, tp=AnyType(), creators=[], created_as=[]
                         ),
                     },
@@ -409,14 +409,14 @@ class BuiltinQueries:
                 for k, v in obj.items()
                 if k is not Ellipsis
             }
-            result = ValQuery(
+            result = ValNode(
                 creators=[],
                 created_as=[],
                 tp=DictType(elt_type=AnyType()),
                 constraint=None,
             )
             for k, v in elts.items():
-                FuncQuery.link(
+                CallNode.link(
                     inputs={"dct": result, "key": k, "val": v},
                     func_op=Builtins.dict_op,
                     outputs={},
@@ -427,14 +427,14 @@ class BuiltinQueries:
             elts = {
                 BuiltinQueries.link_pattern(elt) for elt in obj if elt is not Ellipsis
             }
-            result = ValQuery(
+            result = ValNode(
                 creators=[],
                 created_as=[],
                 tp=SetType(elt_type=AnyType()),
                 constraint=None,
             )
             for elt in elts:
-                FuncQuery.link(
+                CallNode.link(
                     inputs={"st": result, "elt": elt},
                     func_op=Builtins.set_op,
                     outputs={},
@@ -446,11 +446,11 @@ class BuiltinQueries:
         return result
 
 
-def qwrap(obj: Any, tp: Optional[Type] = None, strict: bool = False) -> ValQuery:
+def qwrap(obj: Any, tp: Optional[Type] = None, strict: bool = False) -> ValNode:
     """
     Produce a ValQuery from an object.
     """
-    if isinstance(obj, ValQuery):
+    if isinstance(obj, ValNode):
         return obj
     elif isinstance(obj, Ref):
         assert obj._query is not None, "Ref must be linked to a query"
@@ -467,7 +467,7 @@ def qwrap(obj: Any, tp: Optional[Type] = None, strict: bool = False) -> ValQuery
             tp = AnyType()
         # wrap a raw value as a pointwise constraint
         uid = obj.uid if isinstance(obj, Ref) else Hashing.get_content_hash(obj)
-        return ValQuery(
+        return ValNode(
             tp=tp,
             creators=[],
             created_as=[],
@@ -476,17 +476,17 @@ def qwrap(obj: Any, tp: Optional[Type] = None, strict: bool = False) -> ValQuery
 
 
 def call_query(
-    func_op: FuncOp, inputs: Dict[str, Union[list, dict, set, ValQuery, Ref, Any]]
-) -> List[ValQuery]:
+    func_op: FuncOp, inputs: Dict[str, Union[list, dict, set, ValNode, Ref, Any]]
+) -> List[ValNode]:
     for k in inputs.keys():
         inputs[k] = qwrap(obj=inputs[k])
-    assert all(isinstance(inp, ValQuery) for inp in inputs.values())
+    assert all(isinstance(inp, ValNode) for inp in inputs.values())
     ord_outputs = [
-        ValQuery(creators=[], created_as=[], tp=tp, constraint=None)
+        ValNode(creators=[], created_as=[], tp=tp, constraint=None)
         for tp in func_op.output_types
     ]
     outputs = {dump_output_name(index=i): o for i, o in enumerate(ord_outputs)}
-    FuncQuery.link(
+    CallNode.link(
         inputs=inputs,
         func_op=func_op,
         outputs=outputs,
@@ -499,7 +499,7 @@ def call_query(
 ################################################################################
 ### introspection
 ################################################################################
-def _infer_type(val_query: ValQuery) -> Type:
+def _infer_type(val_query: ValNode) -> Type:
     consumer_op_names = [c.func_op.sig.ui_name for c in val_query.consumers]
     mapping = {"__list__": ListType(), "__dict__": DictType(), "__set__": SetType()}
     tps = [mapping.get(x, None) for x in consumer_op_names]
@@ -512,7 +512,7 @@ def _infer_type(val_query: ValQuery) -> Type:
         raise RuntimeError(f"Multiple types for {val_query}: {struct_tps}")
 
 
-def get_vq_orientation(vq: ValQuery) -> str:
+def get_vq_orientation(vq: ValNode) -> str:
     if not isinstance(vq.tp, StructType):
         raise ValueError
     if (
@@ -526,21 +526,21 @@ def get_vq_orientation(vq: ValQuery) -> str:
         return StructOrientations.construct
 
 
-def is_idx(vq: ValQuery) -> bool:
+def is_idx(vq: ValNode) -> bool:
     for consumer, consumed_as in zip(vq.consumers, vq.consumed_as):
         if consumed_as == "idx" and consumer.func_op.sig.ui_name == "__list__":
             return True
     return False
 
 
-def is_key(vq: ValQuery) -> bool:
+def is_key(vq: ValNode) -> bool:
     for consumer, consumed_as in zip(vq.consumers, vq.consumed_as):
         if consumed_as == "key" and consumer.func_op.sig.ui_name == "__dict__":
             return True
     return False
 
 
-def get_elt_fqs(vq: ValQuery) -> List[FuncQuery]:
+def get_elt_fqs(vq: ValNode) -> List[CallNode]:
     assert isinstance(vq.tp, StructType)
     struct_id = vq.tp.struct_id
     orientation = get_vq_orientation(vq)
@@ -555,7 +555,7 @@ def get_elt_fqs(vq: ValQuery) -> List[FuncQuery]:
     return fqs
 
 
-def get_elts(vq: ValQuery) -> Dict[FuncQuery, ValQuery]:
+def get_elts(vq: ValNode) -> Dict[CallNode, ValNode]:
     """
     Get the constituent element queries of a set, as a dictionary of {fq: vq}
     pairs.
@@ -570,7 +570,7 @@ def get_elts(vq: ValQuery) -> Dict[FuncQuery, ValQuery]:
     }
 
 
-def get_items(vq: ValQuery) -> Dict[FuncQuery, Tuple[Optional[ValQuery], ValQuery]]:
+def get_items(vq: ValNode) -> Dict[CallNode, Tuple[Optional[ValNode], ValNode]]:
     """
     Get the constituent elements and indices of a list or dict in the form of
     {fq: (idx_vq, elt_vq)} pairs.
@@ -588,7 +588,7 @@ def get_items(vq: ValQuery) -> Dict[FuncQuery, Tuple[Optional[ValQuery], ValQuer
     }
 
 
-def get_elt_and_struct(fq: FuncQuery) -> Tuple[ValQuery, ValQuery]:
+def get_elt_and_struct(fq: CallNode) -> Tuple[ValNode, ValNode]:
     assert fq.func_op.is_builtin
     struct_id = fq.func_op.sig.ui_name
     elt_target = (
@@ -607,7 +607,7 @@ def get_elt_and_struct(fq: FuncQuery) -> Tuple[ValQuery, ValQuery]:
         raise NotImplementedError()
 
 
-def get_idx(fq: FuncQuery) -> Optional[ValQuery]:
+def get_idx(fq: CallNode) -> Optional[ValNode]:
     assert fq.func_op.is_builtin
     struct_id = fq.func_op.sig.ui_name
     idx_target = fq.inputs
@@ -621,4 +621,4 @@ def get_idx(fq: FuncQuery) -> Optional[ValQuery]:
 
 def prepare_query(ref: Ref, tp: Type):
     if ref._query is None:
-        ref._query = ValQuery(tp=tp, constraint=None, creators=[], created_as=[])
+        ref._query = ValNode(tp=tp, constraint=None, creators=[], created_as=[])

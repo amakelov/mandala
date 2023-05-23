@@ -4,7 +4,7 @@ from ..core.model import FuncOp, TransientObj, Call
 from ..core.utils import unwrap_decorators
 from ..core.sig import Signature, _postprocess_outputs
 from ..core.tps import AnyType
-from ..queries.weaver import ValQuery, qwrap, call_query
+from ..queries.weaver import ValNode, qwrap, call_query
 from ..deps.tracers.dec_impl import DecTracer
 
 from . import contexts
@@ -17,7 +17,7 @@ def Q(pattern: Optional[Any] = None) -> "pattern":
     """
     if pattern is None:
         # return ValQuery(creator=None, created_as=None)
-        return ValQuery(creators=[], created_as=[], constraint=None, tp=AnyType())
+        return ValNode(creators=[], created_as=[], constraint=None, tp=AnyType())
     else:
         return qwrap(obj=pattern)
 

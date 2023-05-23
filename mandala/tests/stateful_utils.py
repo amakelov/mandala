@@ -4,7 +4,7 @@ from mandala.all import *
 from mandala.tests.utils import *
 from mandala.core.utils import Hashing, invert_dict
 from mandala.queries.compiler import *
-from mandala.queries.weaver import ValQuery, FuncQuery
+from mandala.queries.weaver import ValNode, CallNode
 import string
 
 

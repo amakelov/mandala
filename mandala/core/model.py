@@ -45,7 +45,7 @@ class Ref:
         self.in_memory = in_memory
         self.transient = transient
         # runtime only
-        self._query: Optional[ValQuery] = None
+        self._query: Optional[ValNode] = None
 
     @property
     def causal_uid(self) -> str:
@@ -73,6 +73,7 @@ class Ref:
     def from_full_uid(full_uid: str) -> "Ref":
         uid, causal_uid = Ref.parse_full_uid(full_uid=full_uid)
         res = Ref.from_uid(uid=uid)
+        res.causal_uid = causal_uid
         return res
 
     @staticmethod
@@ -145,7 +146,7 @@ class Ref:
             return f"{self.__class__.__name__}(in_memory=False, uid={self._short_uid})"
 
     @property
-    def query(self) -> "ValQuery":
+    def query(self) -> "ValNode":
         if self._query is None:
             raise ValueError("Ref has no query")
         return self._query
@@ -333,7 +334,7 @@ class Call:
         for i, v in enumerate(self.outputs):
             prepare_query(ref=v, tp=output_types[i])
         outputs = {dump_output_name(i): v.query for i, v in enumerate(self.outputs)}
-        self._func_query = FuncQuery.link(
+        self._func_query = CallNode.link(
             inputs={k: v.query for k, v in self.inputs.items()},
             func_op=self.func_op.detached(),
             outputs=outputs,
@@ -347,7 +348,7 @@ class Call:
         self._func_query = None
 
     @property
-    def func_query(self) -> "FuncQuery":
+    def func_query(self) -> "CallNode":
         assert self._func_query is not None
         return self._func_query
 
@@ -532,13 +533,18 @@ class FuncOp:
         Create a `FuncOp` object based on a signature and maybe a function. For
         internal use only.
         """
-        res = FuncOp(func=func, version=sig.version, ui_name=sig.ui_name)
+        res = FuncOp(
+            func=func,
+            version=sig.version,
+            ui_name=sig.ui_name,
+            _is_builtin=sig.is_builtin,
+        )
         res.sig = sig
         return res
 
     @staticmethod
     def _from_sig(sig: Signature) -> "FuncOp":
-        return FuncOp(func=None, sig=sig)
+        return FuncOp(func=None, sig=sig, _is_builtin=sig.is_builtin)
 
     def detached(self) -> "FuncOp":
         if self._func is None:
@@ -666,6 +672,6 @@ def collect_detached(refs: Iterable[Ref], include_transient: bool) -> List[Ref]:
 
 
 from .builtins_ import ListRef, DictRef, SetRef, Builtins, StructRef
-from ..queries.weaver import ValQuery, StructOrientations, FuncQuery, prepare_query
+from ..queries.weaver import ValNode, StructOrientations, CallNode, prepare_query
 from ..ui.contexts import GlobalContext
 from .wrapping import causify_down, causify_atom

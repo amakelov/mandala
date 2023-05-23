@@ -6,9 +6,9 @@ from pypika import Query, Table, Parameter
 from pypika.terms import LiteralValue
 
 from ..common_imports import *
-from ..core.config import Config, dump_output_name
+from ..core.config import Config, dump_output_name, Provenance
 from ..core.model import Call, FuncOp, Ref, ValueRef, collect_detached
-from ..core.builtins_ import ListRef, DictRef, SetRef, Builtins, StructRef
+from ..core.builtins_ import Builtins
 from ..core.wrapping import unwrap
 from ..core.utils import get_fibers_as_lists
 from ..core.sig import Signature
@@ -636,6 +636,20 @@ class RelAdapter(Transactable):
             if_not_exists=True,
             conn=conn,
         )
+        self.rel_storage.create_relation(
+            name=self.PROVENANCE_TABLE,
+            columns=[
+                (Provenance.causal_uid, None),
+                (Provenance.name, None),
+                (Provenance.call_causal_uid, None),
+                (Provenance.direction, None),
+                (Provenance.op_id, None),
+            ],
+            primary_key=[Provenance.call_causal_uid, Provenance.name],
+            defaults={},
+            if_not_exists=True,
+            conn=conn,
+        )
         # Initialize the event log.
         # The event log is just a list of UIDs that changed, for now.
         # the UID column stores the vref/call uid, the `table` column stores the
@@ -852,6 +866,8 @@ class RelAdapter(Transactable):
                     ),
                     conn=conn,
                 )
+            ### upsert in provenance
+            self.upsert_provenance(calls=calls, conn=conn)
 
     @transaction()
     def _query_call(
@@ -1067,7 +1083,6 @@ class RelAdapter(Transactable):
                 output = pd.concat([output, atoms_df])
             return output.set_index(Config.uid_col).loc[uids, "value"].tolist()
         elif depth is None:
-            print("THIS IS HAPPENING")
             results = [Ref.from_uid(uid=uid) for uid in uids]
             self.mattach(
                 vrefs=results, shallow=False, _attach_atoms=_attach_atoms, conn=conn
@@ -1113,7 +1128,6 @@ class RelAdapter(Transactable):
         vals = self.obj_gets(
             uids=unique_uids, depth=1, _attach_atoms=_attach_atoms, conn=conn
         )  #! this can be optimized
-        print(vals)
         for i, uid in enumerate(unique_uids):
             for obj in vrefs_by_uid[uid]:
                 if vals[i].in_memory:
@@ -1122,3 +1136,36 @@ class RelAdapter(Transactable):
             residues = collect_detached(refs=vals, include_transient=False)
             if len(residues) > 0:
                 self.mattach(vrefs=residues, shallow=False, conn=conn)
+
+    ############################################################################
+    ### provenance methods
+    ############################################################################
+    @transaction()
+    def upsert_provenance(self, calls: List[Call], conn: Optional[Connection] = None):
+        rows = []
+        sess.d()
+        for call in calls:
+            call_causal = call.causal_uid
+            for name, inp in call.inputs.items():
+                rows.append(
+                    {
+                        Provenance.causal_uid: inp.causal_uid,
+                        Provenance.name: name,
+                        Provenance.call_causal_uid: call_causal,
+                        Provenance.direction: "input",
+                        Provenance.op_id: call.func_op.sig.versioned_internal_name,
+                    }
+                )
+            for i, output in enumerate(call.outputs):
+                name = dump_output_name(index=i)
+                rows.append(
+                    {
+                        Provenance.causal_uid: output.causal_uid,
+                        Provenance.name: name,
+                        Provenance.call_causal_uid: call_causal,
+                        Provenance.direction: "output",
+                        Provenance.op_id: call.func_op.sig.versioned_internal_name,
+                    }
+                )
+        df = pd.DataFrame(rows)
+        self.rel_storage.upsert(relation=Config.provenance_table, ta=df, conn=conn)

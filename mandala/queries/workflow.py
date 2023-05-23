@@ -26,18 +26,18 @@ class Workflow:
     def __init__(self):
         ### encoding the shape
         # in topological order
-        self.var_nodes: List[ValQuery] = []
+        self.var_nodes: List[ValNode] = []
         # note that there may be many var nodes with the same causal hash
-        self.var_node_to_causal_hash: Dict[ValQuery, str] = {}
+        self.var_node_to_causal_hash: Dict[ValNode, str] = {}
         # in topological order
-        self.op_nodes: List[FuncQuery] = []
+        self.op_nodes: List[CallNode] = []
         # self.causal_hash_to_op_node: Dict[str, FuncQuery] = {}
-        self.op_node_to_causal_hash: Dict[FuncQuery, str] = {}
+        self.op_node_to_causal_hash: Dict[CallNode, str] = {}
         ### encoding instance data
         # multiple refs may map to the same query node
-        self.value_to_var: Dict[Ref, ValQuery] = {}
+        self.value_to_var: Dict[Ref, ValNode] = {}
         # for a given op node, there may be multiple call structs
-        self.op_node_to_call_structs: Dict[FuncQuery, List[CallStruct]] = {}
+        self.op_node_to_call_structs: Dict[CallNode, List[CallStruct]] = {}
 
     def check_invariants(self):
         assert set(self.var_node_to_causal_hash.keys()) == set(self.var_nodes)
@@ -60,7 +60,7 @@ class Workflow:
         return Hashing.get_content_hash(obj="null")
 
     @property
-    def callable_op_nodes(self) -> List[FuncQuery]:
+    def callable_op_nodes(self) -> List[CallNode]:
         # return op nodes that have non-empty inputs
         res = []
         var_to_values = self.var_to_values()
@@ -70,22 +70,22 @@ class Workflow:
         return res
 
     @property
-    def inputs(self) -> List[ValQuery]:
+    def inputs(self) -> List[ValNode]:
         # return [var for var in self.var_nodes if var.creator is None]
         return [var for var in self.var_nodes if len(var.creators) == 0]
 
-    def var_to_values(self) -> Dict[ValQuery, List[Ref]]:
+    def var_to_values(self) -> Dict[ValNode, List[Ref]]:
         res = defaultdict(list)
         for value, var in self.value_to_var.items():
             res[var].append(value)
         return res
 
-    def add_var(self, val_query: Optional[ValQuery] = None) -> ValQuery:
+    def add_var(self, val_query: Optional[ValNode] = None) -> ValNode:
         res = (
             val_query
             if val_query is not None
             # else ValQuery(creator=None, created_as=None)
-            else ValQuery(creators=[], created_as=[], constraint=None, tp=AnyType())
+            else ValNode(creators=[], created_as=[], constraint=None, tp=AnyType())
         )
         # if res.creator is None:
         if len(res.creators) == 0:
@@ -105,7 +105,7 @@ class Workflow:
     def get_op_hash(
         self,
         func_op: FuncOp,
-        node_inputs: Optional[Dict[str, ValQuery]] = None,
+        node_inputs: Optional[Dict[str, ValNode]] = None,
         val_inputs: Optional[Dict[str, Ref]] = None,
     ) -> str:
         assert (node_inputs is None) != (val_inputs is None)
@@ -130,11 +130,11 @@ class Workflow:
 
     def add_op(
         self,
-        inputs: Dict[str, ValQuery],
+        inputs: Dict[str, ValNode],
         func_op: FuncOp,
-    ) -> Tuple[FuncQuery, Dict[str, ValQuery]]:
+    ) -> Tuple[CallNode, Dict[str, ValNode]]:
         # TODO: refactor the `FuncQuery` creation here
-        res = FuncQuery(inputs=inputs, func_op=func_op, outputs={}, constraint=None)
+        res = CallNode(inputs=inputs, func_op=func_op, outputs={}, constraint=None)
         causal_hash = self.get_op_hash(node_inputs=inputs, func_op=func_op)
         self.op_nodes.append(res)
         self.op_node_to_causal_hash[res] = causal_hash
@@ -145,7 +145,7 @@ class Workflow:
             # created_as=i))
             output_name = dump_output_name(index=i)
             output = self.add_var(
-                val_query=ValQuery(
+                val_query=ValNode(
                     creators=[res],
                     created_as=[output_name],
                     constraint=None,
@@ -158,7 +158,7 @@ class Workflow:
         self.op_node_to_call_structs[res] = []
         return res, outputs
 
-    def add_value(self, value: Ref, var: ValQuery):
+    def add_value(self, value: Ref, var: ValNode):
         assert var in self.var_nodes
         self.value_to_var[value] = var
 
@@ -214,8 +214,8 @@ class Workflow:
 
     @staticmethod
     def from_traversal(
-        vqs: List[ValQuery],
-    ) -> Tuple["Workflow", Dict[ValQuery, ValQuery]]:
+        vqs: List[ValNode],
+    ) -> Tuple["Workflow", Dict[ValNode, ValNode]]:
         vqs, fqs = traverse_all(vqs, direction="backward")
         vqs_topsort = reversed(vqs)
         fqs_topsort = reversed(fqs)
@@ -283,6 +283,6 @@ class Workflow:
 
 
 class History:
-    def __init__(self, workflow: Workflow, node: ValQuery):
+    def __init__(self, workflow: Workflow, node: ValNode):
         self.workflow = workflow
         self.node = node

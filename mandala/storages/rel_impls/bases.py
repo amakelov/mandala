@@ -19,8 +19,11 @@ class RelStorage(ABC):
     def create_relation(
         self,
         name: str,
-        columns: List[Tuple[str, Optional[str]]],
-        defaults: Dict[str, Any],
+        columns: List[Tuple[str, Optional[str]]],  # [(col name, type), ...]
+        defaults: Dict[str, Any],  # {col name: default value, ...}
+        primary_key: Optional[Union[str, List[str]]] = None,
+        if_not_exists: bool = True,
+        conn: Optional[Any] = None,
     ):
         """
         Create a relation with the given name and columns.

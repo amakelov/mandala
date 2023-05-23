@@ -1,11 +1,13 @@
+from abc import ABC, abstractmethod
 from ..common_imports import *
 from typing import Literal
 from ..core.config import parse_output_idx, Config
 from ..core.model import Ref
+from ..core.wrapping import unwrap
 from ..core.tps import ListType, StructType, DictType, SetType
 from .weaver import (
-    ValQuery,
-    FuncQuery,
+    ValNode,
+    CallNode,
     StructOrientations,
     get_items,
     get_elts,
@@ -29,148 +31,293 @@ from ..ui.viz import (
 import textwrap
 
 
-def get_graph_repr(
-    vqs: Set[ValQuery],
-    fqs: Set[FuncQuery],
-    names: Optional[Dict[ValQuery, str]],
-    selection: Optional[List[ValQuery]],
-    pprint: bool = False,
-) -> str:
-    """
-    Print out a computational graph w/ the given names for variables. This
-    treats data structures as "patterns" that match any data structure with the
-    same "qualitative mix" of contents.
-    """
-    res = []
-    if names is None:
-        names = get_names(
-            hints={}, canonical_order=get_canonical_order(vqs=vqs, fqs=fqs)
+class ValueLoaderABC(ABC):
+    @abstractmethod
+    def load_value(self, full_uid: str) -> Any:
+        raise NotImplementedError
+
+
+class GraphPrinter:
+    def __init__(
+        self,
+        vqs: Set[ValNode],
+        fqs: Set[CallNode],
+        value_loader: Optional[ValueLoaderABC] = None,
+        names: Optional[Dict[ValNode, str]] = None,
+    ):
+        self.vqs = vqs
+        self.fqs = fqs
+        self.value_loader = value_loader
+        self.g = InducedSubgraph(vqs=vqs, fqs=fqs)
+        self.v_labels, self.f_labels, self.vq_to_node = self.g.canonicalize()
+        self.full_topsort, self.sources, self.sinks = self.g.topsort(
+            canonical_labels={**self.v_labels, **self.f_labels}
         )
-    assert vqs <= set(names.keys())
-    g = InducedSubgraph(vqs=vqs, fqs=fqs)
-    v_labels, f_labels, _ = g.canonicalize()
-    full_topsort, sources, sinks = g.topsort(canonical_labels={**v_labels, **f_labels})
+        if names is None:
+            names = get_names(
+                hints={}, canonical_order=get_canonical_order(vqs=vqs, fqs=fqs)
+            )
+        self.names = names
 
     def get_struct_comment(
-        vq: ValQuery, elt_names: Tuple[str, ...], idx_names: Tuple[str, ...] = None
+        self,
+        vq: ValNode,
+        elt_names: Tuple[str, ...],
+        idx_names: Optional[Tuple[str, ...]] = None,
     ) -> str:
         id_to_name = {"__list__": "list", "__dict__": "dict", "__set__": "set"}
         if len(elt_names) == 1:
-            s = f"{names[vq]} will match any {id_to_name[vq.tp.struct_id]} containing a match for {elt_names[0]}"
+            s = f"{self.names[vq]} will match any {id_to_name[vq.tp.struct_id]} containing a match for {elt_names[0]}"
             if idx_names is not None:
                 s += f" at index {idx_names[0]}"
         else:
-            s = f'{names[vq]} will match any {id_to_name[vq.tp.struct_id]} containing matches for each of {", ".join(elt_names)}'
+            s = f'{self.names[vq]} will match any {id_to_name[vq.tp.struct_id]} containing matches for each of {", ".join(elt_names)}'
             if idx_names is not None:
                 s += f" at indices {', '.join(idx_names)}"
         return s
 
-    for node in full_topsort:
-        if isinstance(node, ValQuery):
-            if node in sources:
-                if is_idx(vq=node):
-                    comment = "index into list"
-                elif is_key(vq=node):
-                    comment = "key into dict"
-                else:
-                    comment = "input to computation; can match anything"
-                res.append(f"{names[node]} = Q() # {comment}")
-            elif isinstance(node.tp, StructType):
-                if get_vq_orientation(node) != StructOrientations.construct:
-                    continue
-                if isinstance(node.tp, (ListType, DictType)):
-                    idxs_and_elts = list(get_items(vq=node).values())
-                    idxs = [x[0] for x in idxs_and_elts]
-                    elts = [x[1] for x in idxs_and_elts]
-                    elt_names = tuple([str(names[elt]) for elt in elts])
-                    idx_names = tuple(
-                        [str(names[idx]) if idx is not None else "?" for idx in idxs]
-                    )
-                    comment = get_struct_comment(
-                        vq=node, elt_names=elt_names, idx_names=idx_names
-                    )
-                    if isinstance(node.tp, ListType):
-                        rhs = f'ListQ(elts=[{", ".join(elt_names)}], idxs=[{", ".join(idx_names)}]) # {comment}'
-                        sess.d()
-                    elif isinstance(node.tp, DictType):
-                        elt_strings = [
-                            f"{idx_name}: {elt_name}"
-                            for idx_name, elt_name in zip(idx_names, elt_names)
-                        ]
-                        rhs = f'DictQ(dct={{..., {", ".join(elt_strings)}, ...}}) # {comment}'
-                    else:
-                        raise RuntimeError
-                elif isinstance(node.tp, SetType):
-                    elts = list(get_elts(vq=node).values())
-                    elt_names = [str(names[elt]) for elt in elts]
-                    comment = get_struct_comment(vq=node, elt_names=elt_names)
-                    rhs = f'SetQ(elts=[{", ".join(elt_names)}]) # {comment}'
-                else:
-                    raise ValueError
-                lhs = f"{names[node]}"
-                line = f"{lhs} = {rhs}"
-                res.append(line)
-        elif isinstance(node, FuncQuery):
-            if not node.func_op.is_builtin:
-                # lhs
-                full_returns = node.returns_interp
-                full_returns_names = [
-                    names[vq] if vq is not None else "_" for vq in full_returns
-                ]
-                lhs = ", ".join(full_returns_names)
-                # rhs
-                args_dict = {
-                    arg_name: names[vq] for arg_name, vq in node.inputs.items()
-                }
-                for inp_name in node.func_op.sig.input_names:
-                    if inp_name not in args_dict:
-                        args_dict[inp_name] = "Q()"
-                args_string = ", ".join([f"{k}={v}" for k, v in args_dict.items()])
-                rhs = f"{node.func_op.sig.ui_name}({args_string})"
-                if len(lhs) == 0:
-                    res.append(rhs)
-                else:
-                    res.append(f"{lhs} = {rhs}")
-            else:
-                if node.orientation == StructOrientations.destruct:
-                    elt, struct = get_elt_and_struct(fq=node)
-                    idx = get_idx(fq=node)
-                    lhs = f"{names[elt]}"
-                    if idx is None:
-                        idx_label = "?"
-                    else:
-                        idx_label = names[idx]
-                    rhs = f"{names[struct]}[{idx_label}] # {names[elt]} will match any element of a match for {names[struct]} at index matching {idx_label}"
-                    res.append(f"{lhs} = {rhs}")
-    sess.d()
-    if selection is not None:
-        res.append(f"result = storage.df({', '.join([names[vq] for vq in selection])})")
-    res = [textwrap.indent(line, "    ") for line in res]
-    if Config.has_rich and pprint:
-        from rich.syntax import Syntax
+    def get_source_comment(self, vq: ValNode) -> str:
+        if is_idx(vq=vq):
+            return "index into list"
+        elif is_key(vq=vq):
+            return "key into dict"
+        else:
+            return "input to computation; can match anything"
 
-        highlighted = Syntax(
-            "\n".join(res),
-            "python",
-            theme="solarized-light",
-            line_numbers=False,
-        )
-        # return Panel.fit(highlighted, title="Computational Graph")
-        return highlighted
-    else:
+    def get_construct_computation_rhs(self, node: ValNode) -> str:
+        """
+        Given a constructive struct, return
+            [name_0, ..., name_1] for lists
+            {key_0: name_0, ..., key_n: name_n} for dicts
+            {name_0, ..., name_n} for sets
+        """
+        if isinstance(node.tp, (ListType, DictType)):
+            idxs_and_elts = list(get_items(vq=node).values())
+            idxs = [x[0] for x in idxs_and_elts]
+            idx_values = [
+                unwrap(self.value_loader.load_value(full_uid=idx.constraint[0]))
+                for idx in idxs
+            ]
+            elts = [x[1] for x in idxs_and_elts]
+            elt_names = tuple([str(self.names[elt]) for elt in elts])
+            idx_value_to_elt_name = {
+                idx_value: elt_name
+                for idx_value, elt_name in zip(idx_values, elt_names)
+            }
+            if isinstance(node.tp, ListType):
+                assert sorted(idx_value_to_elt_name.keys()) == list(range(len(elts)))
+                rhs = f'[{", ".join([idx_value_to_elt_name[i] for i in range(len(elts))])}]'
+            elif isinstance(node.tp, DictType):
+                elt_strings = [
+                    f"'{idx_value}': {elt_name}"
+                    for idx_value, elt_name in idx_value_to_elt_name.items()
+                ]
+                rhs = f'{", ".join(elt_strings)}'
+                rhs = f"{{{rhs}}}"
+            else:
+                raise RuntimeError
+        elif isinstance(node.tp, SetType):
+            elts = list(get_elts(vq=node).values())
+            elt_names = tuple([str(self.names[elt]) for elt in elts])
+            rhs = f'{", ".join(elt_names)}'
+            rhs = f"{{{rhs}}}"
+        else:
+            raise ValueError
+        return rhs
+
+    def get_construct_query_rhs(self, node: ValNode) -> str:
+        if isinstance(node.tp, (ListType, DictType)):
+            idxs_and_elts = list(get_items(vq=node).values())
+            idxs = [x[0] for x in idxs_and_elts]
+            elts = [x[1] for x in idxs_and_elts]
+            elt_names = tuple([str(self.names[elt]) for elt in elts])
+            idx_names = tuple(
+                [str(self.names[idx]) if idx is not None else "?" for idx in idxs]
+            )
+            comment = self.get_struct_comment(
+                vq=node, elt_names=elt_names, idx_names=idx_names
+            )
+            if isinstance(node.tp, ListType):
+                rhs = f'ListQ(elts=[{", ".join(elt_names)}], idxs=[{", ".join(idx_names)}]) # {comment}'
+            elif isinstance(node.tp, DictType):
+                elt_strings = [
+                    f"{idx_name}: {elt_name}"
+                    for idx_name, elt_name in zip(idx_names, elt_names)
+                ]
+                rhs = f'DictQ(dct={{..., {", ".join(elt_strings)}, ...}}) # {comment}'
+            else:
+                raise RuntimeError
+        elif isinstance(node.tp, SetType):
+            elts = list(get_elts(vq=node).values())
+            elt_names = tuple([str(self.names[elt]) for elt in elts])
+            comment = self.get_struct_comment(vq=node, elt_names=elt_names)
+            rhs = f'SetQ(elts=[{", ".join(elt_names)}]) # {comment}'
+        else:
+            raise ValueError
+        return rhs
+
+    def get_op_computation_line(self, node: CallNode) -> str:
+        full_returns = node.returns_interp
+        full_returns_names = [
+            self.names[vq] if vq is not None else "_" for vq in full_returns
+        ]
+        lhs = ", ".join(full_returns_names)
+        # rhs
+        args_dict = {arg_name: self.names[vq] for arg_name, vq in node.inputs.items()}
+        for inp_name in node.func_op.sig.input_names:
+            if inp_name not in args_dict:
+                raise RuntimeError
+        args_string = ", ".join([f"{k}={v}" for k, v in args_dict.items()])
+        rhs = f"{node.func_op.sig.ui_name}({args_string})"
+        if len(lhs) == 0:
+            return rhs
+        else:
+            return f"{lhs} = {rhs}"
+
+    def get_op_query_line(self, node: CallNode) -> str:
+        # lhs
+        full_returns = node.returns_interp
+        full_returns_names = [
+            self.names[vq] if vq is not None else "_" for vq in full_returns
+        ]
+        lhs = ", ".join(full_returns_names)
+        # rhs
+        args_dict = {arg_name: self.names[vq] for arg_name, vq in node.inputs.items()}
+        for inp_name in node.func_op.sig.input_names:
+            if inp_name not in args_dict:
+                args_dict[inp_name] = "Q()"
+        args_string = ", ".join([f"{k}={v}" for k, v in args_dict.items()])
+        rhs = f"{node.func_op.sig.ui_name}({args_string})"
+        if len(lhs) == 0:
+            return rhs
+        else:
+            return f"{lhs} = {rhs}"
+
+    def get_destruct_computation_line(self, node: CallNode) -> str:
+        elt, struct = get_elt_and_struct(fq=node)
+        idx = get_idx(fq=node)
+        lhs = f"{self.names[elt]}"
+        if idx is None:
+            raise NotImplementedError
+        # inline the index value if the index is a source in the graph
+        if idx in self.sources:
+            assert idx.constraint is not None
+            assert len(idx.constraint) == 1
+            idx_ref = self.value_loader.load_value(full_uid=idx.constraint[0])
+            idx_value = unwrap(idx_ref)
+            if isinstance(idx_value, int):
+                rhs = f"{self.names[struct]}[{idx_value}]"
+            elif isinstance(idx_value, str):
+                rhs = f"{self.names[struct]}['{idx_value}']"
+            else:
+                raise RuntimeError
+        else:
+            rhs = f"{self.names[struct]}[{self.names[idx]}]"
+        return f"{lhs} = {rhs}"
+
+    def get_destruct_query_line(self, node: CallNode) -> str:
+        elt, struct = get_elt_and_struct(fq=node)
+        idx = get_idx(fq=node)
+        lhs = f"{self.names[elt]}"
+        if idx is None:
+            idx_label = "?"
+        else:
+            idx_label = self.names[idx]
+        rhs = f"{self.names[struct]}[{idx_label}] # {self.names[elt]} will match any element of a match for {self.names[struct]} at index matching {idx_label}"
+        return f"{lhs} = {rhs}"
+
+    def print_computational_graph(self, show_sources_as: str = "values") -> str:
+        res = []
+        for node in self.full_topsort:
+            if isinstance(node, ValNode):
+                if node in self.sources:
+                    if is_idx(node) or is_key(node):
+                        # exclude indices/keys if they are sources (we will inline them)
+                        continue
+                    assert node.constraint is not None
+                    assert len(node.constraint) == 1
+                    if show_sources_as == "values":
+                        ref = self.value_loader.load_value(full_uid=node.constraint[0])
+                        value = unwrap(ref)
+                        rep = textwrap.shorten(str(value), 25)
+                        res.append(f"{self.names[node]} = {rep}")
+                    elif show_sources_as == "uids":
+                        uid, causal_uid = Ref.parse_full_uid(
+                            full_uid=node.constraint[0]
+                        )
+                        res.append(
+                            f"{self.names[node]} = Ref(uid={uid}, causal_uid={causal_uid})"
+                        )
+                    else:
+                        raise ValueError
+                elif isinstance(node.tp, StructType):
+                    if get_vq_orientation(node) != StructOrientations.construct:
+                        continue
+                    rhs = self.get_construct_computation_rhs(node=node)
+                    lhs = f"{self.names[node]}"
+                    line = f"{lhs} = {rhs}"
+                    res.append(line)
+            elif isinstance(node, CallNode):
+                if not node.func_op.is_builtin:
+                    res.append(self.get_op_computation_line(node=node))
+                else:
+                    if node.orientation == StructOrientations.destruct:
+                        res.append(self.get_destruct_computation_line(node=node))
         return "\n".join(res)
+
+    def print_query_graph(
+        self,
+        selection: Optional[List[ValNode]],
+        pprint: bool = False,
+    ):
+        res = []
+        for node in self.full_topsort:
+            if isinstance(node, ValNode):
+                if node in self.sources:
+                    comment = self.get_source_comment(vq=node)
+                    res.append(f"{self.names[node]} = Q() # {comment}")
+                elif isinstance(node.tp, StructType):
+                    if get_vq_orientation(node) != StructOrientations.construct:
+                        continue
+                    rhs = self.get_construct_query_rhs(node=node)
+                    lhs = f"{self.names[node]}"
+                    line = f"{lhs} = {rhs}"
+                    res.append(line)
+            elif isinstance(node, CallNode):
+                if not node.func_op.is_builtin:
+                    res.append(self.get_op_query_line(node=node))
+                else:
+                    if node.orientation == StructOrientations.destruct:
+                        res.append(self.get_destruct_query_line(node=node))
+        if selection is not None:
+            res.append(
+                f"result = storage.df({', '.join([self.names[vq] for vq in selection])})"
+            )
+        res = [textwrap.indent(line, "    ") for line in res]
+        if Config.has_rich and pprint:
+            from rich.syntax import Syntax
+
+            highlighted = Syntax(
+                "\n".join(res),
+                "python",
+                theme="solarized-light",
+                line_numbers=False,
+            )
+            # return Panel.fit(highlighted, title="Computational Graph")
+            return highlighted
+        else:
+            return "\n".join(res)
 
 
 def print_graph(
-    vqs: Set[ValQuery],
-    fqs: Set[FuncQuery],
-    names: Dict[ValQuery, str],
-    selection: Optional[List[ValQuery]],
+    vqs: Set[ValNode],
+    fqs: Set[CallNode],
+    names: Dict[ValNode, str],
+    selection: Optional[List[ValNode]],
     pprint: bool = False,
 ):
-    s = get_graph_repr(
-        vqs=vqs, fqs=fqs, names=names, selection=selection, pprint=pprint
-    )
+    printer = GraphPrinter(vqs=vqs, fqs=fqs, names=names)
+    s = printer.print_query_graph(selection=selection)
     if Config.has_rich and pprint:
         rich.print(s)
     else:
@@ -178,11 +325,11 @@ def print_graph(
 
 
 def graph_to_dot(
-    vqs: List[ValQuery],
-    fqs: List[FuncQuery],
-    names: Dict[ValQuery, str],
+    vqs: List[ValNode],
+    fqs: List[CallNode],
+    names: Dict[ValNode, str],
     layout: Literal["computational", "bipartite"] = "computational",
-    memoization_tables: Optional[Dict[FuncQuery, pd.DataFrame]] = None,
+    memoization_tables: Optional[Dict[CallNode, pd.DataFrame]] = None,
 ) -> str:
     # should work for subgraphs
     assert set(vqs) <= set(names.keys())
@@ -325,11 +472,11 @@ def graph_to_dot(
 
 
 def visualize_graph(
-    vqs: Set[ValQuery],
-    fqs: Set[FuncQuery],
-    names: Optional[Dict[ValQuery, str]],
+    vqs: Set[ValNode],
+    fqs: Set[CallNode],
+    names: Optional[Dict[ValNode, str]],
     layout: Literal["computational", "bipartite"] = "computational",
-    memoization_tables: Optional[Dict[FuncQuery, pd.DataFrame]] = None,
+    memoization_tables: Optional[Dict[CallNode, pd.DataFrame]] = None,
     output_path: Optional[Path] = None,
     show_how: Literal["none", "browser", "inline", "open"] = "none",
 ):
@@ -356,12 +503,12 @@ def visualize_graph(
     return output_path
 
 
-def show(*vqs: ValQuery):
+def show(*vqs: ValNode):
     vqs, fqs = traverse_all(vqs=list(vqs), direction="both")
     visualize_graph(vqs=vqs, fqs=fqs, show_how="browser")
 
 
-def extract_names_from_scope(scope: Dict[str, Any]) -> Dict[ValQuery, str]:
+def extract_names_from_scope(scope: Dict[str, Any]) -> Dict[ValNode, str]:
     """
     Heuristic to get deterministic name for all ValQueries we can find in the
     scope.
@@ -372,7 +519,7 @@ def extract_names_from_scope(scope: Dict[str, Any]) -> Dict[ValQuery, str]:
             continue
         if isinstance(v, Ref) and v._query is not None:
             names_per_vq[v.query].append(k)
-        elif isinstance(v, ValQuery):
+        elif isinstance(v, ValNode):
             names_per_vq[v].append(k)
     res = {}
     for vq, names_per_vq in names_per_vq.items():
@@ -385,8 +532,8 @@ def extract_names_from_scope(scope: Dict[str, Any]) -> Dict[ValQuery, str]:
 
 
 def get_names(
-    hints: Dict[ValQuery, str], canonical_order: List[ValQuery]
-) -> Dict[ValQuery, str]:
+    hints: Dict[ValNode, str], canonical_order: List[ValNode]
+) -> Dict[ValNode, str]:
     """
     Get names for the given oredered list of ValQueries, using the following
     priority:

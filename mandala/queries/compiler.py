@@ -2,14 +2,14 @@ from ..common_imports import *
 from ..core.model import FuncOp
 from ..core.sig import Signature
 from ..core.config import Config, dump_output_name
-from .weaver import ValQuery, FuncQuery, traverse_all
+from .weaver import ValNode, CallNode, traverse_all
 from .viz import visualize_graph, get_names
 from ..core.utils import invert_dict, OpKey
 from pypika import Query, Table, Criterion
 
 
 class Compiler:
-    def __init__(self, vqs: List[ValQuery], fqs: List[FuncQuery]):
+    def __init__(self, vqs: List[ValNode], fqs: List[CallNode]):
         if not len(vqs) == len({id(x) for x in vqs}):
             raise InternalError
         if not len(fqs) == len({id(x) for x in fqs}):
@@ -18,7 +18,7 @@ class Compiler:
         self.fqs = fqs
         self.val_aliases, self.func_aliases = self._generate_aliases()
 
-    def _generate_aliases(self) -> Tuple[Dict[ValQuery, Table], Dict[FuncQuery, Table]]:
+    def _generate_aliases(self) -> Tuple[Dict[ValNode, Table], Dict[CallNode, Table]]:
         func_aliases = {}
         func_counter = 0
         for i, func_query in enumerate(self.fqs):
@@ -34,7 +34,7 @@ class Compiler:
         return val_aliases, func_aliases
 
     def compile_func(
-        self, fq: FuncQuery, semantic_versions: Optional[Set[str]] = None
+        self, fq: CallNode, semantic_versions: Optional[Set[str]] = None
     ) -> Tuple[list, list]:
         """
         Compile the query corresponding to an op, including built-in ops
@@ -58,7 +58,7 @@ class Compiler:
             constraints.append(func_alias[Config.causal_uid_col].isin(fq.constraint))
         return constraints, select_fields
 
-    def compile_val(self, val_query: ValQuery) -> Tuple[list, list]:
+    def compile_val(self, val_query: ValNode) -> Tuple[list, list]:
         """
         Compile the query corresponding to a variable
         """
@@ -74,7 +74,7 @@ class Compiler:
 
     def compile(
         self,
-        select_queries: List[ValQuery],
+        select_queries: List[ValNode],
         semantic_version_constraints: Optional[Dict[OpKey, Optional[Set[str]]]] = None,
         filter_duplicates: bool = False,
     ):

@@ -2,7 +2,7 @@ from ..common_imports import *
 from ..core.model import FuncOp
 from ..core.sig import Signature
 from ..core.config import Config
-from .weaver import ValQuery, FuncQuery, traverse_all
+from .weaver import ValNode, CallNode, traverse_all
 from .graphs import InducedSubgraph
 from .viz import visualize_graph, get_names
 from ..core.utils import invert_dict
@@ -20,10 +20,10 @@ class NaiveQueryEngine:
 
     def __init__(
         self,
-        vqs: Set[ValQuery],
-        fqs: Set[FuncQuery],
-        selection: List[ValQuery],
-        tables: Dict[FuncQuery, pd.DataFrame],
+        vqs: Set[ValNode],
+        fqs: Set[CallNode],
+        selection: List[ValNode],
+        tables: Dict[CallNode, pd.DataFrame],
         _table_evaluator: Optional[Callable[[pd.DataFrame], pd.DataFrame]] = None,
         _visualize_steps_at: Optional[Path] = None,
     ):
@@ -50,7 +50,7 @@ class NaiveQueryEngine:
         if self._visualize_intermediate_states:
             assert self._table_evaluator is not None
 
-    def induce_tables(self, tables: Dict[FuncQuery, pd.DataFrame]):
+    def induce_tables(self, tables: Dict[CallNode, pd.DataFrame]):
         for fq, df in tables.items():
             inps, outps = self.get_fq_inputs(fq), self.get_fq_outputs(fq)
             induced_keys = set(inps.keys()) | set(outps.keys())
@@ -58,21 +58,21 @@ class NaiveQueryEngine:
                 columns=[c for c in df.columns if c not in induced_keys], inplace=True
             )
 
-    def get_fq_inputs(self, fq: FuncQuery) -> Dict[str, ValQuery]:
+    def get_fq_inputs(self, fq: CallNode) -> Dict[str, ValNode]:
         if fq in self.g.fqs:
             return self.g.fq_inputs(fq=fq)
         else:
             return fq.inputs
 
-    def get_fq_outputs(self, fq: FuncQuery) -> Dict[str, ValQuery]:
+    def get_fq_outputs(self, fq: CallNode) -> Dict[str, ValNode]:
         if fq in self.g.fqs:
             return self.g.fq_outputs(fq=fq)
         else:
             return fq.outputs
 
     def _get_col_to_vq_mappings(
-        self, func_query: FuncQuery
-    ) -> Tuple[Dict[str, ValQuery], Dict[ValQuery, List[str]]]:
+        self, func_query: CallNode
+    ) -> Tuple[Dict[str, ValNode], Dict[ValNode, List[str]]]:
         """
         Given a FuncQuery, returns:
             - a mapping from column names to the ValQuery that they point to
@@ -92,8 +92,8 @@ class NaiveQueryEngine:
         return col_to_vq, vq_to_cols
 
     def _drop_self_constraints(
-        self, df: pd.DataFrame, vq_to_cols: Dict[ValQuery, List[str]]
-    ) -> Tuple[pd.DataFrame, Dict[str, ValQuery], Dict[ValQuery, str]]:
+        self, df: pd.DataFrame, vq_to_cols: Dict[ValNode, List[str]]
+    ) -> Tuple[pd.DataFrame, Dict[str, ValNode], Dict[ValNode, str]]:
         new_col_to_vq = {}
         df = df.copy()
         for vq, cols in vq_to_cols.items():
@@ -156,7 +156,7 @@ class NaiveQueryEngine:
             from2[right_col] = mapping1[left_col]
         return df, from1, from2
 
-    def merge(self, f1: FuncQuery, f2: FuncQuery):
+    def merge(self, f1: CallNode, f2: CallNode):
         """
         Merge two func query nodes in the graph by joining their tables along
         the columns that correspond to the shared inputs/outputs
@@ -202,7 +202,7 @@ class NaiveQueryEngine:
             output_annotations=[Any for _ in range(0)],
         )
         func_op = FuncOp._from_sig(sig=sig)
-        f = FuncQuery(inputs=inputs, func_op=func_op, outputs={}, constraint=None)
+        f = CallNode(inputs=inputs, func_op=func_op, outputs={}, constraint=None)
         for k, v in inputs.items():
             v.add_consumer(consumer=f, consumed_as=k)
         self.tables[f] = df
@@ -214,7 +214,7 @@ class NaiveQueryEngine:
         del self.tables[f1], self.tables[f2]
 
     ### solver and solver utils
-    def compute_intersection_size(self, f1: FuncQuery, f2: FuncQuery) -> int:
+    def compute_intersection_size(self, f1: CallNode, f2: CallNode) -> int:
         col_to_vq1, vq_to_cols1 = self._get_col_to_vq_mappings(f1)
         col_to_vq2, vq_to_cols2 = self._get_col_to_vq_mappings(f2)
         return len(set(col_to_vq1.values()) & set(col_to_vq2.values()))

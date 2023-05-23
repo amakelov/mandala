@@ -354,7 +354,7 @@ class Preconditions:
     @staticmethod
     def add_call_to_workflow(
         instance: "SingleClientSimulator",
-    ) -> Tuple[bool, List[Tuple[ClientState, Workflow, FuncQuery]]]:
+    ) -> Tuple[bool, List[Tuple[ClientState, Workflow, CallNode]]]:
         # return tuples of (client, workflow, op_node) for which a call can be added
         candidates = []
         for c in instance.clients:

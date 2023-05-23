@@ -1,5 +1,6 @@
 import datetime
 from typing import Literal
+from collections import deque
 
 from .viz import _get_colorized_diff
 from .utils import MODES
@@ -8,7 +9,7 @@ from . import contexts
 from .context_cache import Cache
 
 from ..common_imports import *
-from ..core.config import Config
+from ..core.config import Config, Provenance, dump_output_name
 from ..core.model import Ref, Call, FuncOp, ValueRef, Delayed
 from ..core.builtins_ import Builtins, ListRef, DictRef, SetRef
 from ..core.wrapping import (
@@ -35,8 +36,8 @@ from ..deps.model import DepKey, TerminalData
 
 from ..queries.workflow import CallStruct
 from ..queries.weaver import (
-    ValQuery,
-    FuncQuery,
+    ValNode,
+    CallNode,
     traverse_all,
 )
 from ..queries.viz import (
@@ -44,6 +45,8 @@ from ..queries.viz import (
     print_graph,
     get_names,
     extract_names_from_scope,
+    GraphPrinter,
+    ValueLoaderABC,
 )
 from ..queries.main import Querier
 from ..queries.graphs import get_canonical_order, InducedSubgraph
@@ -477,7 +480,7 @@ class Storage(Transactable):
     @transaction()
     def get_compatible_semantic_versions(
         self,
-        fqs: Set[FuncQuery],
+        fqs: Set[CallNode],
         conn: Optional[Connection] = None,
     ) -> Tuple[Optional[Dict[OpKey, Set[str]]], Optional[Dict[DepKey, Set[str]]]]:
         if not self.versioned:
@@ -510,10 +513,10 @@ class Storage(Transactable):
     @transaction()
     def execute_query(
         self,
-        selection: List[ValQuery],
-        vqs: Set[ValQuery],
-        fqs: Set[FuncQuery],
-        names: Dict[ValQuery, str],
+        selection: List[ValNode],
+        vqs: Set[ValNode],
+        fqs: Set[CallNode],
+        names: Dict[ValNode, str],
         values: Literal["objs", "refs", "uids", "lazy"] = "objs",
         engine: Optional[Literal["sql", "naive", "_test"]] = None,
         local: bool = False,
@@ -529,7 +532,7 @@ class Storage(Transactable):
             engine = Config.query_engine
 
         def rename_cols(
-            df: pd.DataFrame, selection: List[ValQuery], names: Dict[ValQuery, str]
+            df: pd.DataFrame, selection: List[ValNode], names: Dict[ValNode, str]
         ):
             df.columns = [str(i) for i in range(len(df.columns))]
             cols = [names[query] for query in selection]
@@ -586,7 +589,7 @@ class Storage(Transactable):
 
     def _get_graph_and_names(
         self,
-        objs: Tuple[Union[Ref, ValQuery]],
+        objs: Tuple[Union[Ref, ValNode]],
         direction: Literal["forward", "backward", "both"] = "both",
         scope: Optional[Dict[str, Any]] = None,
         project: bool = False,
@@ -619,7 +622,7 @@ class Storage(Transactable):
 
     def draw_graph(
         self,
-        *objs: Union[Ref, ValQuery],
+        *objs: Union[Ref, ValNode],
         traverse: Literal["forward", "backward", "both"] = "backward",
         project: bool = False,
         show_how: Literal["none", "browser", "inline", "open"] = "browser",
@@ -635,7 +638,7 @@ class Storage(Transactable):
 
     def print_graph(
         self,
-        *objs: Union[Ref, ValQuery],
+        *objs: Union[Ref, ValNode],
         project: bool = False,
         traverse: Literal["forward", "backward", "both"] = "backward",
     ):
@@ -658,7 +661,7 @@ class Storage(Transactable):
     @transaction()
     def similar(
         self,
-        *objs: Union[Ref, ValQuery],
+        *objs: Union[Ref, ValNode],
         values: Literal["objs", "refs", "uids", "lazy"] = "objs",
         context: bool = False,
         verbose: Optional[bool] = None,
@@ -687,7 +690,7 @@ class Storage(Transactable):
     @transaction()
     def df(
         self,
-        *objs: Union[Ref, ValQuery],
+        *objs: Union[Ref, ValNode],
         direction: Literal["forward", "backward", "both"] = "both",
         values: Literal["objs", "refs", "uids", "lazy"] = "objs",
         context: bool = False,
@@ -706,7 +709,7 @@ class Storage(Transactable):
         """
         if verbose is None:
             verbose = Config.verbose_queries
-        if not all(isinstance(obj, (Ref, ValQuery)) for obj in objs):
+        if not all(isinstance(obj, (Ref, ValNode)) for obj in objs):
             raise ValueError(
                 "All arguments to df() must be either `Ref`s or `ValQuery`s."
             )
@@ -727,7 +730,7 @@ class Storage(Transactable):
         if context:
             g = InducedSubgraph(vqs=target_vqs, fqs=target_fqs)
             _, _, topsort = g.canonicalize()
-            target_selection = [vq for vq in topsort if isinstance(vq, ValQuery)]
+            target_selection = [vq for vq in topsort if isinstance(vq, ValNode)]
         df = self.execute_query(
             selection=target_selection,
             vqs=set(v_map.values()),
@@ -809,6 +812,34 @@ class Storage(Transactable):
         outputs = [make_delayed(tp=tp) for tp in output_types]
         call_struct = CallStruct(func_op=func_op, inputs=inputs, outputs=outputs)
         return outputs, call_struct
+
+    ############################################################################
+    ### provenance
+    ############################################################################
+    @transaction()
+    def prov(
+        self,
+        ref: Ref,
+        conn: Optional[Connection] = None,
+        uids_only: bool = False,
+        debug: bool = False,
+    ):
+        prov_df = self.rel_storage.get_data(Config.provenance_table, conn=conn)
+        prov_df = prov_df.set_index([Provenance.causal_uid, Provenance.direction])
+        x = provenance.ProvHelpers(storage=self, prov_df=prov_df)
+        val_nodes, call_nodes = x.get_graph(full_uid=ref.full_uid)
+        show_sources_as = "values" if not uids_only else "uids"
+        printer = GraphPrinter(
+            vqs=val_nodes,
+            fqs=call_nodes,
+            names=None,
+            value_loader=ValueLoader(storage=self),
+        )
+        print(printer.print_computational_graph(show_sources_as=show_sources_as))
+        if debug:
+            visualize_graph(
+                vqs=val_nodes, fqs=call_nodes, names=None, show_how="browser"
+            )
 
     ############################################################################
     ### spawning contexts
@@ -953,6 +984,7 @@ class Storage(Transactable):
 
 
 from . import funcs
+from . import provenance
 
 FuncInterface = funcs.FuncInterface
 
@@ -967,3 +999,12 @@ TP_TO_CLS = {
 
 def make_delayed(tp: Type) -> Ref:
     return TP_TO_CLS[type(tp)](uid="", obj=Delayed(), in_memory=False)
+
+
+class ValueLoader(ValueLoaderABC):
+    def __init__(self, storage: Storage):
+        self.storage = storage
+
+    def load_value(self, full_uid: str) -> Any:
+        uid, _ = Ref.parse_full_uid(full_uid)
+        return self.storage.rel_adapter.obj_get(uid=uid)

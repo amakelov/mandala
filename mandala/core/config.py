@@ -123,10 +123,7 @@ class Config:
     tests_module_name = "mandala.tests"
 
     # hashing method
-    content_hasher: Literal["cityhash", "blake2b", "joblib"] = (
-        # "cityhash" if has_cityhash else "blake2b"
-        "joblib"
-    )
+    content_hasher: Literal["cityhash", "blake2b", "joblib"] = "joblib"
 
 
 def dump_output_name(index: int) -> str:
@@ -157,3 +154,11 @@ class MODES:
     delete = "delete"
 
     all_ = (run, query, batch, noop, define, delete)
+
+
+class Provenance:
+    causal_uid = "causal"
+    direction = "direction"
+    call_causal_uid = "call_causal"
+    name = "name"
+    op_id = "op_id"
