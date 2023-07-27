@@ -1,10 +1,23 @@
 from ..common_imports import *
 from .config import Config, is_output_name
 from .utils import get_uid, Hashing, is_subdict, get_full_uid
+from ..utils import serialize
+from pickle import PicklingError
 
 if Config.has_torch:
     import torch
 
+
+def sanitize_annotation(annotation: Any) -> Any:
+    try:
+        serialize(annotation)
+        return annotation
+    except PicklingError:
+        return Any
+    except Exception as e:
+        raise ValueError(f"Invalid annotation: {annotation}") from e
+        
+        
 
 class Signature:
     """
@@ -54,8 +67,8 @@ class Signature:
         # added to the function since its creation
         self._new_input_defaults_uids = {}
 
-        self.input_annotations = input_annotations
-        self.output_annotations = output_annotations
+        self.input_annotations = {k: sanitize_annotation(v) for k, v in input_annotations.items()}
+        self.output_annotations = [sanitize_annotation(v) for v in output_annotations]
 
         self._is_builtin = _is_builtin
         if self.is_builtin:
