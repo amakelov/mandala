@@ -195,6 +195,11 @@ class Storage(Transactable):
     def _end_transaction(self, conn: Connection):
         return self.rel_storage._end_transaction(conn=conn)
 
+    def unwrap(self, obj: Any) -> Any:
+        with self.run():
+            res = unwrap(obj)
+        return res
+
     @transaction()
     def commit(
         self,

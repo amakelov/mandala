@@ -1,3 +1,4 @@
+import typing
 import hashlib
 import textwrap
 from weakref import WeakKeyDictionary
@@ -87,6 +88,10 @@ class Hashing:
 
     @staticmethod
     def get_joblib_hash(obj: Any) -> str:
+        if hasattr(obj, "__get_mandala_dict__"):
+            obj = obj.__get_mandala_dict__()
+        if Config.has_torch:
+            obj = tensor_to_numpy(obj)
         result = joblib.hash(obj)
         if result is None:
             raise RuntimeError("joblib.hash returned None")
@@ -132,3 +137,31 @@ def unwrap_decorators(
         else:
             logger.debug(msg)
     return obj
+
+
+if Config.has_torch:
+
+    def tensor_to_numpy(obj: Union[torch.Tensor, dict, list, tuple, Any]) -> Any:
+        """
+        Recursively convert PyTorch tensors in a data structure to numpy arrays.
+
+        Parameters
+        ----------
+        obj : any
+            The input data structure.
+
+        Returns
+        -------
+        any
+            The data structure with tensors converted to numpy arrays.
+        """
+        if isinstance(obj, torch.Tensor):
+            return obj.cpu().numpy()
+        elif isinstance(obj, dict):
+            return {k: tensor_to_numpy(v) for k, v in obj.items()}
+        elif isinstance(obj, list):
+            return [tensor_to_numpy(v) for v in obj]
+        elif isinstance(obj, tuple):
+            return tuple(tensor_to_numpy(v) for v in obj)
+        else:
+            return obj

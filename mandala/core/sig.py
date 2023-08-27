@@ -16,8 +16,7 @@ def sanitize_annotation(annotation: Any) -> Any:
         return Any
     except Exception as e:
         raise ValueError(f"Invalid annotation: {annotation}") from e
-        
-        
+
 
 class Signature:
     """
@@ -67,7 +66,9 @@ class Signature:
         # added to the function since its creation
         self._new_input_defaults_uids = {}
 
-        self.input_annotations = {k: sanitize_annotation(v) for k, v in input_annotations.items()}
+        self.input_annotations = {
+            k: sanitize_annotation(v) for k, v in input_annotations.items()
+        }
         self.output_annotations = [sanitize_annotation(v) for v in output_annotations]
 
         self._is_builtin = _is_builtin
