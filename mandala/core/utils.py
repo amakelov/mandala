@@ -92,6 +92,13 @@ class Hashing:
             obj = obj.__get_mandala_dict__()
         if Config.has_torch:
             obj = tensor_to_numpy(obj)
+        if isinstance(obj, pd.DataFrame):
+            # DataFrames cause collisions with joblib hashing
+            obj = {
+                'columns': obj.columns,
+                'values': obj.values,
+                'index': obj.index,
+            }
         result = joblib.hash(obj)
         if result is None:
             raise RuntimeError("joblib.hash returned None")
@@ -156,7 +163,7 @@ if Config.has_torch:
             The data structure with tensors converted to numpy arrays.
         """
         if isinstance(obj, torch.Tensor):
-            return obj.cpu().numpy()
+            return obj.detach().cpu().numpy()
         elif isinstance(obj, dict):
             return {k: tensor_to_numpy(v) for k, v in obj.items()}
         elif isinstance(obj, list):

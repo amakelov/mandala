@@ -130,6 +130,8 @@ class Context:
                     self.storage.sync_to_remote()
             elif self.mode == MODES.query:
                 pass
+            elif self.mode == MODES.noop:
+                pass
             elif self.mode == MODES.batch:
                 executor = SimpleWorkflowExecutor()
                 workflow = Workflow.from_call_structs(self._call_structs)

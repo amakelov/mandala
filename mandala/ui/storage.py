@@ -295,12 +295,12 @@ class Storage(Transactable):
             raise RuntimeError(
                 "This function has been invalidated due to a change in the signature, and cannot be called"
             )
-        if f._is_synchronized:
-            if f._storage_id != id(self):
-                raise RuntimeError(
-                    "This function is already synchronized with a different storage object. Re-define the function to synchronize it with this storage object."
-                )
-            return
+        # if f._is_synchronized:
+        #     if f._storage_id != id(self):
+        #         raise RuntimeError(
+        #             "This function is already synchronized with a different storage object. Re-define the function to synchronize it with this storage object."
+        #         )
+        #     return
         self.synchronize_op(func_op=f.func_op, conn=conn)
         f._is_synchronized = True
         f._storage_id = id(self)
@@ -896,6 +896,12 @@ class Storage(Transactable):
             storage=self,
             mode=MODES.batch,
             **updates,
+        )
+    
+    def noop(self) -> contexts.Context:
+        return self._nest(
+            storage=self,
+            mode=MODES.noop,
         )
 
     ############################################################################
