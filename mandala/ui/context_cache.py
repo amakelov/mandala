@@ -105,12 +105,14 @@ class Cache(Transactable):
                 uid=uid, by_causal=False
             )
 
+    @transaction()
     def call_mget(
         self,
         uids: List[str],
         versioned_ui_name: str,
         by_causal: bool = True,
         lazy: bool = True,
+        conn: Optional[Connection] = None,
     ) -> List[Call]:
         if not by_causal:
             raise NotImplementedError()
@@ -127,7 +129,10 @@ class Cache(Transactable):
                 missing_uids.append(uid)
         if len(missing_uids) > 0:
             lazy_calls = self.rel_adapter.mget_call_lazy(
-                versioned_ui_name=versioned_ui_name, uids=missing_uids, by_causal=True
+                versioned_ui_name=versioned_ui_name,
+                uids=missing_uids,
+                by_causal=True,
+                conn=conn,
             )
             for i, lazy_call in zip(missing_indices, lazy_calls):
                 res[i] = lazy_call

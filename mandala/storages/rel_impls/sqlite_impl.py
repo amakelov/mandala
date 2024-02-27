@@ -321,12 +321,17 @@ class SQLiteRelStorage(RelStorage, Transactable):
 
     @transaction()
     def delete(
-        self, relation: str, index: List[str], conn: Optional[sqlite3.Connection] = None
+        self,
+        relation: str,
+        where_col: str,
+        where_values: List[str],
+        conn: Optional[sqlite3.Connection] = None,
     ):
         """
-        Delete rows from a table based on index
+        Delete rows from a table where `where_col` is in `where_values`
         """
-        raise NotImplementedError()
+        query = f"DELETE FROM {relation} WHERE {where_col} IN ({','.join(['?']*len(where_values))})"
+        conn.execute(query, where_values)
 
     @transaction()
     def execute_df(

@@ -1,4 +1,6 @@
 from abc import ABC, abstractmethod
+import sqlite3
+from pypika import Query, Column
 from ...common_imports import *
 from .utils import Connection
 import pyarrow as pa
@@ -49,15 +51,35 @@ class RelStorage(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    def delete(self, name: str, index: List[str]):
+    def delete(
+        self,
+        relation: str,
+        where_col: str,
+        where_values: List[str],
+        conn: Optional[Connection] = None,
+    ):
         """
-        Delete rows from a table based on index
+        Delete rows from a table where `where_col` is in `where_values`
         """
         raise NotImplementedError()
 
     @abstractmethod
-    def get_data(self, table: str) -> pd.DataFrame:
+    def get_data(
+        self, table: str, conn: Optional[sqlite3.Connection] = None
+    ) -> pd.DataFrame:
         """
         Fetch data from a table.
+        """
+        raise NotImplementedError()
+
+    @abstractmethod
+    def execute_df(
+        self,
+        query: Union[str, Query],
+        parameters: List[Any] = None,
+        conn: Optional[sqlite3.Connection] = None,
+    ) -> pd.DataFrame:
+        """
+        Execute a query and return the result as a DataFrame.
         """
         raise NotImplementedError()

@@ -854,8 +854,12 @@ class Storage(Transactable):
     ############################################################################
     ### low-level provenance interfaces
     ############################################################################
+    @transaction()
     def get_creators(
-        self, refs: List[Ref], prov_df: Optional[pd.DataFrame] = None
+        self,
+        refs: List[Ref],
+        prov_df: Optional[pd.DataFrame] = None,
+        conn: Optional[Connection] = None,
     ) -> Tuple[List[Optional[Call]], List[Optional[str]]]:
         """
         Given some Refs, return the
@@ -865,7 +869,7 @@ class Storage(Transactable):
         if not refs:
             return [], []
         if prov_df is None:
-            prov_df = self.rel_storage.get_data(Config.provenance_table)
+            prov_df = self.rel_storage.get_data(Config.provenance_table, conn=conn)
             prov_df = propagate_struct_provenance(prov_df=prov_df)
         causal_uids = list([ref.causal_uid for ref in refs])
         assert all(x is not None for x in causal_uids)
@@ -883,13 +887,14 @@ class Storage(Transactable):
             internal_name, version = Signature.parse_versioned_name(
                 versioned_name=op_id
             )
-            versioned_ui_name = self.sig_adapter.load_state()[
+            versioned_ui_name = self.sig_adapter.load_state(conn=conn)[
                 internal_name, version
             ].versioned_ui_name
             op_calls = self.cache.call_mget(
                 uids=call_causal_list,
                 by_causal=True,
                 versioned_ui_name=versioned_ui_name,
+                conn=conn,
             )
             call_causal_to_call.update({call.causal_uid: call for call in op_calls})
         calls = [
@@ -898,12 +903,6 @@ class Storage(Transactable):
             else None
             for causal_uid in causal_uids
         ]
-        # if not len(set(causal_to_op_id.values())) == 1:
-        #     raise NotImplementedError(f"Creators of refs from different ops not supported; found ops: {set(causal_to_op_id.values())}")
-        # internal_name, version = Signature.parse_versioned_name(versioned_name=causal_to_op_id[causal_uids[0]])
-        # versioned_ui_name = self.sig_adapter.load_state()[internal_name, version].versioned_ui_name
-        # calls = self.cache.call_mget(uids=[causal_to_creator_call_uid[causal_uid] for causal_uid in causal_uids], by_causal=True,
-        #                              versioned_ui_name=versioned_ui_name)
         output_names = [
             causal_to_output_name[causal_uid]
             if causal_uid in causal_to_output_name
@@ -912,8 +911,12 @@ class Storage(Transactable):
         ]
         return calls, output_names
 
+    @transaction()
     def get_consumers(
-        self, refs: List[Ref], prov_df: Optional[pd.DataFrame] = None
+        self,
+        refs: List[Ref],
+        prov_df: Optional[pd.DataFrame] = None,
+        conn: Optional[Connection] = None,
     ) -> Tuple[List[List[Call]], List[List[str]]]:
         """
         Given some Refs, return the
@@ -921,7 +924,7 @@ class Storage(Transactable):
          - the input names under which the refs were used
         """
         if prov_df is None:
-            prov_df = self.rel_storage.get_data(Config.provenance_table)
+            prov_df = self.rel_storage.get_data(Config.provenance_table, conn=conn)
             prov_df = propagate_struct_provenance(prov_df=prov_df)
         causal_uids = [ref.causal_uid for ref in refs]
         assert all(x is not None for x in causal_uids)
@@ -940,7 +943,7 @@ class Storage(Transactable):
             internal_name, version = Signature.parse_versioned_name(
                 versioned_name=op_id
             )
-            op_id_to_versioned_ui_name[op_id] = self.sig_adapter.load_state()[
+            op_id_to_versioned_ui_name[op_id] = self.sig_adapter.load_state(conn=conn)[
                 internal_name, version
             ].versioned_ui_name
         op_to_causal_to_calls_and_inp_names = defaultdict(dict)
@@ -957,6 +960,7 @@ class Storage(Transactable):
                 ],
                 by_causal=True,
                 versioned_ui_name=versioned_ui_name,
+                conn=conn,
             )
             call_causal_to_call = {call.causal_uid: call for call in op_calls}
             op_to_causal_to_calls_and_inp_names[op_id] = {

@@ -2,6 +2,7 @@ from ..common_imports import *
 from ..core.config import *
 from ..core.model import Ref, FuncOp
 from ..core.builtins_ import StructOrientations
+from ..storages.rel_impls.utils import Transactable, transaction, Connection
 from ..queries.graphs import copy_subgraph
 from ..core.prov import propagate_struct_provenance, BUILTIN_OP_IDS
 from ..queries.weaver import CallNode, ValNode
@@ -10,7 +11,7 @@ from .funcs import FuncInterface
 from .storage import Storage, ValueLoader
 
 
-class RefFunctor:
+class RefFunctor(Transactable):
     """
     An in-memory dynamic representation of a slice of storage representing some
     computation, with a set of operations that turn it into a generalized
@@ -40,7 +41,9 @@ class RefFunctor:
             return pd.Series(self.val_nodes[indexer].refs, name=indexer)
         elif isinstance(indexer, list) and all(isinstance(x, str) for x in indexer):
             return pd.DataFrame({col: self.val_nodes[col].refs for col in indexer})
-        elif isinstance(indexer, np.ndarray):
+        elif isinstance(indexer, (np.ndarray, pd.Series)):
+            if isinstance(indexer, pd.Series):
+                indexer = indexer.values
             # boolean mask
             if indexer.dtype == bool:
                 res = self.copy()
@@ -58,8 +61,11 @@ class RefFunctor:
                 f"Invalid indexer type into {self.__class__}: {type(indexer)}"
             )
 
+    @transaction()
     def eval(
-        self, indexer: Optional[Union[str, List[str]]] = None
+        self,
+        indexer: Optional[Union[str, List[str]]] = None,
+        conn: Optional[Connection] = None,
     ) -> Union[pd.Series, pd.DataFrame]:
         if indexer is None:
             indexer = list(self.val_nodes.keys())
@@ -71,11 +77,14 @@ class RefFunctor:
             return res[indexer]
         else:
             full_uids_df = self[indexer].applymap(lambda x: x.full_uid)
-            return self.storage.eval_df(full_uids_df=full_uids_df, values="objs")
+            return self.storage.eval_df(
+                full_uids_df=full_uids_df, values="objs", conn=conn
+            )
 
-    def creators(self, col: str) -> np.ndarray:
+    @transaction()
+    def creators(self, col: str, conn: Optional[Connection] = None) -> np.ndarray:
         calls, output_names = self.storage.get_creators(
-            refs=self.val_nodes[col].refs, prov_df=self.prov_df
+            refs=self.val_nodes[col].refs, prov_df=self.prov_df, conn=conn
         )
         return np.array(
             [
@@ -84,9 +93,10 @@ class RefFunctor:
             ]
         )
 
-    def consumers(self, col: str) -> np.ndarray:
+    @transaction()
+    def consumers(self, col: str, conn: Optional[Connection] = None) -> np.ndarray:
         calls_list, input_names_list = self.storage.get_consumers(
-            refs=self.val_nodes[col].refs, prov_df=self.prov_df
+            refs=self.val_nodes[col].refs, prov_df=self.prov_df, conn=conn
         )
         return np.array(
             [
@@ -100,12 +110,14 @@ class RefFunctor:
             ]
         )
 
+    @transaction()
     def back(
         self,
         cols: Optional[Union[str, List[str]]] = None,
         inplace: bool = False,
         silent_failure: bool = False,
         verbose: bool = False,
+        conn: Optional[Connection] = None,
     ) -> "RefFunctor":
         """
         Given some columns, expand the data structure to include the ops and
@@ -126,6 +138,7 @@ class RefFunctor:
                     inplace=inplace,
                     silent_failure=True,
                     verbose=verbose,
+                    conn=conn,
                 )
                 if verbose:
                     res.print()
@@ -142,7 +155,7 @@ class RefFunctor:
             cols = [cols]
         creator_data = {
             col: res.storage.get_creators(
-                refs=res.val_nodes[col].refs, prov_df=res.prov_df
+                refs=res.val_nodes[col].refs, prov_df=res.prov_df, conn=conn
             )
             for col in cols
         }
@@ -271,6 +284,25 @@ class RefFunctor:
                 )
                 res.call_nodes[res.get_new_cname(op)] = call_node
         return res
+
+    @transaction()
+    def delete(self, conn: Optional[Connection] = None):
+        """
+        Delete the calls referenced by this RefFunctor from the storage, and
+        clean up any orphaned refs.
+
+        Warning: You probably want to apply this only on RefFunctors that are
+        "forward-closed", i.e., that have been expanded to include all the calls
+        that use their values. Otherwise, you may end up with obscure refs for
+        which you have no provenance, i.e. "zombie" refs.
+        """
+        for v in self.call_nodes.values():
+            self.storage.rel_adapter.delete_calls(
+                versioned_ui_name=v.func_op.sig.versioned_ui_name,
+                causal_uids=v.call_uids,
+                conn=conn,
+            )
+        self.storage.rel_adapter.cleanup_vrefs(conn=conn)
 
     ############################################################################
     ### creating new RefFunctors
@@ -425,3 +457,12 @@ class RefFunctor:
         Fast alias for rename
         """
         return self.rename(columns=kwargs, inplace=inplace)
+
+    ############################################################################
+    ### `Transactable` interface
+    ############################################################################
+    def _get_connection(self) -> Connection:
+        return self.storage.rel_storage._get_connection()
+
+    def _end_transaction(self, conn: Connection):
+        return self.storage.rel_storage._end_transaction(conn=conn)

@@ -1214,3 +1214,82 @@ class RelAdapter(Transactable):
                 )
         df = pd.DataFrame(rows)
         self.rel_storage.upsert(relation=Config.provenance_table, ta=df, conn=conn)
+
+    ############################################################################
+    ### deletion
+    ############################################################################
+    @transaction()
+    def delete_causal_refs(
+        self, full_uids: List[str], conn: Optional[Connection] = None
+    ):
+        self.rel_storage.delete(
+            relation=Config.causal_vref_table,
+            where_col=Config.full_uid_col,
+            where_values=full_uids,
+            conn=conn,
+        )
+
+    @transaction()
+    def delete_refs(self, uids: List[str], conn: Optional[Connection] = None):
+        self.rel_storage.delete(
+            relation=Config.vref_table,
+            where_col=Config.uid_col,
+            where_values=uids,
+            conn=conn,
+        )
+        full_uids = set(
+            self.rel_storage.execute_df(
+                query=f"SELECT {Config.full_uid_col} FROM {Config.causal_vref_table}",
+                conn=conn,
+            )[Config.full_uid_col].tolist()
+        )
+        full_uids_to_delete = {
+            full_uid for full_uid in full_uids if full_uid.rsplit(".", 1)[0] in uids
+        }
+        self.delete_causal_refs(full_uids=list(full_uids_to_delete), conn=conn)
+
+    @transaction()
+    def cleanup_vrefs(self, conn: Optional[Connection] = None):
+        """
+        Delete all value references that are not referenced by any call.
+        """
+        # collect all the full uids referenced by calls
+        all_referenced_uids = set()
+        for table in self.get_call_tables(conn=conn):
+            df = self.rel_storage.get_data(table=table, conn=conn)
+            for col in [
+                col for col in df.columns if col not in Config.special_call_cols
+            ]:
+                all_referenced_uids.update(
+                    {x.rsplit(".", 1)[0] for x in df[col].unique()}
+                )
+        # delete the unreferenced full uids
+        stored_uids = set(
+            self.rel_storage.execute_df(
+                query=f"SELECT {Config.uid_col} FROM {Config.vref_table}", conn=conn
+            )[Config.uid_col].tolist()
+        )
+        unreferenced_uids = stored_uids - all_referenced_uids
+        self.delete_refs(uids=list(unreferenced_uids), conn=conn)
+
+    @transaction()
+    def delete_calls(
+        self,
+        versioned_ui_name: str,
+        causal_uids: List[str],
+        conn: Optional[Connection] = None,
+    ):
+        # delete from memoization table
+        self.rel_storage.delete(
+            relation=versioned_ui_name,
+            where_col=Config.causal_uid_col,
+            where_values=causal_uids,
+            conn=conn,
+        )
+        # delete from provenance table
+        self.rel_storage.delete(
+            relation=Config.provenance_table,
+            where_col=Provenance.call_causal_uid,
+            where_values=causal_uids,
+            conn=conn,
+        )
