@@ -54,7 +54,9 @@ class Ref:
     @causal_uid.setter
     def causal_uid(self, causal_uid: str):
         if self.causal_uid is not None and self.causal_uid != causal_uid:
-            raise ValueError("causal_uid already set")
+            raise ValueError(
+                f"causal_uid already set to {self.causal_uid}, cannot set to {causal_uid}"
+            )
         self._causal_uid = causal_uid
 
     @property
@@ -77,16 +79,21 @@ class Ref:
         return res
 
     @staticmethod
-    def from_uid(uid: str) -> "Ref":
+    def from_uid(uid: str, causal_uid: Optional[str] = None) -> "Ref":
         from .builtins_ import Builtins
 
         if Builtins.is_builtin_uid(uid=uid):
             builtin_id, uid = Builtins.parse_builtin_uid(uid=uid)
-            return Builtins.spawn_builtin(builtin_id=builtin_id, uid=uid)
+            return Builtins.spawn_builtin(
+                builtin_id=builtin_id, uid=uid, causal_uid=causal_uid
+            )
         elif is_transient_uid(uid=uid):
-            return ValueRef(uid=uid, obj=None, in_memory=False, transient=True)
+            res = ValueRef(uid=uid, obj=None, in_memory=False, transient=True)
         else:
-            return ValueRef(uid=uid, obj=None, in_memory=False)
+            res = ValueRef(uid=uid, obj=None, in_memory=False)
+        if causal_uid is not None:
+            res._causal_uid = causal_uid
+        return res
 
     def is_delayed(self) -> bool:
         return isinstance(self.obj, Delayed)
@@ -104,7 +111,13 @@ class Ref:
         if not self.in_memory:
 
             context = GlobalContext.current
-            assert context is not None
+            if context is None:
+                ## emit a warning
+                # logger.warning(
+                #     "No context found, cannot attach ref."
+                # )
+                # fail silently
+                return
             if context.mode != MODES.run:
                 return
             assert context.storage is not None
@@ -123,8 +136,20 @@ class Ref:
         """
         Produce a copy unlinked from the computational graph that preserves the
         `in_memory` status and all other properties.
+
+        If `keep_causal` is True, the causal UID is preserved. Otherwise, it is
+        removed recursively.
+
+        ! Actually, this is quite a lot like a deepcopy for refs, which suggests
+        that we could refactor
         """
         raise NotImplementedError
+
+    def clone(self) -> "Ref":
+        """
+        Clone a `Ref` by creating a new object which has the same data
+        """
+        return self.unlinked(keep_causal=True)
 
     @property
     def _uid_suffix(self) -> str:
@@ -371,14 +396,14 @@ class Call:
         return f"Call(\n{data_str}\n)"
 
     @staticmethod
-    def from_row(row: pa.Table, func_op: "FuncOp") -> "Call":
+    def from_row(row: Union[pa.Table, dict], func_op: "FuncOp") -> "Call":
         """
         Generate a `Call` from a single-row table encoding the UID, input and
         output UIDs.
 
         NOTE: this does not include the objects for the inputs and outputs to the call!
         """
-        columns = row.column_names
+        columns = row.column_names if isinstance(row, pa.Table) else row.keys()
         output_columns = [column for column in columns if is_output_name(column)]
         input_columns = [
             column
@@ -386,22 +411,37 @@ class Call:
             if column not in output_columns and column not in Config.special_call_cols
         ]
         process_boolean = lambda x: True if x == "1" else False
-        return Call(
-            uid=row.column(Config.uid_col)[0].as_py(),
-            causal_uid=row.column(Config.causal_uid_col)[0].as_py(),
-            semantic_version=row.column(Config.semantic_version_col)[0].as_py(),
-            content_version=row.column(Config.content_version_col)[0].as_py(),
-            transient=process_boolean(row.column(Config.transient_col)[0].as_py()),
-            inputs={
-                k: Ref.from_full_uid(full_uid=row.column(k)[0].as_py())
-                for k in input_columns
-            },
-            outputs=[
-                Ref.from_full_uid(full_uid=row.column(k)[0].as_py())
-                for k in sorted(output_columns, key=parse_output_idx)
-            ],
-            func_op=func_op,
-        )
+        if isinstance(row, pa.Table):
+            return Call(
+                uid=row.column(Config.uid_col)[0].as_py(),
+                causal_uid=row.column(Config.causal_uid_col)[0].as_py(),
+                semantic_version=row.column(Config.semantic_version_col)[0].as_py(),
+                content_version=row.column(Config.content_version_col)[0].as_py(),
+                transient=process_boolean(row.column(Config.transient_col)[0].as_py()),
+                inputs={
+                    k: Ref.from_full_uid(full_uid=row.column(k)[0].as_py())
+                    for k in input_columns
+                },
+                outputs=[
+                    Ref.from_full_uid(full_uid=row.column(k)[0].as_py())
+                    for k in sorted(output_columns, key=parse_output_idx)
+                ],
+                func_op=func_op,
+            )
+        else:
+            return Call(
+                uid=row[Config.uid_col],
+                causal_uid=row[Config.causal_uid_col],
+                semantic_version=row[Config.semantic_version_col],
+                content_version=row[Config.content_version_col],
+                transient=process_boolean(row[Config.transient_col]),
+                inputs={k: Ref.from_full_uid(full_uid=row[k]) for k in input_columns},
+                outputs=[
+                    Ref.from_full_uid(full_uid=row[k])
+                    for k in sorted(output_columns, key=parse_output_idx)
+                ],
+                func_op=func_op,
+            )
 
     def set_input_values(self, inputs: Dict[str, Ref]) -> "Call":
         res = copy.deepcopy(self)
@@ -474,6 +514,9 @@ class FuncOp:
         if n_outputs_override is not None:
             self.sig.n_outputs = n_outputs_override
             self.sig.output_annotations = [Any] * n_outputs_override
+
+    def __repr__(self) -> str:
+        return f"FuncOp({self.sig.ui_name}, version={self.sig.version})"
 
     @property
     def func(self) -> Callable:
@@ -669,6 +712,14 @@ def collect_detached(refs: Iterable[Ref], include_transient: bool) -> List[Ref]:
         else:
             continue
     return detached_vrefs
+
+
+def clone(ref: Ref) -> Ref:
+    """
+    Clone a `Ref` by creating a new object which has the same data
+    """
+    if isinstance(ref, ValueRef):
+        return ref.dump()
 
 
 from .builtins_ import ListRef, DictRef, SetRef, Builtins, StructRef

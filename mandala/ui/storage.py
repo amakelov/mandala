@@ -1,4 +1,5 @@
 import datetime
+import tqdm
 from typing import Literal
 from collections import deque
 
@@ -50,6 +51,8 @@ from ..queries.viz import (
 )
 from ..queries.main import Querier
 from ..queries.graphs import get_canonical_order, InducedSubgraph
+
+from ..core.prov import propagate_struct_provenance
 
 
 class Storage(Transactable):
@@ -222,10 +225,27 @@ class Storage(Transactable):
         self,
         full_uids_df: pd.DataFrame,
         drop_duplicates: bool = False,
-        values: Literal["objs", "refs", "uids", "lazy"] = "objs",
+        values: Literal["objs", "refs", "uids", "full_uids", "lazy"] = "objs",
         conn: Optional[Connection] = None,
     ) -> pd.DataFrame:
-        uids_df = full_uids_df.applymap(lambda uid: uid.rsplit(".", 1)[0])
+        """
+        - ! this function loads objects in the cache; this is probably not
+        transparent to the user
+        - Note that currently we pass the full UIDs as input, and thus we return
+        values with causal UIDs. Maybe it is desirable in some settings to
+        disable this behavior.
+        """
+        if values == "full_uids":
+            return full_uids_df
+        has_meta = set(Config.special_call_cols).issubset(full_uids_df.columns)
+        inp_outp_cols = [
+            col for col in full_uids_df.columns if col not in Config.special_call_cols
+        ]
+        uids_df = full_uids_df[inp_outp_cols].applymap(
+            lambda uid: uid.rsplit(".", 1)[0]
+        )
+        if has_meta:
+            uids_df[Config.special_call_cols] = full_uids_df[Config.special_call_cols]
         if values in ("objs", "refs"):
             uids_to_collect = [
                 item for _, column in uids_df.items() for _, item in column.items()
@@ -234,11 +254,24 @@ class Storage(Transactable):
             if values == "objs":
                 result = uids_df.applymap(lambda uid: unwrap(self.cache.obj_get(uid)))
             else:
-                result = uids_df.applymap(lambda uid: self.cache.obj_get(uid))
+                result = full_uids_df.applymap(
+                    lambda full_uid: self.cache.obj_get(
+                        obj_uid=full_uid.split(".")[0],
+                        causal_uid=full_uid.split(".")[1],
+                    )
+                )
         elif values == "uids":
             result = uids_df
         elif values == "lazy":
-            result = uids_df.applymap(lambda uid: Ref.from_uid(uid=uid))
+            result = full_uids_df[inp_outp_cols].applymap(
+                lambda full_uid: Ref.from_uid(
+                    uid=full_uid.split(".")[0], causal_uid=full_uid.split(".")[1]
+                )
+            )
+            if has_meta:
+                result[Config.special_call_cols] = full_uids_df[
+                    Config.special_call_cols
+                ]
         else:
             raise ValueError(
                 f"Invalid value for `values`: {values}. Must be one of "
@@ -253,7 +286,7 @@ class Storage(Transactable):
         self,
         func_interface: Union["funcs.FuncInterface", Any],
         meta: bool = False,
-        values: Literal["objs", "uids", "refs", "lazy"] = "objs",
+        values: Literal["objs", "uids", "full_uids", "refs", "lazy"] = "objs",
         drop_duplicates: bool = False,
         conn: Optional[Connection] = None,
     ) -> pd.DataFrame:
@@ -819,6 +852,152 @@ class Storage(Transactable):
         return outputs, call_struct
 
     ############################################################################
+    ### low-level provenance interfaces
+    ############################################################################
+    def get_creators(
+        self, refs: List[Ref], prov_df: Optional[pd.DataFrame] = None
+    ) -> Tuple[List[Optional[Call]], List[Optional[str]]]:
+        """
+        Given some Refs, return the
+         - calls that created them (there may be at most one such call per Ref), or None if there was no such call.
+         - the output name under which the refs were created
+        """
+        if not refs:
+            return [], []
+        if prov_df is None:
+            prov_df = self.rel_storage.get_data(Config.provenance_table)
+            prov_df = propagate_struct_provenance(prov_df=prov_df)
+        causal_uids = list([ref.causal_uid for ref in refs])
+        assert all(x is not None for x in causal_uids)
+        res_df = prov_df.query('causal in @causal_uids and direction_new == "output"')[
+            ["causal", "call_causal", "name", "op_id"]
+        ].set_index("causal")[["call_causal", "name", "op_id"]]
+        if len(res_df) == 0:
+            return [None] * len(refs), [None] * len(refs)
+        causal_to_creator_call_uid = res_df["call_causal"].to_dict()
+        causal_to_output_name = res_df["name"].to_dict()
+        causal_to_op_id = res_df["op_id"].to_dict()
+        op_groups = res_df.groupby("op_id")["call_causal"].apply(list).to_dict()
+        call_causal_to_call = {}
+        for op_id, call_causal_list in op_groups.items():
+            internal_name, version = Signature.parse_versioned_name(
+                versioned_name=op_id
+            )
+            versioned_ui_name = self.sig_adapter.load_state()[
+                internal_name, version
+            ].versioned_ui_name
+            op_calls = self.cache.call_mget(
+                uids=call_causal_list,
+                by_causal=True,
+                versioned_ui_name=versioned_ui_name,
+            )
+            call_causal_to_call.update({call.causal_uid: call for call in op_calls})
+        calls = [
+            call_causal_to_call[causal_to_creator_call_uid[causal_uid]]
+            if causal_uid in causal_to_creator_call_uid
+            else None
+            for causal_uid in causal_uids
+        ]
+        # if not len(set(causal_to_op_id.values())) == 1:
+        #     raise NotImplementedError(f"Creators of refs from different ops not supported; found ops: {set(causal_to_op_id.values())}")
+        # internal_name, version = Signature.parse_versioned_name(versioned_name=causal_to_op_id[causal_uids[0]])
+        # versioned_ui_name = self.sig_adapter.load_state()[internal_name, version].versioned_ui_name
+        # calls = self.cache.call_mget(uids=[causal_to_creator_call_uid[causal_uid] for causal_uid in causal_uids], by_causal=True,
+        #                              versioned_ui_name=versioned_ui_name)
+        output_names = [
+            causal_to_output_name[causal_uid]
+            if causal_uid in causal_to_output_name
+            else None
+            for causal_uid in causal_uids
+        ]
+        return calls, output_names
+
+    def get_consumers(
+        self, refs: List[Ref], prov_df: Optional[pd.DataFrame] = None
+    ) -> Tuple[List[List[Call]], List[List[str]]]:
+        """
+        Given some Refs, return the
+         - calls that use them (there may be multiple such calls per Ref), or an empty list if there were no such calls.
+         - the input names under which the refs were used
+        """
+        if prov_df is None:
+            prov_df = self.rel_storage.get_data(Config.provenance_table)
+            prov_df = propagate_struct_provenance(prov_df=prov_df)
+        causal_uids = [ref.causal_uid for ref in refs]
+        assert all(x is not None for x in causal_uids)
+        res_groups = prov_df.query(
+            'causal in @causal_uids and direction_new == "input"'
+        )[["causal", "call_causal", "name", "op_id"]]
+        op_to_causal_to_call_uids_and_inp_names = defaultdict(dict)
+        for causal, call_causal, name, op_id in res_groups.itertuples(index=False):
+            if causal not in op_to_causal_to_call_uids_and_inp_names[op_id]:
+                op_to_causal_to_call_uids_and_inp_names[op_id][causal] = []
+            op_to_causal_to_call_uids_and_inp_names[op_id][causal].append(
+                (call_causal, name)
+            )
+        op_id_to_versioned_ui_name = {}
+        for op_id in op_to_causal_to_call_uids_and_inp_names.keys():
+            internal_name, version = Signature.parse_versioned_name(
+                versioned_name=op_id
+            )
+            op_id_to_versioned_ui_name[op_id] = self.sig_adapter.load_state()[
+                internal_name, version
+            ].versioned_ui_name
+        op_to_causal_to_calls_and_inp_names = defaultdict(dict)
+        for (
+            op_id,
+            causal_to_call_uids_and_inp_names,
+        ) in op_to_causal_to_call_uids_and_inp_names.items():
+            versioned_ui_name = op_id_to_versioned_ui_name[op_id]
+            op_calls = self.cache.call_mget(
+                uids=[
+                    elt[0]
+                    for v in causal_to_call_uids_and_inp_names.values()
+                    for elt in v
+                ],
+                by_causal=True,
+                versioned_ui_name=versioned_ui_name,
+            )
+            call_causal_to_call = {call.causal_uid: call for call in op_calls}
+            op_to_causal_to_calls_and_inp_names[op_id] = {
+                causal: [
+                    (call_causal_to_call[call_causal], name)
+                    for call_causal, name in call_causal_list
+                ]
+                for causal, call_causal_list in causal_to_call_uids_and_inp_names.items()
+            }
+        concat_lists = lambda l: [elt for sublist in l for elt in sublist]
+        calls = [
+            concat_lists(
+                [
+                    [
+                        v[0]
+                        for v in op_to_causal_to_calls_and_inp_names[op_id].get(
+                            causal_uid, []
+                        )
+                    ]
+                    for op_id in op_to_causal_to_calls_and_inp_names.keys()
+                ]
+            )
+            for causal_uid in causal_uids
+        ]
+        input_names = [
+            concat_lists(
+                [
+                    [
+                        v[1]
+                        for v in op_to_causal_to_calls_and_inp_names[op_id].get(
+                            causal_uid, []
+                        )
+                    ]
+                    for op_id in op_to_causal_to_calls_and_inp_names.keys()
+                ]
+            )
+            for causal_uid in causal_uids
+        ]
+        return calls, input_names
+
+    ############################################################################
     ### provenance
     ############################################################################
     @transaction()
@@ -897,7 +1076,7 @@ class Storage(Transactable):
             mode=MODES.batch,
             **updates,
         )
-    
+
     def noop(self) -> contexts.Context:
         return self._nest(
             storage=self,

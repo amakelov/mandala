@@ -95,9 +95,9 @@ class Hashing:
         if isinstance(obj, pd.DataFrame):
             # DataFrames cause collisions with joblib hashing
             obj = {
-                'columns': obj.columns,
-                'values': obj.values,
-                'index': obj.index,
+                "columns": obj.columns,
+                "values": obj.values,
+                "index": obj.index,
             }
         result = joblib.hash(obj)
         if result is None:

@@ -32,8 +32,9 @@ class ValNode(Node):
         created_as: Optional[List[str]] = None,
         _label: Optional[str] = None,
         name: Optional[str] = None,
+        refs: Optional[List[Ref]] = None,
     ):
-        self.creators = [] if creators is None else creators
+        self.creators: List["CallNode"] = [] if creators is None else creators
         self.created_as = [] if created_as is None else created_as
         self.consumers: List["CallNode"] = []
         self.consumed_as: List[str] = []
@@ -41,6 +42,27 @@ class ValNode(Node):
         self.constraint = constraint
         self.tp = tp
         self._label: Optional[str] = _label
+        self._refs: Optional[List[Ref]] = None
+        self._refs_hash: Optional[str] = None
+
+        if refs is not None:
+            self.refs = refs
+
+    @property
+    def refs(self) -> Optional[List[Ref]]:
+        return self._refs
+
+    @refs.setter
+    def refs(self, value: List[Ref]):
+        self._refs, self._refs_hash = value, Hashing.get_content_hash(
+            [r.causal_uid for r in value]
+        )
+
+    @property
+    def refs_hash(self) -> str:
+        if self._refs_hash is None:
+            raise ValueError("No refs")
+        return self._refs_hash
 
     def add_consumer(self, consumer: "CallNode", consumed_as: str):
         self.consumers.append(consumer)
@@ -87,6 +109,16 @@ class ValNode(Node):
         else:
             return f"ValNode({self.tp})"
 
+    def mask(self, mask: np.ndarray):
+        if self.refs is None:
+            raise ValueError("No refs to mask")
+        if isinstance(mask, np.ndarray):
+            assert mask.dtype == np.dtype("bool")
+            assert mask.shape[0] == len(self.refs)
+            self.refs = [r for r, b in zip(self.refs, mask) if b]
+        else:
+            raise NotImplementedError("Indexing only supported for boolean arrays")
+
     def get_constraint(self, *values) -> List[str]:
         wrapped = [wrap_atom(v) for v in values]
         for w in wrapped:
@@ -121,12 +153,48 @@ class CallNode(Node):
         outputs: Dict[str, ValNode],
         constraint: Optional[List[str]],
         orientation: Optional[str] = None,
+        call_uids: Optional[List[str]] = None,
     ):
         self.func_op = func_op
         self.inputs = inputs
         self.outputs = outputs
         self.orientation = orientation
         self.constraint = constraint
+        self._call_uids: Optional[List[str]] = None
+        self._call_uids_hash: Optional[str] = None
+
+        if call_uids is not None:
+            self.call_uids = call_uids
+
+    @property
+    def call_uids(self) -> Optional[List[str]]:
+        return self._call_uids
+
+    @property
+    def call_uids_hash(self) -> str:
+        if self._call_uids_hash is None:
+            raise ValueError("No df")
+        return self._call_uids_hash
+
+    @call_uids.setter
+    def call_uids(self, value: List[str]):
+        self._call_uids, self._call_uids_hash = value, CallNode.get_call_uids_hash(
+            value
+        )
+
+    @staticmethod
+    def get_call_uids_hash(call_uids: List[str]) -> str:
+        return Hashing.get_content_hash(call_uids)
+
+    def mask(self, mask: np.ndarray):
+        if self.call_uids is None:
+            raise ValueError("No call UIDs to mask")
+        if isinstance(mask, np.ndarray):
+            assert mask.dtype == np.dtype("bool")
+            assert mask.shape[0] == len(self.call_uids)
+            self.call_uids = [c for c, b in zip(self.call_uids, mask) if b]
+        else:
+            raise NotImplementedError("Indexing only supported for boolean arrays")
 
     def set_outputs(self, outputs: Dict[str, ValNode]):
         self.outputs = outputs
@@ -186,6 +254,7 @@ class CallNode(Node):
         constraint: Optional[List[str]],
         orientation: Optional[str],
         include_indexing: bool = True,
+        call_uids: Optional[List[str]] = None,
     ) -> "CallNode":
         """
         Link a func query into the graph
@@ -213,6 +282,7 @@ class CallNode(Node):
             outputs=effective_outputs,
             orientation=orientation,
             constraint=constraint,
+            call_uids=call_uids,
         )
         for name, inp in effective_inputs.items():
             inp.add_consumer(consumer=result, consumed_as=name)

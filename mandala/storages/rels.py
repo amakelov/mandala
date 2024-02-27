@@ -708,6 +708,11 @@ class RelAdapter(Transactable):
         return data
 
     @transaction()
+    def get_causal_vrefs(self, conn: Optional[Connection] = None) -> pd.DataFrame:
+        data = self.rel_storage.get_data(table=self.CAUSAL_VREF_TABLE, conn=conn)
+        return data
+
+    @transaction()
     def get_all_call_data(
         self, conn: Optional[Connection] = None
     ) -> Dict[str, pd.DataFrame]:
@@ -916,6 +921,42 @@ class RelAdapter(Transactable):
         sig = self.sig_adapter.load_ui_sigs(conn=conn)[ui_name, version]
         return Call.from_row(results, func_op=FuncOp._from_sig(sig=sig))
 
+    @transaction()
+    def mget_call_lazy(
+        self,
+        versioned_ui_name: str,
+        uids: List[str],
+        by_causal: bool = True,
+        conn: Optional[Connection] = None,
+    ) -> List[Call]:
+        """
+        Get many calls to the same op.
+        """
+        if not by_causal:
+            raise NotImplementedError()
+        table_name = versioned_ui_name
+        table = Table(table_name)
+        query = (
+            Query.from_(table)
+            .where(table[Config.causal_uid_col].isin(uids))
+            .select(table.star)
+        )
+        results = self.rel_storage.execute_df(query, conn=conn).set_index(
+            Config.causal_uid_col
+        )
+        ui_name, version = Signature.parse_versioned_name(
+            versioned_name=str(table_name)
+        )
+        sig = self.sig_adapter.load_ui_sigs(conn=conn)[ui_name, version]
+        calls_by_causal_uid = {}
+        for causal_uid, row in results.iterrows():
+            call_dict = dict(row)
+            call_dict.update({Config.causal_uid_col: causal_uid})
+            calls_by_causal_uid[causal_uid] = Call.from_row(
+                call_dict, func_op=FuncOp._from_sig(sig=sig)
+            )
+        return [calls_by_causal_uid[uid] for uid in uids]
+
     ############################################################################
     ### object methods
     ############################################################################
@@ -1044,6 +1085,11 @@ class RelAdapter(Transactable):
         _attach_atoms: bool = True,
         conn: Optional[Connection] = None,
     ) -> List[Ref]:
+        """
+        Returns a list of value references for the given uids.
+
+        Note that causal UIDs are not set for these values.
+        """
         if len(uids) == 0:
             return []
         if depth == 0:
@@ -1143,7 +1189,6 @@ class RelAdapter(Transactable):
     @transaction()
     def upsert_provenance(self, calls: List[Call], conn: Optional[Connection] = None):
         rows = []
-        sess.d()
         for call in calls:
             call_causal = call.causal_uid
             for name, inp in call.inputs.items():

@@ -201,16 +201,18 @@ class GraphPrinter:
             raise NotImplementedError
         # inline the index value if the index is a source in the graph
         if idx in self.sources:
-            assert idx.constraint is not None
-            assert len(idx.constraint) == 1
-            idx_ref = self.value_loader.load_value(full_uid=idx.constraint[0])
-            idx_value = unwrap(idx_ref)
-            if isinstance(idx_value, int):
-                rhs = f"{self.names[struct]}[{idx_value}]"
-            elif isinstance(idx_value, str):
-                rhs = f"{self.names[struct]}['{idx_value}']"
+            if idx.constraint is None:
+                rhs = f"{self.names[struct]}[{self.names[idx]}]"
             else:
-                raise RuntimeError
+                assert len(idx.constraint) == 1
+                idx_ref = self.value_loader.load_value(full_uid=idx.constraint[0])
+                idx_value = unwrap(idx_ref)
+                if isinstance(idx_value, int):
+                    rhs = f"{self.names[struct]}[{idx_value}]"
+                elif isinstance(idx_value, str):
+                    rhs = f"{self.names[struct]}['{idx_value}']"
+                else:
+                    raise RuntimeError
         else:
             rhs = f"{self.names[struct]}[{self.names[idx]}]"
         return f"{lhs} = {rhs}"
@@ -226,7 +228,9 @@ class GraphPrinter:
         rhs = f"{self.names[struct]}[{idx_label}] # {self.names[elt]} will match any element of a match for {self.names[struct]} at index matching {idx_label}"
         return f"{lhs} = {rhs}"
 
-    def print_computational_graph(self, show_sources_as: str = "values") -> str:
+    def print_computational_graph(
+        self, show_sources_as: Literal["values", "uids", "omit", "name_only"] = "values"
+    ) -> str:
         res = []
         for node in self.full_topsort:
             if isinstance(node, ValNode):
@@ -234,12 +238,17 @@ class GraphPrinter:
                     if is_idx(node) or is_key(node):
                         # exclude indices/keys if they are sources (we will inline them)
                         continue
+                    if show_sources_as == "omit":
+                        continue
+                    elif show_sources_as == "name_only":
+                        res.append(self.names[node])
+                        continue
                     assert node.constraint is not None
                     assert len(node.constraint) == 1
                     if show_sources_as == "values":
                         ref = self.value_loader.load_value(full_uid=node.constraint[0])
                         value = unwrap(ref)
-                        rep = textwrap.shorten(str(value), 25)
+                        rep = textwrap.shorten(repr(value), 25)
                         res.append(f"{self.names[node]} = {rep}")
                     elif show_sources_as == "uids":
                         uid, causal_uid = Ref.parse_full_uid(
@@ -372,7 +381,8 @@ def graph_to_dot(
     for func_query in fqs:
         html_label = HTMLBuilder()
         func_preview = (
-            f'{func_query.displayname}({", ".join(func_query.inputs.keys())})'
+            # f'{func_query.displayname}({", ".join(func_query.inputs.keys())})'
+            func_query.displayname
         )
         if hasattr(func_query, "_hidden_message"):
             msg = func_query._hidden_message

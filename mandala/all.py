@@ -11,6 +11,7 @@ from .ui.storage import Storage, MODES, FuncInterface
 from .ui.contexts import Context, GlobalContext
 from .ui.funcs import op, Q, superop, Transient
 from .ui.utils import wrap_ui as wrap
+from .ui.reffunctors import RefFunctor
 
 # from .storages.rel_impls.duckdb_impl import DuckDBRelStorage
 from .storages.rel_impls.sqlite_impl import SQLiteRelStorage

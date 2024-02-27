@@ -78,12 +78,20 @@ class Cache(Transactable):
                 vrefs=not_found, shallow=shallow, _attach_atoms=_attach_atoms
             )
 
-    def obj_get(self, obj_uid: str) -> Ref:
+    def obj_get(self, obj_uid: str, causal_uid: Optional[str] = None) -> Ref:
+        """
+        Get the given object from the cache or the storage.
+        """
         #! note that this is not transactional to avoid creating a connection
         #! when the object is already in the cache
         if self.obj_cache.exists(obj_uid):
-            return self.obj_cache.get(obj_uid)
-        return self.rel_adapter.obj_get(uid=obj_uid)
+            res = self.obj_cache.get(obj_uid)
+        else:
+            res = self.rel_adapter.obj_get(uid=obj_uid)
+        res = res.clone()
+        if causal_uid is not None:
+            res.causal_uid = causal_uid
+        return res
 
     def call_exists(self, uid: str, by_causal: bool) -> bool:
         #! note that this is not transactional to avoid creating a connection
@@ -96,6 +104,34 @@ class Cache(Transactable):
             return self.call_cache_by_uid.exists(uid) or self.rel_adapter.call_exists(
                 uid=uid, by_causal=False
             )
+
+    def call_mget(
+        self,
+        uids: List[str],
+        versioned_ui_name: str,
+        by_causal: bool = True,
+        lazy: bool = True,
+    ) -> List[Call]:
+        if not by_causal:
+            raise NotImplementedError()
+        if not lazy:
+            raise NotImplementedError()
+        res = [None for _ in uids]
+        missing_indices = []
+        missing_uids = []
+        for i, uid in enumerate(uids):
+            if self.call_cache_by_causal.exists(uid):
+                res[i] = self.call_cache_by_causal.get(uid)
+            else:
+                missing_indices.append(i)
+                missing_uids.append(uid)
+        if len(missing_uids) > 0:
+            lazy_calls = self.rel_adapter.mget_call_lazy(
+                versioned_ui_name=versioned_ui_name, uids=missing_uids, by_causal=True
+            )
+            for i, lazy_call in zip(missing_indices, lazy_calls):
+                res[i] = lazy_call
+        return res
 
     def call_get(self, uid: str, by_causal: bool, lazy: bool = True) -> Call:
         """

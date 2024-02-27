@@ -321,7 +321,10 @@ def copy_subgraph(
     Copy the subgraph supported on the given nodes. Return maps from the
     original nodes to their copies.
     """
-    v_map = {v: ValNode(tp=v.tp, constraint=v.constraint, name=v.name) for v in vqs}
+    v_map = {
+        v: ValNode(tp=v.tp, constraint=v.constraint, name=v.name, refs=v.refs)
+        for v in vqs
+    }
     f_map = {}
     for fq in fqs:
         inputs = {k: v_map[v] for k, v in fq.inputs.items() if v in vqs}
@@ -332,5 +335,6 @@ def copy_subgraph(
             func_op=fq.func_op,
             orientation=fq.orientation,
             constraint=fq.constraint,
+            call_uids=fq.call_uids,
         )
     return v_map, f_map

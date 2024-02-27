@@ -141,7 +141,6 @@ class ListRef(StructRef, Sequence):
             res = res.unlinked(keep_causal=True)
             wrapped_idx = wrap_atom(obj=idx)
             causify_atom(ref=wrapped_idx)
-            sess.d()
             call = self.get_call(
                 wrapped_inputs={"lst": self, "idx": wrapped_idx, "elt": res}
             )
@@ -369,10 +368,15 @@ class Builtins:
         return builtin_id, uid
 
     @staticmethod
-    def spawn_builtin(builtin_id: str, uid: str) -> Ref:
+    def spawn_builtin(
+        builtin_id: str, uid: str, causal_uid: Optional[str] = None
+    ) -> Ref:
         assert builtin_id in Builtins.IDS
         uid = Builtins._make_builtin_uid(uid=uid, builtin_id=builtin_id)
-        return Builtins.REF_CLASSES[builtin_id](uid=uid, obj=None, in_memory=False)
+        res = Builtins.REF_CLASSES[builtin_id](uid=uid, obj=None, in_memory=False)
+        if causal_uid is not None:
+            res._causal_uid = causal_uid
+        return res
 
     @staticmethod
     def map(

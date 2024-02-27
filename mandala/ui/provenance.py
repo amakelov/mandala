@@ -1,7 +1,7 @@
 from ..common_imports import *
 from .storage import Storage
 from ..core.model import Ref, Call
-from ..core.builtins_ import StructRef
+from ..core.builtins_ import StructRef, ListRef, DictRef, SetRef
 from ..core.config import Provenance, parse_output_idx
 from ..queries.weaver import ValNode, CallNode, StructOrientations, traverse_all
 from ..queries.viz import GraphPrinter
