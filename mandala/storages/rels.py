@@ -1230,7 +1230,9 @@ class RelAdapter(Transactable):
         )
 
     @transaction()
-    def delete_refs(self, uids: List[str], conn: Optional[Connection] = None):
+    def delete_refs(
+        self, uids: List[str], verbose: bool = False, conn: Optional[Connection] = None
+    ):
         self.rel_storage.delete(
             relation=Config.vref_table,
             where_col=Config.uid_col,
@@ -1246,10 +1248,15 @@ class RelAdapter(Transactable):
         full_uids_to_delete = {
             full_uid for full_uid in full_uids if full_uid.rsplit(".", 1)[0] in uids
         }
+        if verbose:
+            logger.info(f"Deleting {len(full_uids_to_delete)} causal refs")
         self.delete_causal_refs(full_uids=list(full_uids_to_delete), conn=conn)
+        spillover_uids = self._get_spillover_uids(uids=uids)
+        for uid in spillover_uids:
+            (self.spillover_dir / f"{uid}.joblib").unlink(missing_ok=True)
 
     @transaction()
-    def cleanup_vrefs(self, conn: Optional[Connection] = None):
+    def cleanup_vrefs(self, verbose: bool = False, conn: Optional[Connection] = None):
         """
         Delete all value references that are not referenced by any call.
         """
@@ -1270,7 +1277,32 @@ class RelAdapter(Transactable):
             )[Config.uid_col].tolist()
         )
         unreferenced_uids = stored_uids - all_referenced_uids
+        if verbose:
+            spillover_uids = self._get_spillover_uids(uids=list(unreferenced_uids))
+            total_memory_usage = 0
+            for spillover_uid in spillover_uids:
+                size_in_mb = round(
+                    os.path.getsize(self.spillover_dir / f"{spillover_uid}.joblib")
+                    / 1024**2,
+                    2,
+                )
+                total_memory_usage += size_in_mb
+            total_memory_usage += self.get_vref_memory_usage(
+                uids=list(unreferenced_uids - spillover_uids), conn=conn
+            )
+            logger.info(
+                f"Deleting {len(unreferenced_uids)} unreferenced value refs that take up {total_memory_usage}MB"
+            )
         self.delete_refs(uids=list(unreferenced_uids), conn=conn)
+
+    def _get_spillover_uids(self, uids: Iterable[str]) -> Set[str]:
+        if self.spillover_dir is None:
+            return set()
+        spillover_uids = set()
+        for uid in uids:
+            if (self.spillover_dir / f"{uid}.joblib").exists():
+                spillover_uids.add(uid)
+        return spillover_uids
 
     @transaction()
     def delete_calls(
@@ -1293,3 +1325,24 @@ class RelAdapter(Transactable):
             where_values=causal_uids,
             conn=conn,
         )
+
+    @transaction()
+    def get_vref_memory_usage(
+        self, uids: List[str], units: str = "MB", conn: Optional[Connection] = None
+    ) -> float:
+        if not uids:
+            return 0
+        if units != "MB":
+            raise NotImplementedError
+        if len(uids) == 1:
+            in_clause = f"('{uids[0]}')"
+        else:
+            in_clause = str(tuple(uids))
+        query = (
+            f"SELECT length({Config.vref_value_col}) AS size_in_bytes FROM {Config.vref_table} WHERE __uid__ IN "
+            + in_clause
+        )
+        df = self.rel_storage.execute_df(query=query, conn=conn)
+        total_size_in_bytes = df["size_in_bytes"].astype(int).sum()
+        size_in_mb = round(total_size_in_bytes / 1024**2, 2)
+        return size_in_mb

@@ -85,3 +85,33 @@ def test_evals():
     assert len(df) == 10
     df = rf.eval()
     assert len(df) == 10
+
+    rf = RefFunctor.from_op(func=add, storage=storage)
+    sub_rf = rf[rf.eval("x") < 5]
+    assert len(sub_rf) == 5
+
+
+def test_deletion():
+
+    storage = Storage()
+
+    @op
+    def inc(x: int) -> int:
+        print("hey!")
+        return x + 1
+
+    with storage.run():
+        for i in range(10):
+            inc(i)
+
+    # check the number of rows goes down by the expected amount
+    rf = RefFunctor.from_op(func=inc, storage=storage)
+    rf[rf.eval("x") < 5].delete(delete_dependents=True, ask=False)
+    rf = RefFunctor.from_op(func=inc, storage=storage)
+    assert len(rf) == 5
+
+    # re-compute the calls
+    storage.cache.evict_all()
+    with storage.run():
+        for i in range(10):
+            inc(i)

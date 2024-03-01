@@ -10,6 +10,11 @@ class Cache(Transactable):
     """
     A layer between calls happening in the context and the persistent storage.
     Also responsible for detaching objects from the computational graph.
+
+    All calls represented in the cache are detached (see `Call.detached`), but
+    objects are represented as `Ref` instances (which are not detached).
+
+    TODO: protect the objects in the cache from being modified.
     """
 
     def __init__(
@@ -177,6 +182,9 @@ class Cache(Transactable):
         """
         Flush dirty (written since last time) calls and objs from the cache to
         persistent storage, and mark them as clean.
+
+        Note that the cache keeps calls and objects in memory in case they are
+        needed again, but the storage is the only source of truth.
         """
         if calls is None:
             new_objs = {
@@ -217,11 +225,17 @@ class Cache(Transactable):
             self.obj_cache.set(k=uid, v=vref)
 
     def evict_all(self):
+        """
+        Remove all entries from the cache.
+        """
         self.call_cache_by_causal.evict_all()
         self.call_cache_by_uid.evict_all()
         self.obj_cache.evict_all()
 
     def clear_all(self):
+        """
+        Mark all entries as clean, but don't remove them from the cache.
+        """
         self.call_cache_by_causal.clear_all()
         self.call_cache_by_uid.clear_all()
         self.obj_cache.clear_all()

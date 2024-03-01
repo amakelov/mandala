@@ -94,7 +94,9 @@ class SQLiteRelStorage(RelStorage, Transactable):
         if self.in_memory:
             return self._conn
         else:
-            return sqlite3.connect(str(self._connection_address), isolation_level=None)
+            return sqlite3.connect(
+                str(self._connection_address), isolation_level=None  # "IMMEDIATE"
+            )
 
     def _end_transaction(self, conn: sqlite3.Connection):
         conn.commit()
@@ -332,6 +334,26 @@ class SQLiteRelStorage(RelStorage, Transactable):
         """
         query = f"DELETE FROM {relation} WHERE {where_col} IN ({','.join(['?']*len(where_values))})"
         conn.execute(query, where_values)
+
+    @transaction()
+    def vacuum(self, warn: bool = True, conn: Optional[sqlite3.Connection] = None):
+        """
+        ! this needs a lot of free space on disk to work (~2x db size)
+        """
+        if warn:
+            total_db_size = (
+                self.execute_df("PRAGMA page_count").astype(float).iloc[0, 0]
+                * self.page_size
+            )
+            question = "Vacuuming a database of size {:.2f} MB, this may take a long time and requires ~2x as much free space on disk, are you sure?".format(
+                total_db_size / 1024**2
+            )
+            # ask the user if they are sure
+            user_input = input(question + " (y/n): ")
+            if user_input.lower() != "y":
+                logging.info("Aborting vacuuming.")
+                return
+        conn.execute("VACUUM")
 
     @transaction()
     def execute_df(

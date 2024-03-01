@@ -1,5 +1,6 @@
 from ..common_imports import *
 from ..core.config import *
+from ..core.tps import Type
 from ..core.model import Ref, FuncOp
 from ..core.builtins_ import StructOrientations
 from ..storages.rel_impls.utils import Transactable, transaction, Connection
@@ -9,6 +10,7 @@ from ..queries.weaver import CallNode, ValNode
 from ..queries.viz import GraphPrinter, visualize_graph
 from .funcs import FuncInterface
 from .storage import Storage, ValueLoader
+from .reftables import estimate_uid_storage, convert_bytes_to
 
 
 class RefFunctor(Transactable):
@@ -98,17 +100,80 @@ class RefFunctor(Transactable):
         calls_list, input_names_list = self.storage.get_consumers(
             refs=self.val_nodes[col].refs, prov_df=self.prov_df, conn=conn
         )
-        return np.array(
-            [
-                tuple(
-                    [
-                        call.func_op.sig.versioned_ui_name if call is not None else None
-                        for call in calls
-                    ]
-                )
-                for calls in calls_list
-            ]
+        res = np.empty(len(calls_list), dtype=object)
+        res[:] = [
+            tuple(
+                [
+                    call.func_op.sig.versioned_ui_name if call is not None else None
+                    for call in calls
+                ]
+            )
+            for calls in calls_list
+        ]
+        return res
+
+    @transaction()
+    def forward(
+        self,
+        col: str,
+        op: FuncOp,
+        conn: Optional[Connection] = None,
+    ):
+        versioned_ui_name = op.sig.versioned_ui_name
+        consumer_calls_list, input_names_list = self.storage.get_consumers(
+            refs=self.val_nodes[col].refs, prov_df=self.prov_df, conn=conn
         )
+
+    def _merge_vnode(self, tp: Type, refs: List[Ref], name_hint: Optional[str] = None):
+        input_node = ValNode(
+            tp=tp,
+            refs=refs,
+            constraint=None,
+        )
+        for v in self.val_nodes.values():
+            if v.refs_hash == input_node.refs_hash:
+                return v
+        else:
+            self.val_nodes[self.get_new_vname(hint=name_hint)] = input_node
+            return input_node
+
+    def _merge_cnode(
+        self,
+        call_uids: List[str],
+        output_cols: List[str],
+        col_to_output_name: Dict[str, str],
+        op: FuncOp,
+        orientation: str,
+        input_nodes: Dict[str, ValNode],  # named by op input names
+    ) -> CallNode:
+        calls_hash = CallNode.get_call_uids_hash(
+            call_uids=call_uids,
+        )
+        for cnode in self.call_nodes.values():
+            if cnode.call_uids_hash == calls_hash:
+                call_node = cnode
+                #! we may have to manually link some outputs to the existing
+                # call node
+                for col in output_cols:
+                    col_val_node = self.val_nodes[col]
+                    if col_val_node not in call_node.outputs.values():
+                        call_node.outputs[col_to_output_name[col]] = col_val_node
+                        col_val_node.creators.append(call_node)
+                        col_val_node.created_as.append(col_to_output_name[col])
+                return call_node
+        else:
+            call_node = CallNode.link(
+                inputs=input_nodes,
+                func_op=op,
+                outputs={
+                    col_to_output_name[col]: self.val_nodes[col] for col in output_cols
+                },
+                constraint=None,
+                call_uids=call_uids,
+                orientation=orientation,
+            )
+            self.call_nodes[self.get_new_cname(op)] = call_node
+            return call_node
 
     @transaction()
     def back(
@@ -242,67 +307,80 @@ class RefFunctor(Transactable):
             # create val nodes for the inputs
             input_nodes = {}
             for input_name, input_type in input_types.items():
-                input_node = ValNode(
+                input_nodes[input_name] = res._merge_vnode(
                     tp=input_type,
                     refs=[call.inputs[input_name] for call in group_calls],
-                    constraint=None,
+                    name_hint=input_name,
                 )
-                for v in res.val_nodes.values():
-                    if v.refs_hash == input_node.refs_hash:
-                        input_nodes[input_name] = v
-                        break
-                else:
-                    input_nodes[input_name] = input_node
-                    res.val_nodes[res.get_new_vname(hint=input_name)] = input_node
 
             # create the call node
-            calls_hash = CallNode.get_call_uids_hash(
-                call_uids=creator_calls_uids[col_representative]
+            res._merge_cnode(
+                call_uids=creator_calls_uids[col_representative],
+                output_cols=col_group,
+                col_to_output_name=col_to_output_name,
+                op=op,
+                orientation=orientation,
+                input_nodes=input_nodes,
             )
-            for cnode in res.call_nodes.values():
-                if cnode.call_uids_hash == calls_hash:
-                    call_node = cnode
-                    #! we may have to manually link some outputs to the existing
-                    # call node
-                    for col in col_group:
-                        col_val_node = res.val_nodes[col]
-                        if col_val_node not in call_node.outputs.values():
-                            call_node.outputs[col_to_output_name[col]] = col_val_node
-                            col_val_node.creators.append(call_node)
-                            col_val_node.created_as.append(col_to_output_name[col])
-                    break
-            else:
-                call_node = CallNode.link(
-                    inputs=input_nodes,
-                    func_op=op,
-                    outputs={
-                        col_to_output_name[col]: res.val_nodes[col] for col in col_group
-                    },
-                    constraint=None,
-                    call_uids=creator_calls_uids[col_representative],
-                    orientation=orientation,
-                )
-                res.call_nodes[res.get_new_cname(op)] = call_node
         return res
 
     @transaction()
-    def delete(self, conn: Optional[Connection] = None):
+    def delete(
+        self,
+        delete_dependents: bool,
+        verbose: bool = True,
+        ask: bool = True,
+        conn: Optional[Connection] = None,
+    ):
         """
+        ! this is a powerful method that can delete a lot of data, use with caution
+
         Delete the calls referenced by this RefFunctor from the storage, and
         clean up any orphaned refs.
 
         Warning: You probably want to apply this only on RefFunctors that are
         "forward-closed", i.e., that have been expanded to include all the calls
         that use their values. Otherwise, you may end up with obscure refs for
-        which you have no provenance, i.e. "zombie" refs.
+        which you have no provenance, i.e. "zombie" refs that have no meaning in
+        the context of the rest of the storage. Alternatively, you can set
+        `delete_dependents` to True, which will delete all the calls that depend
+        on the calls in this RefFunctor, and then clean up the orphaned refs.
         """
-        for v in self.call_nodes.values():
+        # gather all the calls to be deleted
+        call_uids_to_delete = defaultdict(list)
+        call_outputs = {}
+        for x in self.call_nodes.values():
+            # process the call uids
+            for call_uid in x.call_uids:
+                call_uids_to_delete[x.func_op.sig.versioned_ui_name].append(call_uid)
+            # process the call outputs
+            if delete_dependents:
+                for vnode in x.outputs.values():
+                    for ref in vnode.refs:
+                        call_outputs[ref.causal_uid] = ref
+        if delete_dependents:
+            dependent_calls = self.storage.get_dependent_calls(
+                refs=list(call_outputs.values()), prov_df=self.prov_df, conn=conn
+            )
+            for call in dependent_calls:
+                call_uids_to_delete[call.func_op.sig.versioned_ui_name].append(
+                    call.causal_uid
+                )
+        if verbose:
+            # summarize the number of calls per op to be deleted
+            for op, uids in call_uids_to_delete.items():
+                print(f"Op {op} has {len(uids)} calls to be deleted")
+            if ask:
+                if input("Proceed? (y/n) ").strip().lower() != "y":
+                    logging.info("Aborting deletion")
+                    return
+        for versioned_ui_name, call_uids in call_uids_to_delete.items():
             self.storage.rel_adapter.delete_calls(
-                versioned_ui_name=v.func_op.sig.versioned_ui_name,
-                causal_uids=v.call_uids,
+                versioned_ui_name=versioned_ui_name,
+                causal_uids=call_uids,
                 conn=conn,
             )
-        self.storage.rel_adapter.cleanup_vrefs(conn=conn)
+        self.storage.rel_adapter.cleanup_vrefs(conn=conn, verbose=verbose)
 
     ############################################################################
     ### creating new RefFunctors
@@ -349,6 +427,7 @@ class RefFunctor(Transactable):
         """
         Get a RefFunctor expressing the memoization table for a single function
         """
+        storage.synchronize(f=func)
         reftable = storage.get_table(func, values="lazy", meta=True)
         op = func.func_op
         if op.is_builtin:
@@ -457,6 +536,74 @@ class RefFunctor(Transactable):
         Fast alias for rename
         """
         return self.rename(columns=kwargs, inplace=inplace)
+
+    @property
+    def num_vars(self) -> int:
+        return len(self.val_nodes)
+
+    @property
+    def num_ops(self) -> int:
+        return len(self.call_nodes)
+
+    def __len__(self) -> int:
+        representative_node = self.val_nodes[list(self.val_nodes.keys())[0]]
+        return len(representative_node.refs)
+
+    def info(
+        self,
+        units: Literal["bytes", "KB", "MB", "GB"] = "MB",
+        sample_size: int = 20,
+        show_uniques: bool = False,
+        small_threshold_bytes: int = 4096,
+    ):
+        """
+        Print some basic info about the RefFunctor
+        """
+        print(self.__class__)
+        print(
+            f"{self.num_vars} variable(s), {self.num_ops} operation(s), {len(self)} row(s)"
+        )
+        print("Variables:")
+        var_rows = []
+        for k, v in self.val_nodes.items():
+            if len(v.refs) == 0:
+                avg_size, std = 0, 0
+            else:
+                avg_size_bytes, std_bytes = estimate_uid_storage(
+                    uids=[ref.uid for ref in v.refs],
+                    storage=self.storage,
+                    units="bytes",
+                    sample_size=sample_size,
+                )
+                avg_size, std = convert_bytes_to(
+                    num_bytes=avg_size_bytes, units=units
+                ), convert_bytes_to(num_bytes=std_bytes, units=units)
+            # round to 2 decimal places
+            avg_size, std = round(avg_size, 2), round(std, 2)
+            var_data = {
+                "name": k,
+                "size": f"{avg_size}±{std} {units}",
+                "nunique": len(set(ref.uid for ref in v.refs)),
+            }
+            if show_uniques:
+                if avg_size_bytes < small_threshold_bytes:
+                    uniques = {ref.uid: ref for ref in v.refs}
+                    uniques_values = self.storage.unwrap(list(uniques.values()))
+                    try:
+                        uniques_values = sorted(uniques_values)
+                    except:
+                        pass
+                    var_data["unique_values"] = uniques_values
+                else:
+                    var_data["unique_values"] = "<too large>"
+            var_rows.append(var_data)
+        var_df = pd.DataFrame(var_rows)
+        var_df.set_index("name", inplace=True)
+        var_df = var_df.sort_values(by="size", ascending=False)
+        return var_df
+        # representative_node = self.val_nodes[list(self.val_nodes.keys())[0]]
+        # num_rows = len(representative_node.refs)
+        # print(f"RefFunctor with {self.num_vars} variable(s) and {self.num_ops} operations(s), representing {num_rows} computations")
 
     ############################################################################
     ### `Transactable` interface

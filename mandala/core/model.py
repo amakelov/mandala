@@ -127,6 +127,10 @@ class Ref:
             causify_down(ref=self, start=self.causal_uid, stop_at_causal=False)
 
     def detached(self, keep_causal: bool = True) -> "Ref":
+        """
+        Produce a metadata-only copy of this `Ref` that is unlinked from the
+        computational graph.
+        """
         res = self.__class__(uid=self.uid, obj=None, in_memory=False)
         if keep_causal:
             res.causal_uid = self.causal_uid
@@ -462,6 +466,12 @@ class Call:
         return res
 
     def detached(self) -> "Call":
+        """
+        Produce a copy of this call that is unlinked from the computational
+        graph, and has all its inputs and outputs detached.
+
+        See `Ref.detached` for more details.
+        """
         return Call(
             uid=self.uid,
             causal_uid=self.causal_uid,

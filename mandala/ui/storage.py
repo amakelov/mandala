@@ -256,8 +256,8 @@ class Storage(Transactable):
             else:
                 result = full_uids_df.applymap(
                     lambda full_uid: self.cache.obj_get(
-                        obj_uid=full_uid.split(".")[0],
-                        causal_uid=full_uid.split(".")[1],
+                        obj_uid=full_uid.rsplit(".", 1)[0],
+                        causal_uid=full_uid.rsplit(".", 1)[1],
                     )
                 )
         elif values == "uids":
@@ -265,7 +265,8 @@ class Storage(Transactable):
         elif values == "lazy":
             result = full_uids_df[inp_outp_cols].applymap(
                 lambda full_uid: Ref.from_uid(
-                    uid=full_uid.split(".")[0], causal_uid=full_uid.split(".")[1]
+                    uid=full_uid.rsplit(".", 1)[0],
+                    causal_uid=full_uid.rsplit(".", 1)[1],
                 )
             )
             if has_meta:
@@ -318,7 +319,7 @@ class Storage(Transactable):
         new_sig = self.sig_syncer.sync_from_local(sig=func_op.sig, conn=conn)
         func_op.sig = new_sig
         # to send any default values that were created by adding inputs
-        self.sync_to_remote()
+        self.sync_to_remote(conn=conn)
 
     @transaction()
     def synchronize(
@@ -1000,6 +1001,38 @@ class Storage(Transactable):
             for causal_uid in causal_uids
         ]
         return calls, input_names
+
+    @transaction()
+    def get_dependent_calls(
+        self,
+        refs: List[Ref],
+        prov_df: Optional[pd.DataFrame] = None,
+        conn: Optional[Connection] = None,
+    ) -> List[Call]:
+        """
+        Get all calls that depend on the given refs.
+        """
+        if prov_df is None:
+            prov_df = self.rel_storage.get_data(Config.provenance_table, conn=conn)
+            prov_df = propagate_struct_provenance(prov_df=prov_df)
+        res = {}
+        current = refs
+        while True:
+            calls_list, _ = self.get_consumers(refs=current, prov_df=prov_df, conn=conn)
+            if not calls_list:
+                break
+            for calls in calls_list:
+                for call in calls:
+                    res[call.causal_uid] = call
+            current = list(
+                {
+                    ref.causal_uid: ref
+                    for calls in calls_list
+                    for call in calls
+                    for ref in call.outputs
+                }.values()
+            )
+        return list(res.values())
 
     ############################################################################
     ### provenance

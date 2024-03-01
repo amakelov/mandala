@@ -101,8 +101,12 @@ class SigSyncer(Transactable):
     ############################################################################
     ### atomic operations by the client
     ############################################################################
+    @transaction()
     def validate_transaction(
-        self, new_sig: Signature, all_sigs: Dict[Tuple[str, int], Signature]
+        self,
+        new_sig: Signature,
+        all_sigs: Dict[Tuple[str, int], Signature],
+        conn: Optional[Connection] = None,
     ) -> bool:
         """
         Check that a new signature is compatible with a current state of the
@@ -110,9 +114,11 @@ class SigSyncer(Transactable):
         that a transaction is valid before committing it.
         """
         assert new_sig.has_internal_data
-        if self.sig_adapter.exists_internal(sig=new_sig):
+        if self.sig_adapter.exists_internal(sig=new_sig, conn=conn):
             current = all_sigs[new_sig.internal_name, new_sig.version]
-            compatible, reason_not = current.is_compatible(new=new_sig)
+            compatible, reason_not = current.is_compatible(
+                new=new_sig,
+            )
             if compatible:
                 return True
             else:
@@ -132,7 +138,9 @@ class SigSyncer(Transactable):
         self.sync_from_remote(conn=conn)
         new_sig = sig._generate_internal()
         self.validate_transaction(
-            new_sig=new_sig, all_sigs=self.sig_adapter.load_state(conn=conn)
+            new_sig=new_sig,
+            all_sigs=self.sig_adapter.load_state(conn=conn),
+            conn=conn,
         )
         all_sigs = self.sig_adapter.load_state(conn=conn)
         all_sigs[new_sig.internal_name, new_sig.version] = new_sig
