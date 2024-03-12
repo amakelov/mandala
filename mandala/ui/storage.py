@@ -234,40 +234,53 @@ class Storage(Transactable):
         - Note that currently we pass the full UIDs as input, and thus we return
         values with causal UIDs. Maybe it is desirable in some settings to
         disable this behavior.
+
+        Can handle nulls in the input dataframe.
         """
         if values == "full_uids":
             return full_uids_df
         has_meta = set(Config.special_call_cols).issubset(full_uids_df.columns)
-        inp_outp_cols = [
+        ref_cols = [
             col for col in full_uids_df.columns if col not in Config.special_call_cols
         ]
-        uids_df = full_uids_df[inp_outp_cols].applymap(
-            lambda uid: uid.rsplit(".", 1)[0]
+        uids_df = full_uids_df[ref_cols].applymap(
+            lambda uid: uid.rsplit(".", 1)[0] if uid is not None else None
         )
         if has_meta:
             uids_df[Config.special_call_cols] = full_uids_df[Config.special_call_cols]
         if values in ("objs", "refs"):
             uids_to_collect = [
-                item for _, column in uids_df.items() for _, item in column.items()
+                item
+                for _, column in uids_df.items()
+                for _, item in column.items()
+                if item is not None
             ]
             self.cache.preload_objs(uids_to_collect, conn=conn)
             if values == "objs":
-                result = uids_df.applymap(lambda uid: unwrap(self.cache.obj_get(uid)))
+                result = uids_df.applymap(
+                    lambda uid: unwrap(self.cache.obj_get(uid))
+                    if uid is not None
+                    else None
+                )
             else:
                 result = full_uids_df.applymap(
                     lambda full_uid: self.cache.obj_get(
                         obj_uid=full_uid.rsplit(".", 1)[0],
                         causal_uid=full_uid.rsplit(".", 1)[1],
                     )
+                    if full_uid is not None
+                    else None
                 )
         elif values == "uids":
             result = uids_df
         elif values == "lazy":
-            result = full_uids_df[inp_outp_cols].applymap(
+            result = full_uids_df[ref_cols].applymap(
                 lambda full_uid: Ref.from_uid(
                     uid=full_uid.rsplit(".", 1)[0],
                     causal_uid=full_uid.rsplit(".", 1)[1],
                 )
+                if full_uid is not None
+                else None
             )
             if has_meta:
                 result[Config.special_call_cols] = full_uids_df[

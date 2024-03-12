@@ -44,6 +44,7 @@ class GraphPrinter:
         fqs: Set[CallNode],
         value_loader: Optional[ValueLoaderABC] = None,
         names: Optional[Dict[ValNode, str]] = None,
+        fnames: Optional[Dict[CallNode, str]] = None,
     ):
         self.vqs = vqs
         self.fqs = fqs
@@ -58,6 +59,7 @@ class GraphPrinter:
                 hints={}, canonical_order=get_canonical_order(vqs=vqs, fqs=fqs)
             )
         self.names = names
+        self.fnames = fnames
 
     def get_struct_comment(
         self,
@@ -156,7 +158,16 @@ class GraphPrinter:
             raise ValueError
         return rhs
 
-    def get_op_computation_line(self, node: CallNode) -> str:
+    def get_op_computation_line(
+        self,
+        node: CallNode,
+        require_all_inputs: bool = False,
+        add_node_name: bool = True,
+    ) -> str:
+        """
+        Get the line of code representing a function call of the form
+            output_0, output_1 = func_name(input_0=input_0, input_1=input_1)
+        """
         full_returns = node.returns_interp
         full_returns_names = [
             self.names[vq] if vq is not None else "_" for vq in full_returns
@@ -165,10 +176,15 @@ class GraphPrinter:
         # rhs
         args_dict = {arg_name: self.names[vq] for arg_name, vq in node.inputs.items()}
         for inp_name in node.func_op.sig.input_names:
-            if inp_name not in args_dict:
+            if inp_name not in args_dict and require_all_inputs:
                 raise RuntimeError
-        args_string = ", ".join([f"{k}={v}" for k, v in args_dict.items()])
+        args_string = ", ".join(
+            [f"{k}={v}" for k, v in args_dict.items()]
+            + [f"{k}=_" for k in node.func_op.sig.input_names if k not in args_dict]
+        )
         rhs = f"{node.func_op.sig.ui_name}({args_string})"
+        if add_node_name:
+            rhs = rhs + " # OP NAME: " + self.fnames[node]
         if len(lhs) == 0:
             return rhs
         else:

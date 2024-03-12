@@ -335,6 +335,6 @@ def copy_subgraph(
             func_op=fq.func_op,
             orientation=fq.orientation,
             constraint=fq.constraint,
-            call_uids=fq.call_uids,
+            calls=fq.calls,
         )
     return v_map, f_map
