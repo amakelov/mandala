@@ -39,10 +39,13 @@ def propagate_struct_provenance(prov_df: pd.DataFrame) -> pd.DataFrame:
         items_causal_uids = items_df.causal.values
         structs_df = get_structs_df(prov_df, items_causal_uids)
         items_df = get_items_df(prov_df, structs_df.call_causal.values)
-    remaining_struct_calls = prov_df.query(
-        'direction_new != direction_new and op_id in @BUILTIN_OP_IDS and name in ["lst", "dct", "st"]'
-    ).call_causal.values
-    prov_df[prov_df.call_causal.isin(remaining_struct_calls)].direction_new = "output"
+    remaining_struct_mask = (
+        (prov_df["direction_new"] != prov_df["direction_new"])
+        & (prov_df["op_id"].isin(BUILTIN_OP_IDS))
+        & (prov_df["name"].isin(["lst", "dct", "st"]))
+    )
+    prov_df.loc[remaining_struct_mask, "direction_new"] = "output"
+
     remaining_things = prov_df.query("direction_new != direction_new").index
     prov_df.loc[remaining_things, "direction_new"] = prov_df.query(
         "direction_new != direction_new"

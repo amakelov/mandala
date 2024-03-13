@@ -98,7 +98,9 @@ class GraphPrinter:
             idxs = [x[0] for x in idxs_and_elts]
             idx_values = [
                 unwrap(self.value_loader.load_value(full_uid=idx.constraint[0]))
-                for idx in idxs
+                if idx.constraint is not None
+                else i
+                for i, idx in enumerate(idxs)
             ]
             elts = [x[1] for x in idxs_and_elts]
             elt_names = tuple([str(self.names[elt]) for elt in elts])

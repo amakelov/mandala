@@ -354,6 +354,25 @@ class Builtins:
     }
 
     @staticmethod
+    def reassign_io_using_orientation(
+        in_dict: Dict[str, Any],
+        out_dict: Dict[str, Any],
+        orientation: str,
+        builtin_id: str,
+    ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+        io_assignment = Builtins.IO[orientation][builtin_id]
+        in_names = io_assignment["in"]
+        out_names = io_assignment["out"]
+        res_in = {}
+        res_out = {}
+        for k, v in itertools.chain(in_dict.items(), out_dict.items()):
+            if k in in_names:
+                res_in[k] = v
+            if k in out_names:
+                res_out[k] = v
+        return res_in, res_out
+
+    @staticmethod
     def _make_builtin_uid(uid: str, builtin_id: str) -> str:
         return f"{builtin_id}.{uid}"
 

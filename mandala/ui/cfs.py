@@ -3,7 +3,7 @@ from ..common_imports import *
 from ..core.config import *
 from ..core.tps import Type
 from ..core.model import Ref, FuncOp, Call
-from ..core.builtins_ import StructOrientations
+from ..core.builtins_ import StructOrientations, Builtins
 from ..storages.rel_impls.utils import Transactable, transaction, Connection
 from ..queries.graphs import copy_subgraph
 from ..core.prov import propagate_struct_provenance
@@ -44,8 +44,9 @@ class ComputationFrame(Transactable):
         the operations that created/used a variable (including ones not
         currently represented in the `ComputationFrame`);
 
-    The current implementation has some limitations:
-     - the `back` and `forward` methods are not yet fully implemented, and may
+    The current implementation has some important limitations:
+     - the `back` and `forward` methods are not yet fully implemented
+     (especially for computations involving lists/dict/sets of refs), and may
      significantly change in the future, alongside the core data structure of
      `ComputationFrame` itself;
     """
@@ -327,39 +328,60 @@ class ComputationFrame(Transactable):
             call_representative = calls[list(calls.support.keys())[0]]
             op = call_representative.func_op
 
-            #! for struct calls, figure out the orientation
+            #! for struct calls, figure out the orientation; currently ad-hoc
             if op.is_builtin:
-                output_names = list(out_map.keys())
-                orientation = (
-                    StructOrientations.construct
-                    if any(x in output_names for x in ("lst", "dct", "st"))
-                    else StructOrientations.destruct
+                logging.warning(
+                    f"Found a ref data structure: {op.sig.ui_name}; ComputationFrame support for this is experimental and may not work as expected."
                 )
+                output_names = list(out_map.keys())
+                input_names = list(in_map.keys())
+                if len(output_names) == 0:
+                    if any(x in input_names for x in ("elt", "value")):
+                        orientation = StructOrientations.construct
+                    elif any(x in input_names for x in ("lst", "dct", "st")):
+                        orientation = StructOrientations.destruct
+                    else:
+                        raise NotImplementedError
+                else:
+                    if any(x in output_names for x in ("lst", "dct", "st")):
+                        orientation = StructOrientations.construct
+                    elif any(x in output_names for x in ("idx", "key")):
+                        orientation = StructOrientations.destruct
+                    else:
+                        raise NotImplementedError
+                in_map, out_map = Builtins.reassign_io_using_orientation(
+                    in_dict=in_map,
+                    out_dict=out_map,
+                    orientation=orientation,
+                    builtin_id=op.sig.ui_name,
+                )
+                in_map_for_linking = {**in_map, **out_map}
+                out_map_for_linking = {}
             else:
                 orientation = None
+                in_map_for_linking = in_map
+                out_map_for_linking = out_map
 
             res = CallNode.link(
                 calls=calls,
-                inputs={k: self.var_nodes[v] for k, v in in_map.items()},
-                outputs={k: self.var_nodes[v] for k, v in out_map.items()},
+                inputs={k: self.var_nodes[v] for k, v in in_map_for_linking.items()},
+                outputs={k: self.var_nodes[v] for k, v in out_map_for_linking.items()},
                 constraint=None,
                 func_op=call_representative.func_op,
                 orientation=orientation,
             )
             res_name = self.get_new_cname(op)
             self.op_nodes[res_name] = res
-        for k, v in out_map.items():
-            if k not in res.outputs.keys():
-                # connect manually
-                res.outputs[k] = self.var_nodes[v]
-                self.var_nodes[v].creators.append(res)
-                self.var_nodes[v].created_as.append(k)
-        for k, v in in_map.items():
-            if k not in res.inputs.keys():
-                # connect manually
-                res.inputs[k] = self.var_nodes[v]
-                self.var_nodes[v].consumers.append(res)
-                self.var_nodes[v].consumed_as.append(k)
+        # for k, v in out_map.items():
+        #     if k not in res.outputs.keys():
+        #         # connect manually
+        #         res.outputs[k] = self.var_nodes[v]
+        #         self.var_nodes[v].add_creator(creator=res, created_as=k)
+        # for k, v in in_map.items():
+        #     if k not in res.inputs.keys():
+        #         # connect manually
+        #         res.inputs[k] = self.var_nodes[v]
+        #         self.var_nodes[v].add_consumer(consumer=res, consumed_as=k)
         return res_name, res
 
     @transaction()
@@ -710,10 +732,6 @@ class ComputationFrame(Transactable):
     def num_ops(self) -> int:
         return len(self.op_nodes)
 
-    def __len__(self) -> int:
-        representative_node = self.var_nodes[list(self.var_nodes.keys())[0]]
-        return len(representative_node.refs)
-
     def get_var_info(
         self,
         include_uniques: bool = False,
@@ -761,20 +779,30 @@ class ComputationFrame(Transactable):
 
     def get_op_info(self) -> pd.DataFrame:
         rows = []
-        for k, v in self.op_nodes.items():
-            input_types = v.func_op.input_types
+        for k, op_node in self.op_nodes.items():
+            input_types = op_node.func_op.input_types
             output_types = {
-                dump_output_name(index=i): v.func_op.output_types[i]
-                for i in range(len(v.func_op.output_types))
+                dump_output_name(index=i): op_node.func_op.output_types[i]
+                for i in range(len(op_node.func_op.output_types))
             }
-            input_types_dict = {k: input_types[k] for k in v.inputs.keys()}
-            output_types_dict = {k: output_types[k] for k in v.outputs.keys()}
-            signature = f'{v.func_op.sig.ui_name}({", ".join([f"{k}: {v}" for k, v in input_types_dict.items()])}) -> {", ".join([f"{k}: {v}" for k, v in output_types_dict.items()])}'
+            input_types_dict = {
+                k: input_types.get(k, output_types.get(k))
+                for k in op_node.inputs.keys()
+            }
+            output_types_dict = {
+                k: output_types.get(k, input_types.get(k))
+                for k in op_node.outputs.keys()
+            }
+            signature = f'{op_node.func_op.sig.ui_name}({", ".join([f"{k}: {v}" for k, v in input_types_dict.items()])}) -> {", ".join([f"{k}: {v}" for k, v in output_types_dict.items()])}'
             rows.append(
                 {
                     "name": k,
-                    "function": v.func_op.sig.ui_name,
-                    "version": v.func_op.sig.version,
+                    "function": op_node.func_op.sig.ui_name,
+                    "version": op_node.func_op.sig.version,
+                    "num_calls": len(op_node.calls.support),
+                    "num_unique_calls": len(
+                        set(call.causal_uid for call in op_node.calls.dropna())
+                    ),
                     "signature": signature,
                 }
             )
