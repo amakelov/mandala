@@ -384,6 +384,90 @@ class ComputationFrame(Transactable):
         #         self.var_nodes[v].add_consumer(consumer=res, consumed_as=k)
         return res_name, res
 
+    def expand_struct(
+        self,
+        op_node: CallNode,
+        orientation: str,
+    ):
+        """
+        Currently ad-hoc method to add all elements of a struct. This should be
+        called every time when `back` produces a constructive struct call,
+        or `forward` produces a destructive struct call.
+        """
+        # find the struct node
+        builtin_id = op_node.func_op.sig.ui_name
+        struct_name = (
+            "lst"
+            if builtin_id == "__list__"
+            else "dct"
+            if builtin_id == "__dict__"
+            else "st"
+            if builtin_id == "__set__"
+            else None
+        )
+        elt_name = (
+            "elt"
+            if builtin_id == "__list__"
+            else "value"
+            if builtin_id == "__dict__"
+            else None
+        )
+        idx_name = (
+            "idx"
+            if builtin_id == "__list__"
+            else "key"
+            if builtin_id == "__dict__"
+            else None
+        )
+        op_id = op_node.func_op.sig.versioned_ui_name
+        present_call_uids = {c.causal_uid for c in op_node.calls.support.values()}
+
+        if orientation == StructOrientations.construct:
+            struct_node = op_node.outputs[struct_name]
+            idx_node = op_node.inputs[idx_name]
+            elt_node = op_node.inputs[elt_name]
+        else:
+            struct_node = op_node.inputs[struct_name]
+            idx_node = op_node.inputs[idx_name]
+            elt_node = op_node.outputs[elt_name]
+
+        def expand_one(
+            idx: int,
+            calls_to_add: List[Call],
+        ):
+            structs_to_append = [c.inputs[struct_name] for c in calls_to_add]
+            idxs_to_append = [c.inputs[idx_name] for c in calls_to_add]
+            elts_to_append = [c.inputs[elt_name] for c in calls_to_add]
+            num_extra = len(calls_to_add)
+
+            op_node.calls.append_items(items=calls_to_add, inplace=True)
+            struct_node.refs.append_items(items=structs_to_append, inplace=True)
+            idx_node.refs.append_items(items=idxs_to_append, inplace=True)
+            elt_node.refs.append_items(items=elts_to_append, inplace=True)
+
+            for other_op_node in self.op_nodes.values():
+                if other_op_node != op_node:
+                    other_op_node.calls.copy_item(i=idx, times=num_extra, inplace=True)
+            for other_var_node in self.var_nodes.values():
+                if other_var_node not in [struct_node, idx_node, elt_node]:
+                    other_var_node.refs.copy_item(i=idx, times=num_extra, inplace=True)
+
+        indices_to_expand = struct_node.refs.support.keys()
+        for i in indices_to_expand:
+            struct_ref = struct_node.refs[i]
+            ref_rows = self.prov_df.query(
+                f'causal == "{struct_ref.causal_uid}" and op_id == "{op_id}"'
+            )
+            ref_call_uids = ref_rows["call_causal"].values.tolist()
+            call_uids_to_add = set(ref_call_uids) - present_call_uids
+            calls_to_add = self.storage.cache.call_mget(
+                by_causal=True,
+                uids=list(call_uids_to_add),
+                versioned_ui_name=op_id,
+            )
+            expand_one(idx=i, calls_to_add=calls_to_add)
+        return calls_to_add
+
     @transaction()
     def back(
         self,

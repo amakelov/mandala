@@ -30,6 +30,26 @@ class PaddedList(Sequence[Optional[T]]):
     def tolist(self) -> List[Optional[T]]:
         return [self.support.get(i, None) for i in range(self.length)]
 
+    def copy(self) -> "PaddedList":
+        return PaddedList(support=self.support.copy(), length=self.length)
+
+    def copy_item(self, i: int, times: int, inplace: bool = False) -> "PaddedList":
+        res = self if inplace else self.copy()
+        if i not in res.support:
+            res.length = res.length + times
+        else:
+            for j in range(res.length, res.length + times):
+                res.support[j] = res.support[i]
+            res.length += times
+        return res
+
+    def append_items(self, items: List[T], inplace: bool = False) -> "PaddedList":
+        res = self if inplace else self.copy()
+        for i, item in enumerate(items):
+            res.support[res.length + i] = item
+        res.length += len(items)
+        return res
+
     @staticmethod
     def from_list(lst: List[Optional[T]], length: Optional[int] = None) -> "PaddedList":
         if length is None:
