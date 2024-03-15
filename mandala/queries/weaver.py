@@ -13,103 +13,6 @@ T = TypeVar("T")
 T1 = TypeVar("T1")
 
 
-class PaddedList(Sequence[Optional[T]]):
-    """
-    A list-like object that is backed by a list of values and a list of indices,
-    and has length `length`. When indexed, it returns the value from the list at
-    the corresponding index, or None if the index is not in the list of indices.
-    """
-
-    def __init__(self, support: Dict[int, T], length: int):
-        self.support = support
-        self.length = length
-
-    def __repr__(self) -> str:
-        return f"PaddedList({self.tolist()})"
-
-    def tolist(self) -> List[Optional[T]]:
-        return [self.support.get(i, None) for i in range(self.length)]
-
-    def copy(self) -> "PaddedList":
-        return PaddedList(support=self.support.copy(), length=self.length)
-
-    def copy_item(self, i: int, times: int, inplace: bool = False) -> "PaddedList":
-        res = self if inplace else self.copy()
-        if i not in res.support:
-            res.length = res.length + times
-        else:
-            for j in range(res.length, res.length + times):
-                res.support[j] = res.support[i]
-            res.length += times
-        return res
-
-    def append_items(self, items: List[T], inplace: bool = False) -> "PaddedList":
-        res = self if inplace else self.copy()
-        for i, item in enumerate(items):
-            res.support[res.length + i] = item
-        res.length += len(items)
-        return res
-
-    @staticmethod
-    def from_list(lst: List[Optional[T]], length: Optional[int] = None) -> "PaddedList":
-        if length is None:
-            length = len(lst)
-        items = {i: v for i, v in enumerate(lst) if v is not None}
-        return PaddedList(support=items, length=length)
-
-    def dropna(self) -> List[T]:
-        return [self.support[k] for k in sorted(self.support.keys())]
-
-    @staticmethod
-    def padded_like(plist: "PaddedList[T1]", values: List[T]) -> "PaddedList[T]":
-        support = {i: values[j] for j, i in enumerate(sorted(plist.support.keys()))}
-        return PaddedList(support=support, length=len(plist))
-
-    def __len__(self) -> int:
-        return self.length
-
-    def __iter__(self) -> Iterator[Optional[T]]:
-        return (self.support.get(i, None) for i in range(self.length))
-
-    def __getitem__(
-        self, idx: Union[int, slice, List[bool], np.ndarray]
-    ) -> Union[T, "PaddedList"]:
-        if isinstance(idx, int):
-            return self.support.get(idx, None)
-        elif isinstance(idx, slice):
-            raise NotImplementedError
-        elif isinstance(idx, (list, np.ndarray)):
-            return self.masked(idx)
-        else:
-            raise NotImplementedError(
-                "Indexing only supported for integers, slices, and boolean arrays"
-            )
-
-    def masked(self, mask: Union[List[bool], np.ndarray]) -> "PaddedList":
-        """
-        Return a new `PaddedList` object with the values masked by the given
-        boolean array, and the indices updated accordingly.
-        """
-        if len(mask) != self.length:
-            raise ValueError("Boolean mask must have the same length as the list")
-        result_items = {}
-        cur_masked_idx = 0
-        for mask_idx, m in enumerate(mask):
-            if m:
-                if mask_idx in self.support:
-                    result_items[cur_masked_idx] = self.support[mask_idx]
-                cur_masked_idx += 1
-        return PaddedList(support=result_items, length=cur_masked_idx)
-
-    def keep_only(self, indices: Set[int]) -> "PaddedList":
-        """
-        Return a new `PaddedList` object with the values masked by the given
-        list of indices.
-        """
-        items = {i: v for i, v in self.support.items() if i in indices}
-        return PaddedList(support=items, length=self.length)
-
-
 class StructOrientations:
     # at runtime only
     construct = "construct"
@@ -133,7 +36,7 @@ class ValNode(Node):
         created_as: Optional[List[str]] = None,
         _label: Optional[str] = None,
         name: Optional[str] = None,
-        refs: Optional[PaddedList[Ref]] = None,
+        refs: Optional[List[Ref]] = None,
     ):
         self.creators: List["CallNode"] = [] if creators is None else creators
         self.created_as = [] if created_as is None else created_as
@@ -143,31 +46,25 @@ class ValNode(Node):
         self.constraint = constraint
         self.tp = tp
         self._label: Optional[str] = _label
-        self._refs: Optional[PaddedList] = None
+        self._refs: Optional[List[Ref]] = None
         self._refs_hash: Optional[str] = None
 
         if refs is not None:
             self.refs = refs
 
     @property
-    def refs(self) -> PaddedList[Ref]:
+    def refs(self) -> List[Ref]:
         return self._refs
 
     @refs.setter
-    def refs(self, value: Union[PaddedList[Ref], List[Ref]]):
+    def refs(self, value: List[Ref]):
         # a single assignment expression guarantees no broken state
-        if isinstance(value, list):
-            value = PaddedList.from_list(value)
-        elif isinstance(value, PaddedList):
-            pass
-        else:
-            raise ValueError(f"Invalid type for refs: {type(value)}")
         self._refs, self._refs_hash = value, ValNode.get_refs_hash(value)
 
     @staticmethod
-    def get_refs_hash(refs: PaddedList[Ref]) -> str:
+    def get_refs_hash(refs: List[Ref]) -> str:
         return Hashing.get_content_hash(
-            obj=[(i, r.causal_uid) for i, r in refs.support.items()]
+            obj=[r.causal_uid for r in refs],
         )
 
     @property
@@ -230,7 +127,7 @@ class ValNode(Node):
         if isinstance(mask, np.ndarray):
             assert mask.dtype == np.dtype("bool")
             assert mask.shape[0] == len(self.refs)
-            self.refs = self.refs.masked(mask)
+            self.refs = [r for r, m in zip(self.refs, mask) if m]
         else:
             raise NotImplementedError("Indexing only supported for boolean arrays")
 
@@ -268,21 +165,21 @@ class CallNode(Node):
         outputs: Dict[str, ValNode],
         constraint: Optional[List[str]],
         orientation: Optional[str] = None,
-        calls: Optional[PaddedList[Call]] = None,
+        calls: Optional[List[Call]] = None,
     ):
         self.func_op = func_op
         self.inputs = inputs
         self.outputs = outputs
         self.orientation = orientation
         self.constraint = constraint
-        self._calls: Optional[PaddedList[Call]] = None
+        self._calls: Optional[List[Call]] = None
         self._calls_hash: Optional[str] = None
 
         if calls is not None:
             self.calls = calls
 
     @property
-    def calls(self) -> PaddedList[Call]:
+    def calls(self) -> List[Call]:
         return self._calls
 
     @property
@@ -292,14 +189,14 @@ class CallNode(Node):
         return self._calls_hash
 
     @calls.setter
-    def calls(self, value: PaddedList[Call]):
+    def calls(self, value: List[Call]):
         # a single assignment expression guarantees no broken state
         self._calls, self._calls_hash = value, CallNode.get_calls_hash(value)
 
     @staticmethod
-    def get_calls_hash(calls: PaddedList[Call]) -> str:
+    def get_calls_hash(calls: List[Call]) -> str:
         return Hashing.get_content_hash(
-            [(i, c.causal_uid) for i, c in calls.support.items()]
+            [c.causal_uid for c in calls],
         )
 
     def inplace_mask(self, mask: np.ndarray):
@@ -311,7 +208,7 @@ class CallNode(Node):
         if isinstance(mask, np.ndarray):
             assert mask.dtype == np.dtype("bool")
             assert mask.shape[0] == len(self.calls)
-            self.calls = self.calls.masked(mask)
+            self.calls = [c for c, m in zip(self.calls, mask) if m]
         else:
             raise NotImplementedError("Indexing only supported for boolean arrays")
 
@@ -373,7 +270,7 @@ class CallNode(Node):
         constraint: Optional[List[str]],
         orientation: Optional[str],
         include_indexing: bool = True,
-        calls: Optional[PaddedList[Call]] = None,
+        calls: Optional[List[Call]] = None,
     ) -> "CallNode":
         """
         Link a func query into the graph

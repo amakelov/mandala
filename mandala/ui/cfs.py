@@ -7,7 +7,7 @@ from ..core.builtins_ import StructOrientations, Builtins
 from ..storages.rel_impls.utils import Transactable, transaction, Connection
 from ..queries.graphs import copy_subgraph
 from ..core.prov import propagate_struct_provenance
-from ..queries.weaver import CallNode, ValNode, PaddedList
+from ..queries.weaver import CallNode, ValNode
 from ..queries.viz import GraphPrinter, visualize_graph
 from .funcs import FuncInterface
 from .storage import Storage, ValueLoader
@@ -24,9 +24,12 @@ class ComputationFrame(Transactable):
     corresponding to values of those variables for a single instance of the
     computation.
 
-    This is the main "declarative" interface for exploring the storage, in
+    This is a simple declarative interface for exploring the storage, in
     contrast with using an imperative computational context (i.e., manipulating
-    some memoized piece of code to access storage).
+    some memoized piece of code to interface with storage). It has several
+    limitations, the main one being that it can only represent a single
+    computation in a given instance (i.e., a single composition of functions).
+    This comes at the benefit of simplicity and ease of use.
 
     The main differences between a `ComputationFrame` and a `DataFrame` are as
     follows:
@@ -44,11 +47,6 @@ class ComputationFrame(Transactable):
         the operations that created/used a variable (including ones not
         currently represented in the `ComputationFrame`);
 
-    The current implementation has some important limitations:
-     - the `back` and `forward` methods are not yet fully implemented
-     (especially for computations involving lists/dict/sets of refs), and may
-     significantly change in the future, alongside the core data structure of
-     `ComputationFrame` itself;
     """
 
     def __init__(
@@ -99,7 +97,7 @@ class ComputationFrame(Transactable):
             return res_df[columns]
         elif isinstance(columns, list) and all(isinstance(x, str) for x in columns):
             refs = pd.DataFrame(
-                {col: self.var_nodes[col].refs.tolist() for col in columns}
+                {col: self.var_nodes[col].refs for col in columns}
             )
             return self.storage.eval_df(
                 full_uids_df=refs.applymap(
@@ -218,7 +216,7 @@ class ComputationFrame(Transactable):
         col: str,
         direction: Literal["back", "forward"],
         conn: Optional[Connection] = None,
-    ) -> List[Tuple[PaddedList[Call], str]]:
+    ) -> Dict[Tuple[str, str], List[Optional[Call]]]:
         """
         Given a column and a direction to traverse the graph (back or forward),
         return the calls that created/used the values in the column, along with
@@ -227,36 +225,32 @@ class ComputationFrame(Transactable):
         The calls are grouped by the operation and the output/input name under
         which the values in this column appear in the calls.
         """
-        refs: PaddedList[Ref] = self.var_nodes[col].refs
+        refs: List[Ref] = self.var_nodes[col].refs
         if direction == "back":
             calls_list, names_list = self.storage.get_creators(
-                refs=refs.dropna(), prov_df=self.prov_df, conn=conn
+                refs=refs, prov_df=self.prov_df, conn=conn
             )
             calls_list = [[c] if c is not None else [] for c in calls_list]
             names_list = [[n] if n is not None else [] for n in names_list]
         elif direction == "forward":
             calls_list, names_list = self.storage.get_consumers(
-                refs=refs.dropna(), prov_df=self.prov_df, conn=conn
+                refs=refs, prov_df=self.prov_df, conn=conn
             )
         else:
             raise ValueError(f"Unknown direction: {direction}")
-        calls_list = PaddedList.padded_like(plist=refs, values=calls_list)
-        names_list = PaddedList.padded_like(plist=refs, values=names_list)
-        index_dict = defaultdict(list)  # (op_id, input/output name) -> indices
+        index_dict = defaultdict(list)  # (op_id, input/output name) -> (idx, call)
         # for i, (calls, names) in enumerate(zip(calls_list, names_list)):
-        for i in refs.support.keys():
+        for i in range(len(refs)):
             calls = calls_list[i]
             names = names_list[i]
-            if calls is None:
-                continue
             for call, name in zip(calls, names):
                 index_dict[(call.func_op.sig.versioned_ui_name, name)].append((i, call))
-        res = []
+        res = {}
         for (op_id, name), indices_and_calls in index_dict.items():
-            plist = PaddedList(
-                support={idx: call for idx, call in indices_and_calls}, length=len(refs)
-            )
-            res.append((plist, name))
+            calls_list = [None for _ in range(len(refs))]
+            for i, call in indices_and_calls:
+                calls_list[i] = call
+            res[(op_id, name)] = calls_list
         return res
 
     @transaction()
@@ -287,10 +281,10 @@ class ComputationFrame(Transactable):
 
     def join_var_node(
         self,
-        refs: PaddedList[Ref],
+        refs: List[Ref],
         tp: Type,
         name_hint: Optional[str] = None,
-    ):
+    ) -> Tuple[str, ValNode]:
         refs_hash = ValNode.get_refs_hash(refs=refs)
         for var_name, var_node in self.var_nodes.items():
             if var_node.refs_hash == refs_hash:
@@ -307,9 +301,9 @@ class ComputationFrame(Transactable):
 
     def join_op_node(
         self,
-        calls: PaddedList[Call],
-        out_map: Optional[Dict[str, str]] = None,  # output name -> var
-        in_map: Optional[Dict[str, str]] = None,  # input name -> var
+        calls: List[Call],
+        out_map: Optional[Dict[str, str]] = None,  # output name -> var name
+        in_map: Optional[Dict[str, str]] = None,  # input name -> var name
     ) -> Tuple[str, CallNode]:
         """
         Join an op node to the graph. If a node with this hash already exists,
@@ -325,7 +319,7 @@ class ComputationFrame(Transactable):
                 res_name = op_name
                 break
         else:
-            call_representative = calls[list(calls.support.keys())[0]]
+            call_representative = calls[0]
             op = call_representative.func_op
 
             #! for struct calls, figure out the orientation; currently ad-hoc
@@ -372,101 +366,17 @@ class ComputationFrame(Transactable):
             )
             res_name = self.get_new_cname(op)
             self.op_nodes[res_name] = res
-        # for k, v in out_map.items():
-        #     if k not in res.outputs.keys():
-        #         # connect manually
-        #         res.outputs[k] = self.var_nodes[v]
-        #         self.var_nodes[v].add_creator(creator=res, created_as=k)
-        # for k, v in in_map.items():
-        #     if k not in res.inputs.keys():
-        #         # connect manually
-        #         res.inputs[k] = self.var_nodes[v]
-        #         self.var_nodes[v].add_consumer(consumer=res, consumed_as=k)
+        for k, v in out_map.items():
+            if k not in res.outputs.keys():
+                # connect manually
+                res.outputs[k] = self.var_nodes[v]
+                self.var_nodes[v].add_creator(creator=res, created_as=k)
+        for k, v in in_map.items():
+            if k not in res.inputs.keys():
+                # connect manually
+                res.inputs[k] = self.var_nodes[v]
+                self.var_nodes[v].add_consumer(consumer=res, consumed_as=k)
         return res_name, res
-
-    def expand_struct(
-        self,
-        op_node: CallNode,
-        orientation: str,
-    ):
-        """
-        Currently ad-hoc method to add all elements of a struct. This should be
-        called every time when `back` produces a constructive struct call,
-        or `forward` produces a destructive struct call.
-        """
-        # find the struct node
-        builtin_id = op_node.func_op.sig.ui_name
-        struct_name = (
-            "lst"
-            if builtin_id == "__list__"
-            else "dct"
-            if builtin_id == "__dict__"
-            else "st"
-            if builtin_id == "__set__"
-            else None
-        )
-        elt_name = (
-            "elt"
-            if builtin_id == "__list__"
-            else "value"
-            if builtin_id == "__dict__"
-            else None
-        )
-        idx_name = (
-            "idx"
-            if builtin_id == "__list__"
-            else "key"
-            if builtin_id == "__dict__"
-            else None
-        )
-        op_id = op_node.func_op.sig.versioned_ui_name
-        present_call_uids = {c.causal_uid for c in op_node.calls.support.values()}
-
-        if orientation == StructOrientations.construct:
-            struct_node = op_node.outputs[struct_name]
-            idx_node = op_node.inputs[idx_name]
-            elt_node = op_node.inputs[elt_name]
-        else:
-            struct_node = op_node.inputs[struct_name]
-            idx_node = op_node.inputs[idx_name]
-            elt_node = op_node.outputs[elt_name]
-
-        def expand_one(
-            idx: int,
-            calls_to_add: List[Call],
-        ):
-            structs_to_append = [c.inputs[struct_name] for c in calls_to_add]
-            idxs_to_append = [c.inputs[idx_name] for c in calls_to_add]
-            elts_to_append = [c.inputs[elt_name] for c in calls_to_add]
-            num_extra = len(calls_to_add)
-
-            op_node.calls.append_items(items=calls_to_add, inplace=True)
-            struct_node.refs.append_items(items=structs_to_append, inplace=True)
-            idx_node.refs.append_items(items=idxs_to_append, inplace=True)
-            elt_node.refs.append_items(items=elts_to_append, inplace=True)
-
-            for other_op_node in self.op_nodes.values():
-                if other_op_node != op_node:
-                    other_op_node.calls.copy_item(i=idx, times=num_extra, inplace=True)
-            for other_var_node in self.var_nodes.values():
-                if other_var_node not in [struct_node, idx_node, elt_node]:
-                    other_var_node.refs.copy_item(i=idx, times=num_extra, inplace=True)
-
-        indices_to_expand = struct_node.refs.support.keys()
-        for i in indices_to_expand:
-            struct_ref = struct_node.refs[i]
-            ref_rows = self.prov_df.query(
-                f'causal == "{struct_ref.causal_uid}" and op_id == "{op_id}"'
-            )
-            ref_call_uids = ref_rows["call_causal"].values.tolist()
-            call_uids_to_add = set(ref_call_uids) - present_call_uids
-            calls_to_add = self.storage.cache.call_mget(
-                by_causal=True,
-                uids=list(call_uids_to_add),
-                versioned_ui_name=op_id,
-            )
-            expand_one(idx=i, calls_to_add=calls_to_add)
-        return calls_to_add
 
     @transaction()
     def back(
@@ -480,82 +390,57 @@ class ComputationFrame(Transactable):
         res = self if inplace else self.copy_subgraph()
         if cols is None:
             # this means we want to expand the entire graph
-            return self._back_all(res, inplace=inplace, verbose=verbose, conn=conn)
+            return res._back_all(res, inplace=inplace, verbose=verbose, conn=conn)
         if verbose:
             logger.info(f"Expanding graph to include the provenance of columns {cols}")
         if isinstance(cols, str):
             cols = [cols]
 
-        N = len(res)
-
         adjacent_calls_data = {
             col: res.get_adjacent_calls(col=col, direction="back", conn=conn)
             for col in cols
         }
-        ### do the magic sorting of calls into op nodes
-        ### we want to get the following data: for each mapping of output names
-        # to columns in `cols` and each operation, get the calls to this
-        # operation that created the columns, along with the indices of the rows
-        # occupied by these calls
-        data = defaultdict(list)  # (idx, call_uid) -> List[(output name, col, op_id)]
-        calls_by_uid = {}
-        for col, calls_data in adjacent_calls_data.items():
-            calls_list = [x[0] for x in calls_data]
-            names_list = [x[1] for x in calls_data]
-            for calls, name in zip(calls_list, names_list):
-                for i, call in calls.support.items():
-                    data[(i, call.causal_uid)].append(
-                        (name, col, call.func_op.sig.versioned_ui_name)
-                    )
-                    calls_by_uid[call.causal_uid] = call
-        # make the values of `data` canonical and hashable
-        for call_and_idx, names_and_cols_and_op in data.items():
-            data[call_and_idx] = tuple(sorted(names_and_cols_and_op))
-        # invert the mapping
-        data_inverse = defaultdict(
-            list
-        )  # (output name, col, op_id) -> list of (idx, call)
-        for call_and_idx, names_and_cols_and_op in data.items():
-            idx, call_uid = call_and_idx
-            data_inverse[names_and_cols_and_op].append((idx, calls_by_uid[call_uid]))
-        for names_and_cols_and_op in data_inverse.keys():
-            present_names = [x[0] for x in names_and_cols_and_op]
-            present_columns = [x[1] for x in names_and_cols_and_op]
-            if len(set(present_names)) != len(present_names):
-                raise NotImplementedError(
-                    f"Some rows in columns {present_columns} contain copies of the same reference; this is not supported yet"
-                )
-        for names_and_cols_and_op, idxs_and_calls in data_inverse.items():
-            # create the padded list of calls
-            calls_plist: PaddedList[Call] = PaddedList(
-                support={i: call for i, call in idxs_and_calls}, length=N
+
+        filtered_cols = []
+        for col, calls_dict in adjacent_calls_data.items():
+            if len(calls_dict) > 1:
+                reason = f"Values in column {col} were created by multiple ops and/or as different outputs: {[f'{op}::{out}' for op, out in calls_dict.keys()]}"
+                if skip_failures:
+                    if verbose:
+                        logger.info(f"{reason}; skipping column {col}")
+                    continue
+                else:
+                    raise ValueError(reason)
+            if len(calls_dict) == 0 or any(call is None for call in calls_dict[list(calls_dict.keys())[0]]):
+                reason = f"Some refs in column {col} were not created by any op"
+                if skip_failures:
+                    if verbose:
+                        logger.info(f"{reason}; skipping column {col}")
+                    continue
+                else:
+                    raise ValueError(reason)
+            filtered_cols.append(col)
+        cols = filtered_cols
+
+        for col in cols:
+            calls_dict = adjacent_calls_data[col]
+            op_id, output_name = list(calls_dict.keys())[0]
+            calls = calls_dict[(op_id, output_name)]
+            # produce input nodes
+            representative_call: Call = calls[0] 
+            op = representative_call.func_op
+            input_node_names = {}
+            for input_name, input_tp in op.input_types.items():
+                input_node_names[input_name], _ = res.join_var_node(
+                    refs=[call.inputs[input_name] for call in calls],
+                    tp=input_tp,
+                    name_hint=input_name,)
+            res.join_op_node(
+                calls=calls,
+                out_map={output_name: col},
+                in_map={k: v for k, v in input_node_names.items()},
             )
-            reference_call = calls_plist.support[list(calls_plist.support.keys())[0]]
-            op = reference_call.func_op
-            # create padded lists of inputs
-            input_names = calls_plist.support[
-                list(calls_plist.support.keys())[0]
-            ].inputs.keys()
-            inputs_plists = {
-                input_name: PaddedList(
-                    support={i: call.inputs[input_name] for i, call in idxs_and_calls},
-                    length=N,
-                )
-                for input_name in input_names
-            }
-            input_name_to_col = {}
-            for input_name, input_plist in inputs_plists.items():
-                input_col, _ = res.join_var_node(
-                    refs=input_plist,
-                    tp=op.input_types[input_name],
-                    name_hint=input_name,
-                )
-                input_name_to_col[input_name] = input_col
-            op_name, op_node = res.join_op_node(
-                calls=calls_plist,
-                out_map={k: v for k, v, _ in names_and_cols_and_op},
-                in_map=input_name_to_col,
-            )
+            
         return res
 
     @transaction()
@@ -585,7 +470,7 @@ class ComputationFrame(Transactable):
         call_outputs = {}
         for x in self.op_nodes.values():
             # process the call uids
-            for call in x.calls.dropna():
+            for call in x.calls:
                 call_uids_to_delete[x.func_op.sig.versioned_ui_name].append(
                     call.causal_uid
                 )
@@ -662,7 +547,7 @@ class ComputationFrame(Transactable):
             constraint=None,
             tp=None,
             # refs=list(refs),
-            refs=PaddedList.from_list(lst=refs),
+            refs=refs,
         )
         name = "v0" if name is None else name
         return ComputationFrame(
@@ -713,7 +598,7 @@ class ComputationFrame(Transactable):
             func_op=op,
             outputs=output_nodes,
             constraint=None,
-            calls=PaddedList.from_list(lst=calls),
+            calls=calls,
             orientation=None,
         )
         return ComputationFrame(
@@ -829,7 +714,7 @@ class ComputationFrame(Transactable):
                 avg_size, std = 0, 0
             else:
                 avg_size_bytes, std_bytes = estimate_uid_storage(
-                    uids=[ref.uid for ref in v.refs.dropna()],
+                    uids=[ref.uid for ref in v.refs],
                     storage=self.storage,
                     units="bytes",
                     sample_size=sample_size,
@@ -842,11 +727,11 @@ class ComputationFrame(Transactable):
             var_data = {
                 "name": k,
                 "size": f"{avg_size}±{std} {units}",
-                "nunique": len(set(ref.uid for ref in v.refs.dropna())),
+                "nunique": len(set(ref.uid for ref in v.refs)),
             }
             if include_uniques:
                 if avg_size_bytes < small_threshold_bytes:
-                    uniques = {ref.uid: ref for ref in v.refs.dropna()}
+                    uniques = {ref.uid: ref for ref in v.refs}
                     uniques_values = self.storage.unwrap(list(uniques.values()))
                     try:
                         uniques_values = sorted(uniques_values)
@@ -883,9 +768,9 @@ class ComputationFrame(Transactable):
                     "name": k,
                     "function": op_node.func_op.sig.ui_name,
                     "version": op_node.func_op.sig.version,
-                    "num_calls": len(op_node.calls.support),
+                    "num_calls": len(op_node.calls),
                     "num_unique_calls": len(
-                        set(call.causal_uid for call in op_node.calls.dropna())
+                        set(call.causal_uid for call in op_node.calls)
                     ),
                     "signature": signature,
                 }
