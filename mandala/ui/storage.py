@@ -877,8 +877,11 @@ class Storage(Transactable):
     ) -> Tuple[List[Optional[Call]], List[Optional[str]]]:
         """
         Given some Refs, return the
-         - calls that created them (there may be at most one such call per Ref), or None if there was no such call.
+         - calls that created them (there may be at most one such call per Ref),
+         or None if there was no such call.
          - the output name under which the refs were created
+
+         ! This currently fails for refs created as a list of inputs.
         """
         if not refs:
             return [], []
@@ -892,6 +895,10 @@ class Storage(Transactable):
         ].set_index("causal")[["call_causal", "name", "op_id"]]
         if len(res_df) == 0:
             return [None] * len(refs), [None] * len(refs)
+        if not res_df.index.is_unique:
+            logging.warning(
+                "Work in progress: Detected ref w/ multiple creators (this happens when a data structure is created explicitly out of its elements), choosing arbitrary creator."
+            )
         causal_to_creator_call_uid = res_df["call_causal"].to_dict()
         causal_to_output_name = res_df["name"].to_dict()
         causal_to_op_id = res_df["op_id"].to_dict()
@@ -923,6 +930,7 @@ class Storage(Transactable):
             else None
             for causal_uid in causal_uids
         ]
+        sess.d()
         return calls, output_names
 
     @transaction()

@@ -26,10 +26,7 @@ class ComputationFrame(Transactable):
 
     This is a simple declarative interface for exploring the storage, in
     contrast with using an imperative computational context (i.e., manipulating
-    some memoized piece of code to interface with storage). It has several
-    limitations, the main one being that it can only represent a single
-    computation in a given instance (i.e., a single composition of functions).
-    This comes at the benefit of simplicity and ease of use.
+    some memoized piece of code to interface with storage). 
 
     The main differences between a `ComputationFrame` and a `DataFrame` are as
     follows:
@@ -47,6 +44,18 @@ class ComputationFrame(Transactable):
         the operations that created/used a variable (including ones not
         currently represented in the `ComputationFrame`);
 
+    It has several important limitations:
+    - the main one being that it can only represent a single computation in a
+    given instance (i.e., a single composition of functions). This comes at the
+    benefit of simplicity and ease of use.
+    - when it finds a data structure that was constructed "by hand" out of
+    multiple elements, it picks one of them arbitrarily to represent the
+    computational history of the entire structure. Sometimes this makes sense 
+    (e.g., when the structure is a list of values with analogous provenance), 
+    sometimes it doesn't.
+    - Similarly, when it finds a data structure that is the output of a
+    computation, it picks one of its elements arbitrarily to represent the
+    computational continuation of the entire structure. Dual caveats apply.
     """
 
     def __init__(
@@ -442,6 +451,50 @@ class ComputationFrame(Transactable):
             )
             
         return res
+    
+    @transaction()
+    def forward(
+        self,
+        cols: Optional[Union[str, List[str]]] = None,
+        inplace: bool = False,
+        skip_failures: bool = False,
+        verbose: bool = False,
+        conn: Optional[Connection] = None,
+    ) -> "ComputationFrame":
+        res = self if inplace else self.copy_subgraph()
+        if cols is None:
+            # this means we want to expand the entire graph
+            return res._forward_all(res, inplace=inplace, verbose=verbose, conn=conn)
+        if verbose:
+            logger.info(f"Expanding graph to include the consumers of columns {cols}")
+        if isinstance(cols, str):
+            cols = [cols]
+
+        adjacent_calls_data = {
+            col: res.get_adjacent_calls(col=col, direction="forward", conn=conn)
+            for col in cols
+        }
+
+        filtered_cols = []
+        raise NotImplementedError
+        # for col, calls_dict in adjacent_calls_data.items():
+
+        #     
+        #     filtered_cols.append(col)
+        # cols = filtered_cols
+
+        # for col in cols:
+        #     calls_dict = adjacent_calls_data[col]
+        #     op_id, input_name = list(calls_dict.keys())[0]
+        #     calls = calls_dict[(op_id, input_name)]
+        #     # produce output nodes
+        #     representative_call: Call = calls[0] 
+        #     op = representative_call.func_op
+        #     output_node_names = {}
+        #     for output_name, output_tp in enumerate(op.output_types):
+        #         output_node_names[dump_output_name(i=output_name)], _ = res.join_var_node(
+        #             refs=[call.outputs[dump_output_name(i=output_name)] for call in calls],
+        #             tp=output_tp
 
     @transaction()
     def delete(

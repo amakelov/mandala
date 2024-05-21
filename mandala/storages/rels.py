@@ -379,7 +379,9 @@ class SigAdapter(Transactable):
         logger.debug(f"Created signature:\n{sig}")
 
     @transaction()
-    def create_new_version(self, sig: Signature, conn: Optional[Connection] = None):
+    def create_new_version(self, sig: Signature,
+                           strict: bool = False,
+                            conn: Optional[Connection] = None):
         """
         Create a new version of an already existing function using the `sig`
         object. `sig` must have internal data, and the internal name must
@@ -387,7 +389,8 @@ class SigAdapter(Transactable):
         """
         assert sig.has_internal_data
         latest_sig = self.get_latest_version(sig=sig, conn=conn)
-        assert sig.version == latest_sig.version + 1
+        if strict:
+            assert sig.version == latest_sig.version + 1
         # update signatures
         sigs = self.load_state(conn=conn)
         sigs[(sig.internal_name, sig.version)] = sig

@@ -174,7 +174,8 @@ class SigSyncer(Transactable):
 
     @transaction()
     def sync_new_version(
-        self, sig: Signature, conn: Optional[Connection] = None
+        self, sig: Signature, conn: Optional[Connection] = None,
+        strict: bool = False,
     ) -> Signature:
         """
         Pull the current state of the signatures from the remote, make sure that
@@ -187,8 +188,9 @@ class SigSyncer(Transactable):
             raise ValueError()
         latest_sig = self.sig_adapter.get_latest_version(sig=sig, conn=conn)
         new_version = latest_sig.version + 1
-        if not sig.version == new_version:
-            raise ValueError(f"New version must be {new_version}, not {sig.version}")
+        if strict:
+            if not sig.version == new_version:
+                raise ValueError(f"New version must be {new_version}, not {sig.version}")
         new_sig = sig._generate_internal(internal_name=latest_sig.internal_name)
         new_sig.check_invariants()
         self.validate_transaction(
