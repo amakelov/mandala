@@ -1,10 +1,13 @@
 from .common_imports import *
+import prettytable
 import datetime
 from .model import *
 import sqlite3
-from .model import __make_list__, __get_item__
+from .model import __make_list__, __get_list_item__, __make_dict__, __get_dict_value__
+from .utils import dataframe_to_prettytable
 
 from .storage_utils import (
+    DBAdapter,
     InMemCallStorage,
     SQLiteCallStorage,
     CachedDictStorage,
@@ -14,39 +17,45 @@ from .storage_utils import (
 
 
 class Storage:
-    def __init__(self, db_path: Optional[str] = None):
-        self.db_path = db_path if db_path is not None else ":memory:"
-        if db_path is not None:
-            # if no file exists, create a sqlite db
-            if not os.path.exists(db_path):
-                # create a database with incremental vacuuming
-                conn = self.conn()
-                conn.execute("PRAGMA journal_mode=WAL")
-                conn.execute("PRAGMA auto_vacuum=INCREMENTAL")
-                conn.execute("PRAGMA incremental_vacuum_threshold = 1024;")
-                conn.close()
-        else:
-            self._conn = sqlite3.connect(":memory:")
+    def __init__(self, db_path: str = ":memory:"):
+        self.db = DBAdapter(db_path=db_path)
 
-        self.call_storage = SQLiteCallStorage(self.db_path, table_name="calls")
+        self.call_storage = SQLiteCallStorage(db=self.db, table_name="calls")
         self.calls = CachedCallStorage(persistent=self.call_storage)
         self.call_cache = self.calls.cache
 
         self.atoms = CachedDictStorage(
-            persistent=SQLiteDictStorage(self.db_path, table="atoms")
+            persistent=SQLiteDictStorage(self.db, table="atoms")
         )
         self.shapes = CachedDictStorage(
-            persistent=SQLiteDictStorage(self.db_path, table="shapes")
+            persistent=SQLiteDictStorage(self.db, table="shapes")
         )
         self.ops = CachedDictStorage(
-            persistent=SQLiteDictStorage(self.db_path, table="ops")
+            persistent=SQLiteDictStorage(self.db, table="ops")
         )
-
+    
     def conn(self) -> sqlite3.Connection:
-        if self.db_path == ":memory:":
-            return self._conn
-        else:
-            return sqlite3.connect(self.db_path)
+        return self.db.conn()
+
+    ###
+    def cache_info(self) -> str:
+        df = pd.DataFrame({
+            'present': [len(self.atoms.cache), len(self.shapes.cache), len(self.ops.cache), len(self.calls.cache)],
+            'dirty': [len(self.atoms.dirty_keys), len(self.shapes.dirty_keys), len(self.ops.dirty_keys), len(self.calls.dirty_hids)]
+        }, index=['atoms', 'shapes', 'ops', 'calls']).reset_index().rename(columns={'index': 'cache'})
+        print(dataframe_to_prettytable(df))
+
+    def __repr__(self):
+        # summarize cache sizes
+        cache_sizes = {
+            "atoms": len(self.atoms.cache),
+            "shapes": len(self.shapes.cache),
+            "ops": len(self.ops.cache),
+            "calls": len(self.calls.cache),
+        }
+        return f"Storage(db_path={self.db_path}), cache contents:\n" + "\n".join(
+            [f"  {k}: {v}" for k, v in cache_sizes.items()]
+        )
 
     def vacuum(self):
         with self.conn() as conn:
@@ -75,6 +84,11 @@ class Storage:
             self.shapes[ref.hid] = ref.shape()
             for i, elt in enumerate(ref):
                 self.save_ref(elt)
+        elif isinstance(ref, DictRef):
+            self.shapes[ref.hid] = ref.shape()
+            for k, v in ref.items():
+                self.save_ref(v)
+                self.save_ref(k)
         else:
             raise NotImplementedError
 
@@ -90,6 +104,11 @@ class Storage:
             for i, elt in enumerate(shape):
                 obj.append(self.load_ref(elt.hid, lazy=lazy))
             return shape.attached(obj=shape.obj)
+        elif isinstance(shape, DictRef):
+            obj = {}
+            for k, v in shape.items():
+                obj[self.load_ref(k.hid, lazy=lazy)] = self.load_ref(v.hid, lazy=lazy)
+            return shape.attached(obj=obj)
         else:
             raise NotImplementedError
 
@@ -145,7 +164,7 @@ class Storage:
         if self.call_cache.exists(hid):
             call_data = self.call_cache.get_data(hid)
         else:
-            with self.call_storage.get_conn() as conn:
+            with self.call_storage.conn() as conn:
                 call_data = self.call_storage.get_data(hid, conn=conn)
         op_name = call_data["op_name"]
         return Call(
@@ -255,6 +274,8 @@ class Storage:
         # the builtin op that will construct instances of this type
         if isinstance(tp, ListType):
             return __make_list__
+        elif isinstance(tp, DictType):
+            return __make_dict__
         else:
             raise NotImplementedError
 
@@ -263,6 +284,14 @@ class Storage:
         # return the inputs that would be passed to the struct builder
         if isinstance(tp, ListType):
             return {f"elts_{i}": elt for i, elt in enumerate(val)}
+        elif isinstance(tp, DictType):
+            # the keys must be sortable uniquely
+            sorted_keys = sorted(val.keys())
+            res = {}
+            for i, k in enumerate(sorted_keys):
+                res[f'key_{i}'] = k
+                res[f'value_{i}'] = val[k]
+            return res
         else:
             raise NotImplementedError
 
@@ -273,6 +302,18 @@ class Storage:
         # that would be passed to the struct builder
         if isinstance(tp, ListType):
             return {f"elts_{i}": tp.elt for i in range(len(struct_inputs))}
+        elif isinstance(tp, DictType):
+            result = {}
+            for input_name in struct_inputs.keys():
+                if input_name.startswith("key_"):
+                    i = int(input_name.split("_")[-1])
+                    result[f"key_{i}"] = tp.key
+                elif input_name.startswith("value_"):
+                    i = int(input_name.split("_")[-1])
+                    result[f"value_{i}"] = tp.val
+                else:
+                    raise ValueError(f"Invalid input name {input_name}")
+            return result
         else:
             raise NotImplementedError
 
@@ -306,9 +347,9 @@ class Storage:
             new_elts = []
             for i, elt in enumerate(ref):
                 getitem_dict, item_call, _ = self.call_internal(
-                    op=__get_item__,
+                    op=__get_list_item__,
                     inputs={"obj": ref, "attr": i},
-                    input_tps={"obj": tp.elt, "attr": AtomType()},
+                    input_tps={"obj": tp, "attr": AtomType()},
                 )
                 new_elt = getitem_dict["output_0"]
                 destr_calls.append(item_call)
@@ -316,6 +357,23 @@ class Storage:
                 new_elts.append(new_elt)
                 destr_calls.extend(elt_subcalls)
             res = ListRef(cid=ref.cid, hid=ref.hid, in_memory=True, obj=new_elts)
+            return res, destr_calls
+        elif isinstance(ref, DictRef):
+            assert isinstance(ref, DictRef)
+            assert isinstance(tp, DictType)
+            new_items = {}
+            for k, v in ref.items():
+                getvalue_dict, value_call, _ = self.call_internal(
+                    op=__get_dict_value__,
+                    inputs={"obj": ref, "key": k},
+                    input_tps={"obj": tp, "key": tp.key},
+                )
+                new_v = getvalue_dict["output_0"]
+                destr_calls.append(value_call)
+                new_v, v_subcalls = self.destruct(new_v, tp=tp.val)
+                new_items[k] = new_v
+                destr_calls.extend(v_subcalls)
+            res = DictRef(cid=ref.cid, hid=ref.hid, in_memory=True, obj=new_items)
             return res, destr_calls
         else:
             raise NotImplementedError
@@ -473,6 +531,6 @@ class Storage:
     def __exit__(self, exc_type, exc_value, traceback) -> None:
         Context.current_context = None
         self.commit()
-
+    
 
 from .cf import ComputationFrame

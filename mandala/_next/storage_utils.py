@@ -1,10 +1,48 @@
 from .common_imports import *
+import uuid
 from .utils import serialize, deserialize
 from .model import Call
 import joblib
 import sqlite3
 from abc import ABC, abstractmethod
 
+
+class DBAdapter:
+    def __init__(self, db_path: str = ":memory:"):
+        self.db_path = db_path
+        if self.in_memory:
+            # maintain a single connection throughout the lifetime of the object
+            # avoid clashes with other in-memory databases
+            self._id = str(uuid.uuid4())
+            self._connection_address = f"file:{self._id}?mode=memory&cache=shared"
+            self._conn = sqlite3.connect(
+                str(self._connection_address), isolation_level=None, uri=True
+            )
+        if not self.in_memory:
+            if not os.path.exists(db_path):
+                # create a database with incremental vacuuming
+                conn = self.conn()
+                conn.execute("PRAGMA journal_mode=WAL")
+                conn.execute("PRAGMA auto_vacuum=INCREMENTAL")
+                conn.execute("PRAGMA incremental_vacuum_threshold = 1024;")
+                conn.close()
+    
+    @property
+    def in_memory(self) -> bool:
+        return self.db_path == ":memory:"
+    
+    def conn(self) -> sqlite3.Connection:
+        if self.in_memory:
+            return self._conn
+        else:
+            return sqlite3.connect(self.db_path)
+
+def is_in_memory_db(conn):
+    cursor = conn.execute("PRAGMA database_list")
+    db_list = cursor.fetchall()
+    if len(db_list) != 1:
+        raise ValueError("Expected exactly one database")
+    return db_list[0][2] == ''
 
 def transaction(method):  # transaction decorator for classes with a `get_conn` method
     def wrapper(self, *args, **kwargs):
@@ -15,7 +53,7 @@ def transaction(method):  # transaction decorator for classes with a `get_conn` 
             logging.debug(
                 f"Opening new transaction from {self.__class__.__name__}.{method.__name__}"
             )
-            conn = self.get_conn()
+            conn = self.conn()
             try:
                 res = method(self, *args, conn=conn, **kwargs)
                 conn.commit()
@@ -24,7 +62,11 @@ def transaction(method):  # transaction decorator for classes with a `get_conn` 
                 conn.rollback()
                 raise e
             finally:
-                conn.close()
+                if not is_in_memory_db(conn):
+                    conn.close()
+                else:
+                    # in-memory databases are kept open
+                    pass
 
     return wrapper
 
@@ -54,21 +96,22 @@ class DictStorage(ABC):
 
     def __contains__(self, key: str) -> bool:
         return self.exists(key)
+    
+    def __len__(self) -> int:
+        return len(self.keys())
 
 
 class SQLiteDictStorage(DictStorage):
-    def __init__(self, db_path: str, table: str):
-        self.db_path = db_path
+    def __init__(self, db: DBAdapter, table: str):
+        self.db = db
         self.table = table
-        self.conn = sqlite3.connect(self.db_path)
-        self.conn.execute(
-            f"CREATE TABLE IF NOT EXISTS {self.table} (key TEXT PRIMARY KEY, value BLOB)"
-        )
-        # close the connection, we will open it when we need it
-        self.conn.close()
-
-    def get_conn(self) -> sqlite3.Connection:
-        return sqlite3.connect(self.db_path)
+        with self.conn() as conn:
+            conn.execute(
+                f"CREATE TABLE IF NOT EXISTS {table} (key TEXT PRIMARY KEY, value BLOB)"
+            )
+    
+    def conn(self) -> sqlite3.Connection:
+        return self.db.conn()
 
     @transaction
     def get(self, key: str, conn: Optional[sqlite3.Connection] = None) -> Any:
@@ -115,6 +158,9 @@ class CachedDictStorage(DictStorage):
         self.persistent = persistent
         self.cache: Dict[str, Any] = {}
         self.dirty_keys: Set[str] = set()
+    
+    def __len__(self) -> int:
+        return len(self.cache)
 
     def get(self, key: str) -> Any:
         if key in self.cache:
@@ -131,6 +177,10 @@ class CachedDictStorage(DictStorage):
     def commit(self, conn: Optional[sqlite3.Connection] = None) -> None:
         for key in self.dirty_keys:
             self.persistent.set(key, self.cache[key], conn=conn)
+        self.dirty_keys.clear()
+    
+    def clear(self) -> None:
+        self.cache.clear()
         self.dirty_keys.clear()
 
     def drop(self, key: str) -> None:
@@ -165,6 +215,9 @@ class InMemCallStorage:
             self.df = pd.DataFrame(columns=InMemCallStorage.COLUMNS).set_index(
                 ["call_history_id", "name"]
             )
+        
+    def __len__(self) -> int:
+        return self.df.index.get_level_values(0).nunique()
 
     def save(self, call: Call):
         if call.hid in self.df.index.levels[0]:
@@ -286,19 +339,21 @@ class InMemCallStorage:
 
 
 class SQLiteCallStorage:
-    def __init__(self, db_path: str, table_name: str):
-        self.db_path = db_path
+    def __init__(self, db: DBAdapter, table_name: str):
+        self.db = db
         self.table_name = table_name
         # if it doesn't exist, create a table with a two-column primary key
         # on call_history_id and name
-        self.conn = sqlite3.connect(db_path)
-        self.conn.execute(
-            f"CREATE TABLE IF NOT EXISTS {table_name} (call_history_id TEXT, name TEXT, direction TEXT, "
-            "call_content_id TEXT, ref_content_id TEXT, ref_history_id TEXT, op TEXT, PRIMARY KEY (call_history_id, name))"
-        )
-        # close the connection, we will open it when we need it
-        self.conn.close()
+        with self.db.conn() as conn:
+            conn.execute(
+                f"CREATE TABLE IF NOT EXISTS {table_name} (call_history_id TEXT, name TEXT, direction TEXT, "
+                "call_content_id TEXT, ref_content_id TEXT, ref_history_id TEXT, op TEXT, PRIMARY KEY (call_history_id, name))"
+            )
+    
+    def conn(self) -> sqlite3.Connection:
+        return self.db.conn()
 
+    ###
     @transaction
     def get_df(self, conn: Optional[sqlite3.Connection] = None) -> pd.DataFrame:
         return pd.read_sql(f"SELECT * FROM {self.table_name}", conn).set_index(
@@ -310,9 +365,6 @@ class SQLiteCallStorage:
         self, query: str, conn: Optional[sqlite3.Connection] = None
     ) -> pd.DataFrame:
         return pd.read_sql(query, conn)
-
-    def get_conn(self) -> sqlite3.Connection:
-        return sqlite3.connect(self.db_path)
 
     @transaction
     def save(
@@ -487,10 +539,9 @@ class CachedCallStorage:
         if self.cache.exists(call_history_id):
             return self.cache.get_data(call_history_id)
         else:
-            if conn is None:
-                conn = self.persistent.get_conn()
-            with conn:
-                return self.persistent.get_data(call_history_id, conn)
+            # if conn is None:
+            #     conn = self.persistent.conn()
+            return self.persistent.get_data(call_history_id, conn)
 
     def get_creator_hids(self, hids: Iterable[str]) -> Set[str]:
         raise NotImplementedError()
@@ -500,8 +551,12 @@ class CachedCallStorage:
 
     def commit(self, conn: Optional[sqlite3.Connection] = None):
         if conn is None:
-            conn = self.persistent.get_conn()
-        with conn:
-            for hid in self.dirty_hids:
-                self.persistent.save(self.cache.get_data(hid), conn=conn)
+            conn = self.persistent.conn()
+        # with conn:
+        for hid in self.dirty_hids:
+            self.persistent.save(self.cache.get_data(hid), conn=conn)
+        self.dirty_hids.clear()
+    
+    def clear(self):
+        self.cache = InMemCallStorage()
         self.dirty_hids.clear()

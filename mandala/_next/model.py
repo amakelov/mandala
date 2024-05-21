@@ -124,7 +124,6 @@ class Op:
 
     def __call__(self, *args, **kwargs) -> Union[Tuple[Ref, ...], Ref]:
         if Context.current_context is None:  # act as noop
-            print(args, kwargs)
             return self.f(*args, **kwargs)
         else:
             storage = Context.current_context.storage
@@ -191,8 +190,27 @@ class ListRef(Ref):
 
 
 class DictRef(Ref):
-    pass
-
+    def __len__(self) -> int:
+        return len(self.obj)
+    
+    def __getitem__(self, key: Ref) -> Ref:
+        assert self.in_memory
+        return self.obj[key]
+    
+    def __repr__(self) -> str:
+        return "Dict" + super().__repr__()
+    
+    def items(self) -> Iterable[Tuple[Ref, Ref]]:
+        return self.obj.items()
+    
+    def shape(self) -> "DictRef":
+        return DictRef(
+            cid=self.cid,
+            hid=self.hid,
+            in_memory=True,
+            obj={k.detached(): v.detached() for k, v in self.obj.items()},
+        )
+        
 
 class TupleRef(Ref):
     pass
@@ -217,7 +235,7 @@ def recurse_on_ref_collections(f: Callable, obj: Any, **kwargs: Any) -> Any:
         return f(obj, **kwargs)
     elif isinstance(obj, (list, ListRef)):
         return [recurse_on_ref_collections(f, elt, **kwargs) for elt in obj]
-    elif isinstance(obj, dict):
+    elif isinstance(obj, (dict, DictRef)):
         return {k: recurse_on_ref_collections(f, v, **kwargs) for k, v in obj.items()}
     elif isinstance(obj, tuple):
         return tuple(recurse_on_ref_collections(f, elt, **kwargs) for elt in obj)
@@ -236,6 +254,19 @@ def __make_list__(**kwargs: Any) -> MList[Any]:
         obj=elts,
     )
 
+def __make_dict__(**keys_and_values: Any) -> dict:
+    num_elts = len(keys_and_values) // 2
+    keys = [keys_and_values[f"key_{i}"] for i in range(num_elts)]
+    values = [keys_and_values[f"value_{i}"] for i in range(num_elts)]
+    obj = {k: v for k, v in zip(keys, values)}
+    return DictRef(
+        cid=get_content_hash(sorted([(k.cid, v.cid) for k, v in obj.items()])),
+        hid=get_content_hash(sorted([(k.hid, v.hid) for k, v in obj.items()])),
+        in_memory=True,
+        obj=obj,
+    )
+
+
 
 def __make_set__(**kwargs: Any) -> MSet[Any]:
     elts = [kwargs[f"elts_{i}"] for i in range(len(kwargs))]
@@ -247,31 +278,23 @@ def __make_set__(**kwargs: Any) -> MSet[Any]:
     )
 
 
-def __make_dict__(**items: Any) -> dict:
-    keys = [items[f"key_{i}"] for i in range(len(items))]
-    values = [items[f"value_{i}"] for i in range(len(items))]
-    obj = {k: v for k, v in zip(keys, values)}
-    return DictRef(
-        cid=get_content_hash(sorted([(k.cid, v.cid) for k, v in obj.items()])),
-        hid=get_content_hash(sorted([(k.hid, v.hid) for k, v in obj.items()])),
-        in_memory=True,
-        obj=obj,
-    )
-
-
 def __make_tuple__(*elts: Any) -> tuple:
     return tuple(elts)
 
 
-def __get_item__(obj: MList[Any], attr: Any) -> Any:
+def __get_list_item__(obj: MList[Any], attr: Any) -> Any:
     return obj[attr.obj]
+
+def __get_dict_value__(obj: MDict[Any, Any], key: Any) -> Any:
+    return obj[key]
 
 
 __make_list__ = Op(name=__make_list__.__name__, f=__make_list__, __structural__=True)
 __make_dict__ = Op(name=__make_dict__.__name__, f=__make_dict__, __structural__=True)
 __make_set__ = Op(name=__make_set__.__name__, f=__make_set__, __structural__=True)
 __make_tuple__ = Op(name=__make_tuple__.__name__, f=__make_tuple__, __structural__=True)
-__get_item__ = Op(name=__get_item__.__name__, f=__get_item__, __structural__=True)
+__get_list_item__ = Op(name=__get_list_item__.__name__, f=__get_list_item__, __structural__=True)
+__get_dict_value__ = Op(name=__get_dict_value__.__name__, f=__get_dict_value__, __structural__=True)
 
 
 def make_ref_set(resf: Iterable[Ref]) -> SetRef:

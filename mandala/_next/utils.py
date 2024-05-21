@@ -2,9 +2,24 @@ from .common_imports import *
 import joblib
 import io
 import inspect
+import prettytable
 import sqlite3
 from .config import *
 from abc import ABC, abstractmethod
+
+def dataframe_to_prettytable(df: pd.DataFrame) -> str:
+    # Initialize a PrettyTable object
+    table = prettytable.PrettyTable()
+    
+    # Set the column names
+    table.field_names = df.columns.tolist()
+    
+    # Add rows to the table
+    for row in df.itertuples(index=False):
+        table.add_row(row)
+    
+    # Return the pretty-printed table as a string
+    return table.get_string()
 
 
 def serialize(obj: Any) -> bytes:
