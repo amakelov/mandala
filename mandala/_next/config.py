@@ -1,12 +1,15 @@
-from common_imports import *
+from .common_imports import *
+
 
 class Config:
 
     try:
         import torch
+
         has_torch = True
     except ImportError:
         has_torch = False
+
 
 if Config.has_torch:
     import torch

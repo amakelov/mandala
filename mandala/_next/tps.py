@@ -1,4 +1,4 @@
-from common_imports import *
+from .common_imports import *
 import typing
 from typing import Hashable
 
@@ -7,20 +7,23 @@ from typing import Hashable
 ################################################################################
 from typing import Generic
 
-T = TypeVar('T')
+T = TypeVar("T")
 # Subclassing List
 class MList(List[T], Generic[T]):
     def identify(self):
         return "Type annotation for `mandala` lists"
 
+
 class MDict(Dict[Hashable, T], Generic[T]):
     def identify(self):
         return "Type annotation for `mandala` dictionaries"
 
+
 class MSet(Set[T], Generic[T]):
     def identify(self):
         return "Type annotation for `mandala` sets"
-    
+
+
 class MTuple(Tuple, Generic[T]):
     def identify(self):
         return "Type annotation for `mandala` tuples"
@@ -36,9 +39,7 @@ class Type:
         elif hasattr(annotation, "__origin__"):
             if annotation.__origin__ is MList:
                 elt_annotation = annotation.__args__[0]
-                return ListType(
-                    elt=Type.from_annotation(annotation=elt_annotation)
-                )
+                return ListType(elt=Type.from_annotation(annotation=elt_annotation))
             elif annotation.__origin__ is MDict:
                 key_annotation = annotation.__args__[0]
                 value_annotation = annotation.__args__[1]
@@ -51,12 +52,16 @@ class Type:
                 return SetType(elt=Type.from_annotation(annotation=elt_annotation))
             elif annotation.__origin__ is MTuple:
                 if len(annotation.__args__) == 2 and annotation.__args__[1] == Ellipsis:
-                    return TupleType(Type.from_annotation(annotation=annotation.__args__[0]))
+                    return TupleType(
+                        Type.from_annotation(annotation=annotation.__args__[0])
+                    )
                 else:
-                    return TupleType(*(
+                    return TupleType(
+                        *(
                             Type.from_annotation(annotation=elt_annotation)
                             for elt_annotation in annotation.__args__
-                        ))
+                        )
+                    )
             else:
                 return AtomType()
         elif isinstance(annotation, Type):

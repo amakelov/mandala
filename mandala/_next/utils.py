@@ -1,10 +1,11 @@
-from common_imports import *
+from .common_imports import *
 import joblib
 import io
 import inspect
 import sqlite3
-from config import *
+from .config import *
 from abc import ABC, abstractmethod
+
 
 def serialize(obj: Any) -> bytes:
     """
@@ -22,6 +23,7 @@ def deserialize(value: bytes) -> Any:
     buffer = io.BytesIO(value)
     return joblib.load(buffer)
 
+
 def get_content_hash(obj: Any) -> str:
     if hasattr(obj, "__get_mandala_dict__"):
         obj = obj.__get_mandala_dict__()
@@ -35,7 +37,7 @@ def get_content_hash(obj: Any) -> str:
             "values": obj.values,
             "index": obj.index,
         }
-    result = joblib.hash(obj) # this hash is canonical wrt python collections
+    result = joblib.hash(obj)  # this hash is canonical wrt python collections
     if result is None:
         raise RuntimeError("joblib.hash returned None")
     return result
@@ -45,37 +47,60 @@ def dump_output_name(index: int, output_names: Optional[List[str]] = None) -> st
     if output_names is not None and index < len(output_names):
         return output_names[index]
     else:
-        return f'output_{index}'
+        return f"output_{index}"
+
 
 def parse_output_name(name: str) -> int:
     return int(name.split("_")[-1])
 
-def get_setdict_union(a: Dict[str, Set[str]], b: Dict[str, Set[str]]) -> Dict[str, Set[str]]:
+
+def get_setdict_union(
+    a: Dict[str, Set[str]], b: Dict[str, Set[str]]
+) -> Dict[str, Set[str]]:
     return {k: a.get(k, set()) | b.get(k, set()) for k in a.keys() | b.keys()}
 
-def get_setdict_intersection(a: Dict[str, Set[str]], b: Dict[str, Set[str]]) -> Dict[str, Set[str]]:
+
+def get_setdict_intersection(
+    a: Dict[str, Set[str]], b: Dict[str, Set[str]]
+) -> Dict[str, Set[str]]:
     return {k: a[k] & b[k] for k in a.keys() & b.keys()}
+
 
 def get_dict_union_over_keys(a: Dict[str, Any], b: Dict[str, Any]) -> Dict[str, Any]:
     return {k: a[k] if k in a else b[k] for k in a.keys() | b.keys()}
 
-def get_dict_intersection_over_keys(a: Dict[str, Any], b: Dict[str, Any]) -> Dict[str, Any]:
+
+def get_dict_intersection_over_keys(
+    a: Dict[str, Any], b: Dict[str, Any]
+) -> Dict[str, Any]:
     return {k: a[k] for k in a.keys() & b.keys()}
 
-def get_adjacency_union(a: Dict[str, Dict[str, Set[str]]], b: Dict[str, Dict[str, Set[str]]]) -> Dict[str, Dict[str, Set[str]]]:
-    return {k: get_setdict_union(a.get(k, {}), b.get(k, {})) for k in a.keys() | b.keys()}
 
-def get_adjacency_intersection(a: Dict[str, Dict[str, Set[str]]], b: Dict[str, Dict[str, Set[str]]]) -> Dict[str, Dict[str, Set[str]]]:
+def get_adjacency_union(
+    a: Dict[str, Dict[str, Set[str]]], b: Dict[str, Dict[str, Set[str]]]
+) -> Dict[str, Dict[str, Set[str]]]:
+    return {
+        k: get_setdict_union(a.get(k, {}), b.get(k, {})) for k in a.keys() | b.keys()
+    }
+
+
+def get_adjacency_intersection(
+    a: Dict[str, Dict[str, Set[str]]], b: Dict[str, Dict[str, Set[str]]]
+) -> Dict[str, Dict[str, Set[str]]]:
     return {k: get_setdict_intersection(a[k], b[k]) for k in a.keys() & b.keys()}
+
 
 def get_nullable_union(*sets: Set[str]) -> Set[str]:
     return set.union(*sets) if len(sets) > 0 else set()
 
+
 def get_nullable_intersection(*sets: Set[str]) -> Set[str]:
     return set.intersection(*sets) if len(sets) > 0 else set()
 
-def get_adj_from_edges(edges: Set[Tuple[str, str, str]], 
-                    node_support: Optional[Set[str]] = None) -> Tuple[Dict[str, Dict[str, Set[str]]], Dict[str, Dict[str, Set[str]]]]:
+
+def get_adj_from_edges(
+    edges: Set[Tuple[str, str, str]], node_support: Optional[Set[str]] = None
+) -> Tuple[Dict[str, Dict[str, Set[str]]], Dict[str, Dict[str, Set[str]]]]:
     """
     Given edges, convert them into the adjacency representation used by the
     `ComputationFrame` class.
@@ -101,7 +126,10 @@ def get_adj_from_edges(edges: Set[Tuple[str, str, str]],
                 inp[node] = {}
     return out, inp
 
-def parse_args(sig: inspect.Signature, args, kwargs, apply_defaults: bool) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+
+def parse_args(
+    sig: inspect.Signature, args, kwargs, apply_defaults: bool
+) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     """
     Return two dicts based on the inputs:
     - {input name: input value}, except var_positional are named as var_positional_0, var_positional_1, ...,
@@ -137,7 +165,10 @@ def parse_args(sig: inspect.Signature, args, kwargs, apply_defaults: bool) -> Tu
             unpacked_annotations[k] = input_annotations[k]
     return unpacked_inputs, unpacked_annotations
 
-def dump_args(sig: inspect.Signature, inputs: Dict[str, Any]) -> Tuple[Tuple[Any, ...], Dict[str, Any]]:
+
+def dump_args(
+    sig: inspect.Signature, inputs: Dict[str, Any]
+) -> Tuple[Tuple[Any, ...], Dict[str, Any]]:
     """
     Convert a dict of inputs to args and kwargs for a function.
     """
@@ -162,15 +193,20 @@ def dump_args(sig: inspect.Signature, inputs: Dict[str, Any]) -> Tuple[Tuple[Any
                     args.append(v)
         return tuple(args), kwargs
 
-def parse_returns(sig: inspect.Signature, returns: Any, nout: Union[Literal["auto", "var"], int], 
-                  output_names: Optional[List[str]] = None) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+
+def parse_returns(
+    sig: inspect.Signature,
+    returns: Any,
+    nout: Union[Literal["auto", "var"], int],
+    output_names: Optional[List[str]] = None,
+) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     """
     Return two dicts based on the returns:
     - {output name: output value}
     - {output name: output type annotation}, where things like `Tuple[T, ...]` are expanded.
     """
-    ### figure out the number of outputs, and convert them to a tuple 
-    if nout == "auto": # infer from the returns
+    ### figure out the number of outputs, and convert them to a tuple
+    if nout == "auto":  # infer from the returns
         if isinstance(returns, tuple):
             nout = len(returns)
             returns_tuple = returns
@@ -181,24 +217,37 @@ def parse_returns(sig: inspect.Signature, returns: Any, nout: Union[Literal["aut
         assert isinstance(returns, tuple)
         nout = len(returns)
         returns_tuple = returns
-    else: # nout is an integer
+    else:  # nout is an integer
         assert isinstance(nout, int)
         assert isinstance(returns, tuple)
         assert len(returns) == nout
         returns_tuple = returns
     ### get the dict of outputs
-    outputs_dict = {dump_output_name(i, output_names): returns_tuple[i] for i in range(nout)}
+    outputs_dict = {
+        dump_output_name(i, output_names): returns_tuple[i] for i in range(nout)
+    }
     ### figure out the annotations
     annotations_dict = {}
     output_annotation = sig.return_annotation
-    if output_annotation is inspect._empty: # no annotation
+    if output_annotation is inspect._empty:  # no annotation
         annotations_dict = {k: Any for k in outputs_dict.keys()}
     else:
-        if hasattr(output_annotation, "__origin__") and output_annotation.__origin__ is tuple:
-            if len(output_annotation.__args__) == 2 and output_annotation.__args__[1] == Ellipsis:
-                annotations_dict = {k: output_annotation.__args__[0] for k in outputs_dict.keys()}
+        if (
+            hasattr(output_annotation, "__origin__")
+            and output_annotation.__origin__ is tuple
+        ):
+            if (
+                len(output_annotation.__args__) == 2
+                and output_annotation.__args__[1] == Ellipsis
+            ):
+                annotations_dict = {
+                    k: output_annotation.__args__[0] for k in outputs_dict.keys()
+                }
             else:
-                annotations_dict = {k: output_annotation.__args__[i] for i, k in enumerate(outputs_dict.keys())}
+                annotations_dict = {
+                    k: output_annotation.__args__[i]
+                    for i, k in enumerate(outputs_dict.keys())
+                }
         else:
             assert nout == 1
             annotations_dict = {k: output_annotation for k in outputs_dict.keys()}

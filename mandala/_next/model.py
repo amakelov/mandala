@@ -1,27 +1,36 @@
 import textwrap
+import functools
 from collections import deque
-from common_imports import *
-from mandala.common_imports import sess
+from .common_imports import *
+from .common_imports import sess
 from typing import Literal
-from tps import *
-from config import *
-from utils import parse_args, dump_args, parse_output_name, dump_output_name, parse_returns
-from utils import serialize, deserialize, get_content_hash
+from .tps import *
+from .config import *
+from .utils import (
+    parse_args,
+    dump_args,
+    parse_output_name,
+    dump_output_name,
+    parse_returns,
+)
+from .utils import serialize, deserialize, get_content_hash
 
 ################################################################################
 ### model
 ################################################################################
 
+
 class Ref:
     """
     Base class, should not be instantiated directly.
     """
+
     def __init__(self, cid: str, hid: str, in_memory: bool, obj: Optional[Any]) -> None:
         self.cid = cid
         self.hid = hid
         self.obj = obj
         self.in_memory = in_memory
-    
+
     def with_hid(self, hid: str) -> "Ref":
         return type(self)(cid=self.cid, hid=hid, in_memory=self.in_memory, obj=self.obj)
 
@@ -30,18 +39,20 @@ class Ref:
             return f"Ref({self.obj}, hid={self.hid[:3]}...)"
         else:
             return f"Ref(hid={self.hid[:3]}..., in_memory={self.in_memory})"
-    
+
     def __hash__(self) -> int:
         return hash(self.hid)
-    
+
     def detached(self) -> "Ref":
         return type(self)(cid=self.cid, hid=self.hid, in_memory=False, obj=None)
-    
+
     def attached(self, obj: Any) -> "Ref":
         return type(self)(cid=self.cid, hid=self.hid, in_memory=True, obj=obj)
-    
+
     def shallow_copy(self) -> "Ref":
-        return type(self)(cid=self.cid, hid=self.hid, in_memory=self.in_memory, obj=self.obj)
+        return type(self)(
+            cid=self.cid, hid=self.hid, in_memory=self.in_memory, obj=self.obj
+        )
 
 
 class AtomRef(Ref):
@@ -50,66 +61,85 @@ class AtomRef(Ref):
 
 
 class Op:
-    def __init__(self, name: str, f: Callable, 
-                 nout: Union[Literal['var', 'auto'], int] = 'auto',
-                 output_names: Optional[List[str]] = None,
-                 skip_inputs: Optional[List[str]] = None,
-                 skip_outputs: Optional[List[str]] = None,
-                 version: Optional[int] = 0,
-                 __structural__: bool = False,
-                 ) -> None:
+    def __init__(
+        self,
+        name: str,
+        f: Callable,
+        nout: Union[Literal["var", "auto"], int] = "auto",
+        output_names: Optional[List[str]] = None,
+        skip_inputs: Optional[List[str]] = None,
+        skip_outputs: Optional[List[str]] = None,
+        version: Optional[int] = 0,
+        __structural__: bool = False,
+    ) -> None:
         self.name = name
         self.nout = nout
         self.version = version
         self.output_names = output_names
         self.__structural__ = __structural__
         self.f = f
-    
+
     def __repr__(self) -> str:
         return f"Op({self.name}, nout={self.nout}, output_names={self.output_names}, version={self.version})"
-    
+
     @property
     def id(self) -> str:
         return self.name
-    
+
     def get_call_history_id(self, inputs: Dict[str, Ref]) -> str:
-        return get_content_hash((
-            {k: v.hid for k, v in inputs.items()},
-            self.name,
-            self.version
-        ))
-    
+        return get_content_hash(
+            ({k: v.hid for k, v in inputs.items()}, self.name, self.version)
+        )
+
     def get_call_content_id(self, inputs: Dict[str, Ref]) -> str:
-        return get_content_hash((
-            {k: v.cid for k, v in inputs.items()},
-            self.name,
-            self.version
-        ))
-    
-    def get_output_history_ids(self, call_history_id: str, output_names: List[str]) -> Dict[str, str]:
+        return get_content_hash(
+            ({k: v.cid for k, v in inputs.items()}, self.name, self.version)
+        )
+
+    def get_output_history_ids(
+        self, call_history_id: str, output_names: List[str]
+    ) -> Dict[str, str]:
         return {k: get_content_hash((call_history_id, k)) for k in output_names}
-    
+
     def get_ordered_outputs(self, output_dict: Dict[str, Any]) -> Tuple[Any, ...]:
-        if self.output_names is None: # output names must be generic output_0, output_1, etc.
-            output_dict_by_int = {parse_output_name(name): value for name, value in output_dict.items()}
+        if (
+            self.output_names is None
+        ):  # output names must be generic output_0, output_1, etc.
+            output_dict_by_int = {
+                parse_output_name(name): value for name, value in output_dict.items()
+            }
             return tuple([output_dict_by_int[i] for i in range(len(output_dict))])
-        else: # we use the order of the keys in self.output_names
+        else:  # we use the order of the keys in self.output_names
             return tuple([output_dict[k] for k in self.output_names])
-    
+
     def detached(self) -> "Op":
-        return Op(name=self.name, f=None, nout=self.nout, output_names=self.output_names, version=self.version, __structural__=self.__structural__)
+        return Op(
+            name=self.name,
+            f=None,
+            nout=self.nout,
+            output_names=self.output_names,
+            version=self.version,
+            __structural__=self.__structural__,
+        )
 
     def __call__(self, *args, **kwargs) -> Union[Tuple[Ref, ...], Ref]:
-        if Context.current_context is None: # act as noop
+        if Context.current_context is None:  # act as noop
+            print(args, kwargs)
             return self.f(*args, **kwargs)
         else:
             storage = Context.current_context.storage
-            return storage.call(self, *args, __config__={"save_calls": True}, **kwargs)
-    
+            return storage.call(self, args, kwargs, __config__={"save_calls": True})
 
 
 class Call:
-    def __init__(self, op: Op, cid: str, hid: str, inputs: Dict[str, Ref], outputs: Dict[str, Ref]) -> None:
+    def __init__(
+        self,
+        op: Op,
+        cid: str,
+        hid: str,
+        inputs: Dict[str, Ref],
+        outputs: Dict[str, Ref],
+    ) -> None:
         self.op = op
         self.cid = cid
         self.hid = hid
@@ -118,13 +148,15 @@ class Call:
 
     def __repr__(self) -> str:
         return f"Call({self.op.name}, cid={self.hid[:3]}..., hid={self.hid[:3]}...)"
-    
+
     def detached(self) -> "Call":
-        return Call(op=self.op,
-                    cid=self.cid,
-                    hid=self.hid,
-                    inputs={k: v.detached() for k, v in self.inputs.items()},
-                    outputs={k: v.detached() for k, v in self.outputs.items()})
+        return Call(
+            op=self.op,
+            cid=self.cid,
+            hid=self.hid,
+            inputs={k: v.detached() for k, v in self.inputs.items()},
+            outputs={k: v.detached() for k, v in self.outputs.items()},
+        )
 
 
 def wrap_atom(obj: Any, history_id: Optional[str] = None) -> AtomRef:
@@ -139,22 +171,24 @@ def wrap_atom(obj: Any, history_id: Optional[str] = None) -> AtomRef:
 
 ### native support for some collections
 class ListRef(Ref):
-
     def __len__(self) -> int:
         return len(self.obj)
-    
+
     def __getitem__(self, i: int) -> Ref:
         assert self.in_memory
         return self.obj[i]
-    
+
     def __repr__(self) -> str:
         return "List" + super().__repr__()
-    
+
     def shape(self) -> "ListRef":
-        return ListRef(cid=self.cid, hid=self.hid, in_memory=True,
-                       obj=[elt.detached() for elt in self.obj])
-    
-    
+        return ListRef(
+            cid=self.cid,
+            hid=self.hid,
+            in_memory=True,
+            obj=[elt.detached() for elt in self.obj],
+        )
+
 
 class DictRef(Ref):
     pass
@@ -165,16 +199,15 @@ class TupleRef(Ref):
 
 
 class SetRef(Ref):
-    
     def __repr__(self) -> str:
         return "Set" + super().__repr__()
-    
+
     def __len__(self) -> int:
         return len(self.obj)
-    
+
     def __iter__(self):
         return iter(self.obj)
-    
+
     def __contains__(self, elt: Ref) -> bool:
         return elt in self.obj
 
@@ -193,9 +226,16 @@ def recurse_on_ref_collections(f: Callable, obj: Any, **kwargs: Any) -> Any:
     else:
         return obj
 
+
 def __make_list__(**kwargs: Any) -> MList[Any]:
     elts = [kwargs[f"elts_{i}"] for i in range(len(kwargs))]
-    return ListRef(cid=get_content_hash([elt.cid for elt in elts]), hid=get_content_hash([elt.hid for elt in elts]), in_memory=True, obj=elts)
+    return ListRef(
+        cid=get_content_hash([elt.cid for elt in elts]),
+        hid=get_content_hash([elt.hid for elt in elts]),
+        in_memory=True,
+        obj=elts,
+    )
+
 
 def __make_set__(**kwargs: Any) -> MSet[Any]:
     elts = [kwargs[f"elts_{i}"] for i in range(len(kwargs))]
@@ -203,22 +243,25 @@ def __make_set__(**kwargs: Any) -> MSet[Any]:
         cid=get_content_hash(sorted([elt.cid for elt in elts])),
         hid=get_content_hash(sorted([elt.hid for elt in elts])),
         in_memory=True,
-        obj=set(elts)
+        obj=set(elts),
     )
 
+
 def __make_dict__(**items: Any) -> dict:
-    keys = [items[f'key_{i}'] for i in range(len(items))]
-    values = [items[f'value_{i}'] for i in range(len(items))]
+    keys = [items[f"key_{i}"] for i in range(len(items))]
+    values = [items[f"value_{i}"] for i in range(len(items))]
     obj = {k: v for k, v in zip(keys, values)}
     return DictRef(
         cid=get_content_hash(sorted([(k.cid, v.cid) for k, v in obj.items()])),
         hid=get_content_hash(sorted([(k.hid, v.hid) for k, v in obj.items()])),
         in_memory=True,
-        obj=obj
+        obj=obj,
     )
+
 
 def __make_tuple__(*elts: Any) -> tuple:
     return tuple(elts)
+
 
 def __get_item__(obj: MList[Any], attr: Any) -> Any:
     return obj[attr.obj]
@@ -235,6 +278,69 @@ def make_ref_set(resf: Iterable[Ref]) -> SetRef:
     return __make_set__.f(**{f"elts_{i}": elt for i, elt in enumerate(resf)})
 
 
+################################################################################
+### interfaces
+################################################################################
+def op(
+    output_names: Union[Optional[List[str]], Callable] = None,
+    nout: Union[Literal["var", "auto"], int] = "auto",
+    skip_inputs: Optional[List[str]] = None,
+    skip_outputs: Optional[List[str]] = None,
+    __structural__: bool = False,
+):
+    def decorator(f: Callable) -> Op:
+        return Op(
+            f.__name__,
+            f,
+            output_names=None,
+            nout=nout,
+            __structural__=__structural__,
+            skip_inputs=skip_inputs,
+            skip_outputs=skip_outputs,
+        )
+
+    if callable(output_names):
+        return decorator(output_names)
+    else:
+        return decorator
 
 
-from ui import Context
+# class OpDecorator:
+#     def __init__(self, output_names: Optional[List[str]] = None,
+#                  nout: Union[Literal['var', 'auto'], int] = 'auto',
+#                  skip_inputs: Optional[List[str]] = None,
+#                  skip_outputs: Optional[List[str]] = None,
+#                  __structural__: bool = False
+#                  ) -> None:
+#         self.output_names = output_names
+#         self.skip_inputs = skip_inputs
+#         self.skip_outputs = skip_outputs
+#         self.nout = nout
+#         self.__structural__ = __structural__
+#
+#     def __call__(self, f: Callable) -> 'f':
+#         return Op(f.__name__, f, output_names=self.output_names, nout=self.nout, __structural__=self.__structural__, skip_inputs=self.skip_inputs, skip_outputs=self.skip_outputs)
+#         # @wraps(f)
+#         # def wrapper(*args, **kwargs):
+#         #     return Op(f, output_names=self.output_names, nout=self.nout, __structural__=self.__structural__)(*args, **kwargs)
+#         # return wrapper
+#
+# op = OpDecorator
+
+
+class Context:
+
+    current_context: Optional["Context"] = None
+
+    def __init__(self, storage: "Storage") -> None:
+        self.storage = storage
+
+    def __enter__(self) -> "Storage":
+        Context.current_context = self
+        return self.storage
+
+    def __exit__(self, exc_type, exc_value, traceback) -> None:
+        Context.current_context = None
+
+
+# from .storage import Storage
