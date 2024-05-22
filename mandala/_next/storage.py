@@ -204,19 +204,28 @@ class Storage:
     def drop_calls(self, hids: Iterable[str], delete_dependents: bool):
         """
         Remove the calls with the given HIDs (and optionally their dependents)
-        from the storage and the cache.
+        from the storage *and* the cache. 
+
+        Removing from the cache is necessary to ensure that future lookups don't
+        hit a false positive.
         """
+        hids = set(hids)
         if delete_dependents:
             _, dependent_call_hids = self.call_storage.get_dependents(
                 ref_hids=set(), call_hids=hids
             )
             hids |= dependent_call_hids
-        logger.info(f"Dropping {len(hids)} calls.")
+        num_dropped_cache = 0
+        num_dropped_persistent = 0
         for hid in hids:
             if self.call_cache.exists(hid):
                 self.call_cache.drop(hid)
+                num_dropped_cache += 1
         for hid in hids:
-            self.call_storage.drop(hid)
+            if self.call_storage.exists(hid):
+                self.call_storage.drop(hid)
+                num_dropped_persistent += 1
+        logger.info(f"Dropped {num_dropped_persistent} calls (and {num_dropped_cache} from cache).")
 
     ############################################################################
     ### provenance queries
@@ -418,12 +427,12 @@ class Storage:
         ### check for the call
         call_hid = op.get_call_history_id(wrapped_inputs)
         if self.exists_call(hid=call_hid):
-            if not op.__structural__: logger.debug(f"Call with hid {call_hid} already exists.")
+            if not op.__structural__: logger.debug(f"Call to {op.name} with hid {call_hid} already exists.")
             main_call = self.get_call(hid=call_hid, lazy=True)
             return main_call.outputs, main_call, input_calls
 
         ### execute the call if it doesn't exist
-        if not op.__structural__: logger.debug(f"Call does not exist; executing.")
+        if not op.__structural__: logger.debug(f"Call to {op.name} with hid {call_hid} does not exist; executing.")
         # call the function
         f, sig = op.f, inspect.signature(op.f)
         if op.__structural__:

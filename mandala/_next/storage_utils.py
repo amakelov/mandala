@@ -186,7 +186,7 @@ class CachedDictStorage(DictStorage):
     def drop(self, key: str) -> None:
         if key in self.cache:
             del self.cache[key]
-        self.dirty_keys.add(key)
+        self.dirty_keys.remove(key) # when we `drop`, we forget this key ever existed
         self.persistent.drop(key)
 
     def exists(self, key: str) -> bool:
@@ -530,7 +530,7 @@ class CachedCallStorage:
 
     def drop(self, hid: str):
         self.cache.drop(hid)
-        self.dirty_hids.add(hid)
+        self.dirty_hids.remove(hid) # when we `drop`, we forget this key ever existed
 
     def exists(self, call_history_id: str) -> bool:
         if self.cache.exists(call_history_id):
