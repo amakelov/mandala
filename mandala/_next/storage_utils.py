@@ -234,9 +234,15 @@ class InMemCallStorage:
             )
 
     def drop(self, hid: str):
+        """
+        Remove all rows referencing the call with the given history_id.
+        """
         if hid not in self.df.index.levels[0]:
             raise ValueError(f"Call with history_id {hid} does not exist")
-        self.df.drop(index=hid, level=0, inplace=True)
+        # self.df.drop(index=hid, level=0, inplace=True)
+        self.df = self.df.drop(index=hid, level=0)
+        #! this step is crucial, because otherwise the old `hid` remains in the index
+        self.df.index = self.df.index.remove_unused_levels()
 
     def exists(self, call_history_id: str) -> bool:
         return call_history_id in self.df.index.levels[0]

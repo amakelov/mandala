@@ -37,13 +37,37 @@ class Storage:
     def conn(self) -> sqlite3.Connection:
         return self.db.conn()
 
-    ###
+    def vacuum(self):
+        with self.conn() as conn:
+            conn.execute("VACUUM")
+
+    ############################################################################
+    ### managing the caches
+    ############################################################################
     def cache_info(self) -> str:
+        """
+        Display information about the contents of the cache in a pretty table.
+
+        TODO: make a verbose version w/ a breakdown by op, and some data on
+        memory usage.
+        """
         df = pd.DataFrame({
             'present': [len(self.atoms.cache), len(self.shapes.cache), len(self.ops.cache), len(self.calls.cache)],
             'dirty': [len(self.atoms.dirty_keys), len(self.shapes.dirty_keys), len(self.ops.dirty_keys), len(self.calls.dirty_hids)]
         }, index=['atoms', 'shapes', 'ops', 'calls']).reset_index().rename(columns={'index': 'cache'})
         print(dataframe_to_prettytable(df))
+
+    def preload_calls(self):
+        df = self.call_storage.get_df()
+        self.call_cache.df = df
+
+    def commit(self):
+        with self.conn() as conn:
+            self.atoms.commit(conn=conn)
+            self.shapes.commit(conn=conn)
+            self.ops.commit(conn=conn)
+            self.calls.commit(conn=conn)
+
 
     def __repr__(self):
         # summarize cache sizes
@@ -56,10 +80,6 @@ class Storage:
         return f"Storage(db_path={self.db_path}), cache contents:\n" + "\n".join(
             [f"  {k}: {v}" for k, v in cache_sizes.items()]
         )
-
-    def vacuum(self):
-        with self.conn() as conn:
-            conn.execute("VACUUM")
 
     def in_context(self) -> bool:
         return Context.current_context is not None
@@ -182,6 +202,10 @@ class Storage:
         )
 
     def drop_calls(self, hids: Iterable[str], delete_dependents: bool):
+        """
+        Remove the calls with the given HIDs (and optionally their dependents)
+        from the storage and the cache.
+        """
         if delete_dependents:
             _, dependent_call_hids = self.call_storage.get_dependents(
                 ref_hids=set(), call_hids=hids
@@ -193,20 +217,6 @@ class Storage:
                 self.call_cache.drop(hid)
         for hid in hids:
             self.call_storage.drop(hid)
-
-    ############################################################################
-    ### managing the caches
-    ############################################################################
-    def preload_calls(self):
-        df = self.call_storage.get_df()
-        self.call_cache.df = df
-
-    def commit(self):
-        with self.conn() as conn:
-            self.atoms.commit(conn=conn)
-            self.shapes.commit(conn=conn)
-            self.ops.commit(conn=conn)
-            self.calls.commit(conn=conn)
 
     ############################################################################
     ### provenance queries
@@ -397,23 +407,23 @@ class Storage:
         internally by the storage.
         """
         ### wrap the inputs
-        logger.debug(f"Calling {op.name} with input {list(inputs.keys())}.")
+        if not op.__structural__: logger.debug(f"Calling {op.name} with input {list(inputs.keys())}.")
         wrapped_inputs = {}
         input_calls = []
         for k, v in inputs.items():
             wrapped_inputs[k], struct_calls = self.construct(tp=input_tps[k], val=v)
             input_calls.extend(struct_calls)
         if len(input_calls) > 0:
-            logger.debug(f"Collected {len(input_calls)} calls for inputs.")
+            if not op.__structural__: logger.debug(f"Collected {len(input_calls)} calls for inputs.")
         ### check for the call
-        call_history_id = op.get_call_history_id(wrapped_inputs)
-        if self.exists_call(hid=call_history_id):
-            logger.debug(f"Call already exists.")
-            main_call = self.get_call(hid=call_history_id, lazy=True)
+        call_hid = op.get_call_history_id(wrapped_inputs)
+        if self.exists_call(hid=call_hid):
+            if not op.__structural__: logger.debug(f"Call with hid {call_hid} already exists.")
+            main_call = self.get_call(hid=call_hid, lazy=True)
             return main_call.outputs, main_call, input_calls
 
         ### execute the call if it doesn't exist
-        logger.debug(f"Call does not exist; executing.")
+        if not op.__structural__: logger.debug(f"Call does not exist; executing.")
         # call the function
         f, sig = op.f, inspect.signature(op.f)
         if op.__structural__:
@@ -450,9 +460,9 @@ class Storage:
             for k, v in outputs_annotations.items()
         }
         call_content_id = op.get_call_content_id(wrapped_inputs)
-        call_history_id = op.get_call_history_id(wrapped_inputs)
+        call_hid = op.get_call_history_id(wrapped_inputs)
         output_history_ids = op.get_output_history_ids(
-            call_history_id=call_history_id, output_names=list(outputs_dict.keys())
+            call_history_id=call_hid, output_names=list(outputs_dict.keys())
         )
 
         wrapped_outputs = {}
@@ -471,7 +481,7 @@ class Storage:
         main_call = Call(
             op=op,
             cid=call_content_id,
-            hid=call_history_id,
+            hid=call_hid,
             inputs=wrapped_inputs,
             outputs=wrapped_outputs,
         )
