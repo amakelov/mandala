@@ -14,7 +14,7 @@ class MList(List[T], Generic[T]):
         return "Type annotation for `mandala` lists"
 
 
-class MDict(Dict[Hashable, T], Generic[T]):
+class MDict(Dict[str, T], Generic[T]):
     def identify(self):
         return "Type annotation for `mandala` dictionaries"
 
@@ -98,12 +98,12 @@ class DictType(Type):
     struct_id = "__dict__"
     model = dict
 
-    def __init__(self, key: Type, val: Type):
+    def __init__(self, val: Type, key: Type = None):
         self.key = key
         self.val = val
 
     def __repr__(self):
-        return f"DictType(key_type={self.key}, val_type={self.val})"
+        return f"DictType(val_type={self.val})"
 
 
 class SetType(Type):

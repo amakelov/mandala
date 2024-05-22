@@ -168,7 +168,9 @@ def wrap_atom(obj: Any, history_id: Optional[str] = None) -> AtomRef:
     return AtomRef(cid=uid, hid=history_id, in_memory=True, obj=obj)
 
 
-### native support for some collections
+################################################################################
+### native support for some kinds of collections
+################################################################################
 class ListRef(Ref):
     def __len__(self) -> int:
         return len(self.obj)
@@ -190,17 +192,21 @@ class ListRef(Ref):
 
 
 class DictRef(Ref):
+    """
+    For now, we only support dictionaries where keys are strings. It's possible
+    to extend keys to be `Ref` objects.
+    """
     def __len__(self) -> int:
         return len(self.obj)
     
-    def __getitem__(self, key: Ref) -> Ref:
+    def __getitem__(self, key: str) -> Ref:
         assert self.in_memory
-        return self.obj[key]
+        return self.obj[key.obj]
     
     def __repr__(self) -> str:
         return "Dict" + super().__repr__()
     
-    def items(self) -> Iterable[Tuple[Ref, Ref]]:
+    def items(self) -> Iterable[Tuple[str, Ref]]:
         return self.obj.items()
     
     def shape(self) -> "DictRef":
@@ -208,7 +214,7 @@ class DictRef(Ref):
             cid=self.cid,
             hid=self.hid,
             in_memory=True,
-            obj={k.detached(): v.detached() for k, v in self.obj.items()},
+            obj={k: v.detached() for k, v in self.obj.items()},
         )
         
 
@@ -254,16 +260,12 @@ def __make_list__(**kwargs: Any) -> MList[Any]:
         obj=elts,
     )
 
-def __make_dict__(**keys_and_values: Any) -> dict:
-    num_elts = len(keys_and_values) // 2
-    keys = [keys_and_values[f"key_{i}"] for i in range(num_elts)]
-    values = [keys_and_values[f"value_{i}"] for i in range(num_elts)]
-    obj = {k: v for k, v in zip(keys, values)}
+def __make_dict__(**kwargs: Any) -> dict:
     return DictRef(
-        cid=get_content_hash(sorted([(k.cid, v.cid) for k, v in obj.items()])),
-        hid=get_content_hash(sorted([(k.hid, v.hid) for k, v in obj.items()])),
+        cid=get_content_hash(sorted([(k, v.cid) for k, v in kwargs.items()])),
+        hid=get_content_hash(sorted([(k, v.hid) for k, v in kwargs.items()])),
         in_memory=True,
-        obj=obj,
+        obj=kwargs,
     )
 
 

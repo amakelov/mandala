@@ -88,7 +88,7 @@ class Storage:
             self.shapes[ref.hid] = ref.shape()
             for k, v in ref.items():
                 self.save_ref(v)
-                self.save_ref(k)
+                # self.save_ref(k)
         else:
             raise NotImplementedError
 
@@ -107,7 +107,7 @@ class Storage:
         elif isinstance(shape, DictRef):
             obj = {}
             for k, v in shape.items():
-                obj[self.load_ref(k.hid, lazy=lazy)] = self.load_ref(v.hid, lazy=lazy)
+                obj[k] = self.load_ref(v.hid, lazy=lazy)
             return shape.attached(obj=obj)
         else:
             raise NotImplementedError
@@ -285,12 +285,14 @@ class Storage:
         if isinstance(tp, ListType):
             return {f"elts_{i}": elt for i, elt in enumerate(val)}
         elif isinstance(tp, DictType):
-            # the keys must be sortable uniquely
-            sorted_keys = sorted(val.keys())
-            res = {}
-            for i, k in enumerate(sorted_keys):
-                res[f'key_{i}'] = k
-                res[f'value_{i}'] = val[k]
+            # the keys must be strings
+            assert all(isinstance(k, str) for k in val.keys())
+            res = val
+            # sorted_keys = sorted(val.keys())
+            # res = {}
+            # for i, k in enumerate(sorted_keys):
+            #     res[f'key_{i}'] = k
+            #     res[f'value_{i}'] = val[k]
             return res
         else:
             raise NotImplementedError
@@ -298,21 +300,24 @@ class Storage:
     def get_struct_tps(
         self, tp: Type, struct_inputs: Dict[str, Any]
     ) -> Dict[str, Type]:
-        # given the inputs to a struct builder, return the annotations
-        # that would be passed to the struct builder
+        """
+        Given the inputs to a struct builder, return the annotations that would
+        be passed to the struct builder.
+        """
         if isinstance(tp, ListType):
             return {f"elts_{i}": tp.elt for i in range(len(struct_inputs))}
         elif isinstance(tp, DictType):
             result = {}
             for input_name in struct_inputs.keys():
-                if input_name.startswith("key_"):
-                    i = int(input_name.split("_")[-1])
-                    result[f"key_{i}"] = tp.key
-                elif input_name.startswith("value_"):
-                    i = int(input_name.split("_")[-1])
-                    result[f"value_{i}"] = tp.val
-                else:
-                    raise ValueError(f"Invalid input name {input_name}")
+                result[input_name] = tp.val
+                # if input_name.startswith("key_"):
+                #     i = int(input_name.split("_")[-1])
+                #     result[f"key_{i}"] = tp.key
+                # elif input_name.startswith("value_"):
+                #     i = int(input_name.split("_")[-1])
+                #     result[f"value_{i}"] = tp.val
+                # else:
+                #     raise ValueError(f"Invalid input name {input_name}")
             return result
         else:
             raise NotImplementedError
