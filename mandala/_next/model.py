@@ -313,8 +313,8 @@ def op(
     skip_outputs: Optional[List[str]] = None,
     __structural__: bool = False,
 ):
-    def decorator(f: Callable) -> Op:
-        return Op(
+    def decorator(f: Callable) -> 'f': # some IDE magic to make it recognize that @op(f) has the same type as f
+        res = Op(
             f.__name__,
             f,
             output_names=None,
@@ -323,6 +323,7 @@ def op(
             skip_inputs=skip_inputs,
             skip_outputs=skip_outputs,
         )
+        return functools.wraps(f)(res) # more magic 
 
     if callable(output_names):
         return decorator(output_names)
