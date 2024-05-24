@@ -1,4 +1,5 @@
 from .common_imports import *
+from tqdm import tqdm
 import prettytable
 import datetime
 from .model import *
@@ -60,6 +61,22 @@ class Storage:
     def preload_calls(self):
         df = self.call_storage.get_df()
         self.call_cache.df = df
+    
+    def preload_shapes(self):
+        self.shapes.cache = self.shapes.persistent.load_all()
+    
+    def preload_ops(self):
+        self.ops.cache = self.ops.persistent.load_all()
+
+    def preload_atoms(self):
+        self.atoms.cache = self.atoms.persistent.load_all()
+    
+    def preload(self, lazy: bool = True):
+        self.preload_calls()
+        self.preload_shapes()
+        self.preload_ops()
+        if not lazy:
+            self.preload_atoms()
 
     def commit(self):
         with self.conn() as conn:
@@ -179,27 +196,73 @@ class Storage:
         for k, v in itertools.chain(call.inputs.items(), call.outputs.items()):
             self.save_ref(v)
         self.calls.save(call)
+    
+    def mget_call(self, hids: List[str], lazy: bool) -> List[Call]:
+
+        def split_list(lst: List[Any], mask: List[bool]) -> Tuple[List[Any], List[Any]]:
+            return [x for x, m in zip(lst, mask) if m], [x for x, m in zip(lst, mask) if not m]
+        
+        def merge_lists(list_true: List[Any], list_false: List[Any], mask: List[bool]) -> List[Any]:
+            res = []
+            i, j = 0, 0
+            for m in mask:
+                if m:
+                    res.append(list_true[i])
+                    i += 1
+                else:
+                    res.append(list_false[j])
+                    j += 1
+            return res
+
+        mask = [self.call_cache.exists(hid) for hid in hids]
+        cache_part, db_part = split_list(hids, mask)
+        # cache_datas = [self.call_cache.get_data(hid) for hid in tqdm(cache_part)]
+        cache_datas = self.call_cache.mget_data(call_hids=cache_part)
+        db_datas = self.call_storage.mget_data(call_hids=db_part)
+        sess.d()
+        call_datas = merge_lists(cache_datas, db_datas, mask)
+
+        calls = []
+        for call_data in call_datas:
+            op_name = call_data["op_name"]
+            call = Call(
+                op=self.ops[op_name],
+                cid=call_data["cid"],
+                hid=call_data["hid"],
+                inputs={
+                    k: self.load_ref(v, lazy=lazy)
+                    for k, v in call_data["input_hids"].items()
+                },
+                outputs={
+                    k: self.load_ref(v, lazy=lazy)
+                    for k, v in call_data["output_hids"].items()
+                },
+            )
+            calls.append(call)
+        return calls
+
 
     def get_call(self, hid: str, lazy: bool) -> Call:
-        if self.call_cache.exists(hid):
-            call_data = self.call_cache.get_data(hid)
-        else:
-            with self.call_storage.conn() as conn:
-                call_data = self.call_storage.get_data(hid, conn=conn)
-        op_name = call_data["op_name"]
-        return Call(
-            op=self.ops[op_name],
-            cid=call_data["cid"],
-            hid=call_data["hid"],
-            inputs={
-                k: self.load_ref(v, lazy=lazy)
-                for k, v in call_data["input_hids"].items()
-            },
-            outputs={
-                k: self.load_ref(v, lazy=lazy)
-                for k, v in call_data["output_hids"].items()
-            },
-        )
+        return self.mget_call([hid], lazy=lazy)[0]
+        # if self.call_cache.exists(hid):
+        #     call_data = self.call_cache.get_data(hid)
+        # else:
+        #     with self.call_storage.conn() as conn:
+        #         call_data = self.call_storage.get_data(hid, conn=conn)
+        # op_name = call_data["op_name"]
+        # return Call(
+        #     op=self.ops[op_name],
+        #     cid=call_data["cid"],
+        #     hid=call_data["hid"],
+        #     inputs={
+        #         k: self.load_ref(v, lazy=lazy)
+        #         for k, v in call_data["input_hids"].items()
+        #     },
+        #     outputs={
+        #         k: self.load_ref(v, lazy=lazy)
+        #         for k, v in call_data["output_hids"].items()
+        #     },
+        # )
 
     def drop_calls(self, hids: Iterable[str], delete_dependents: bool):
         """

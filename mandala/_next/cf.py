@@ -1469,11 +1469,12 @@ class ComputationFrame:
         call_hids = storage.call_storage.execute_df(
             f'SELECT call_history_id FROM calls WHERE op="{f.name}"'
         )["call_history_id"].values.tolist()
-        calls = {
-            call_hid: storage.get_call(call_hid, lazy=True) for call_hid in call_hids
-        }
-        input_names = set([k for call in calls.values() for k in call.inputs.keys()])
-        output_names = set([k for call in calls.values() for k in call.outputs.keys()])
+        calls = storage.mget_call(hids=call_hids, lazy=True)
+        # calls = {
+        #     call_hid: storage.get_call(call_hid, lazy=True) for call_hid in call_hids
+        # }
+        input_names = set([k for call in calls for k in call.inputs.keys()])
+        output_names = set([k for call in calls for k in call.outputs.keys()])
         res = ComputationFrame(
             refs={},
             calls={},
@@ -1496,7 +1497,7 @@ class ComputationFrame:
             output_label = get_name_proj(op=f)(output_name)
             output_var = res.add_var(vname=res.get_new_vname(output_label))
             res.add_edge(f.name, output_var, output_label)
-        for call in calls.values():
+        for call in calls:
             res.add_call(f.name, call, with_refs=True)
         return res
 

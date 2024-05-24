@@ -85,6 +85,10 @@ class DictStorage(ABC):
         pass
 
     @abstractmethod
+    def load_all(self) -> Dict[str, Any]:
+        pass
+
+    @abstractmethod
     def exists(self, key: str) -> bool:
         pass
 
@@ -112,6 +116,11 @@ class SQLiteDictStorage(DictStorage):
     
     def conn(self) -> sqlite3.Connection:
         return self.db.conn()
+    
+    def load_all(self) -> Dict[str, Any]:
+        with self.conn() as conn:
+            cursor = conn.execute(f"SELECT key, value FROM {self.table}")
+            return {row[0]: deserialize(row[1]) for row in cursor.fetchall()}
 
     @transaction
     def get(self, key: str, conn: Optional[sqlite3.Connection] = None) -> Any:
@@ -158,6 +167,9 @@ class CachedDictStorage(DictStorage):
         self.persistent = persistent
         self.cache: Dict[str, Any] = {}
         self.dirty_keys: Set[str] = set()
+    
+    def load_all(self) -> Dict[str, Any]:
+        return self.persistent.load_all()
     
     def __len__(self) -> int:
         return len(self.cache)
@@ -247,6 +259,35 @@ class InMemCallStorage:
 
     def exists(self, call_history_id: str) -> bool:
         return call_history_id in self.df.index.levels[0]
+    
+    def mget_data(self, call_hids: List[str]) -> List[Dict[str, Any]]:
+        idx = pd.IndexSlice
+        filtered_df = self.df.loc[idx[call_hids, :], :]
+        grouped = filtered_df.groupby(level=0)
+        groups = {key: value for key, value in grouped}
+        res_dict = {}
+        for hid, group_df in groups.items():
+            rows = group_df.reset_index().to_dict(orient="records")
+            input_hids, output_hids = {}, {}
+            input_cids, output_cids = {}, {}
+            for row in rows:
+                if row["direction"] == "in":
+                    input_hids[row["name"]] = row["ref_history_id"]
+                    input_cids[row["name"]] = row["ref_content_id"]
+                else:
+                    output_hids[row["name"]] = row["ref_history_id"]
+                    output_cids[row["name"]] = row["ref_content_id"]
+            op_name = rows[0]["op"]
+            res_dict[hid] = {
+                "op_name": op_name,
+                "cid": rows[0]["call_content_id"],
+                "hid": hid,
+                "input_hids": input_hids,
+                "output_hids": output_hids,
+                "input_cids": input_cids,
+                "output_cids": output_cids,
+            }
+        return [res_dict[hid] for hid in call_hids]
 
     def get_data(self, call_history_id: str) -> Dict[str, Any]:
         """
@@ -254,27 +295,28 @@ class InMemCallStorage:
         """
         if not self.exists(call_history_id):
             raise ValueError(f"Call with history_id {call_history_id} does not exist")
-        rows = self.df.loc[call_history_id].reset_index().to_dict(orient="records")
-        input_hids, output_hids = {}, {}
-        input_cids, output_cids = {}, {}
-        for row in rows:
-            if row["direction"] == "in":
-                input_hids[row["name"]] = row["ref_history_id"]
-                input_cids[row["name"]] = row["ref_content_id"]
-            else:
-                output_hids[row["name"]] = row["ref_history_id"]
-                output_cids[row["name"]] = row["ref_content_id"]
-        # return Call(op=op, cid=rows[0]["call_content_id"], hid=call_history_id, inputs=inputs, outputs=outputs)
-        op_name = rows[0]["op"]
-        return {
-            "op_name": op_name,
-            "cid": rows[0]["call_content_id"],
-            "hid": call_history_id,
-            "input_hids": input_hids,
-            "output_hids": output_hids,
-            "input_cids": input_cids,
-            "output_cids": output_cids,
-        }
+        return self.mget_data([call_history_id])[0]
+        # rows = self.df.loc[call_history_id].reset_index().to_dict(orient="records")
+        # input_hids, output_hids = {}, {}
+        # input_cids, output_cids = {}, {}
+        # for row in rows:
+        #     if row["direction"] == "in":
+        #         input_hids[row["name"]] = row["ref_history_id"]
+        #         input_cids[row["name"]] = row["ref_content_id"]
+        #     else:
+        #         output_hids[row["name"]] = row["ref_history_id"]
+        #         output_cids[row["name"]] = row["ref_content_id"]
+        # # return Call(op=op, cid=rows[0]["call_content_id"], hid=call_history_id, inputs=inputs, outputs=outputs)
+        # op_name = rows[0]["op"]
+        # return {
+        #     "op_name": op_name,
+        #     "cid": rows[0]["call_content_id"],
+        #     "hid": call_history_id,
+        #     "input_hids": input_hids,
+        #     "output_hids": output_hids,
+        #     "input_cids": input_cids,
+        #     "output_cids": output_cids,
+        # }
 
     def get_creator_hids(self, ref_hids: Iterable[str]) -> Set[str]:
         #! slow
@@ -363,6 +405,9 @@ class SQLiteCallStorage:
     ###
     @transaction
     def get_df(self, conn: Optional[sqlite3.Connection] = None) -> pd.DataFrame:
+        """
+        Load the full table into a DataFrame.
+        """
         return pd.read_sql(f"SELECT * FROM {self.table_name}", conn).set_index(
             ["call_history_id", "name"]
         )
@@ -417,37 +462,67 @@ class SQLiteCallStorage:
         )
         count = cursor.fetchone()[0]
         return count > 0
+    
+    @transaction
+    def mget_data(
+        self, call_hids: List[str], conn: Optional[sqlite3.Connection] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        Get the data of multiple `Call` objects given their history_ids,
+        preserving order.
+        """
+        cursor = conn.execute(
+            f"SELECT * FROM {self.table_name} WHERE call_history_id IN ({','.join('?' for _ in call_hids)})",
+            call_hids,
+        )
+        rows = cursor.fetchall()
+        call_data = {}
+        for row in rows:
+            hid = row[0]
+            if hid not in call_data:
+                call_data[hid] = {"op_name": row[6], "cid": row[3], "hid": hid, "input_hids": {}, "output_hids": {}, "input_cids": {}, "output_cids": {}}
+            if row[2] == "in":
+                call_data[hid]["input_hids"][row[1]] = row[5]
+                call_data[hid]["input_cids"][row[1]] = row[4]
+            else:
+                call_data[hid]["output_hids"][row[1]] = row[5]
+                call_data[hid]["output_cids"][row[1]] = row[4]
+        return [call_data[hid] for hid in call_hids]
 
     @transaction
     def get_data(
         self, call_history_id: str, conn: Optional[sqlite3.Connection] = None
     ) -> Dict[str, Any]:
-        cursor = conn.execute(
-            f"SELECT * FROM {self.table_name} WHERE call_history_id = ?",
-            (call_history_id,),
-        )
-        rows = cursor.fetchall()
-        input_hids, output_hids = {}, {}
-        input_cids, output_cids = {}, {}
-        op_name = None
-        for row in rows:
-            if op_name is None:
-                op_name = row[6]
-            if row[2] == "in":
-                input_hids[row[1]] = row[5]
-                input_cids[row[1]] = row[4]
-            else:
-                output_hids[row[1]] = row[5]
-                output_cids[row[1]] = row[4]
-        return {
-            "op_name": op_name,
-            "cid": rows[0][3],
-            "hid": call_history_id,
-            "input_hids": input_hids,
-            "output_hids": output_hids,
-            "input_cids": input_cids,
-            "output_cids": output_cids,
-        }
+        """
+        Get the data of a `Call` object given its history_id.
+        """
+        return self.mget_data([call_history_id], conn)[0]
+        # cursor = conn.execute(
+        #     f"SELECT * FROM {self.table_name} WHERE call_history_id = ?",
+        #     (call_history_id,),
+        # )
+        # rows = cursor.fetchall()
+        # input_hids, output_hids = {}, {}
+        # input_cids, output_cids = {}, {}
+        # op_name = None
+        # for row in rows:
+        #     if op_name is None:
+        #         op_name = row[6]
+        #     if row[2] == "in":
+        #         input_hids[row[1]] = row[5]
+        #         input_cids[row[1]] = row[4]
+        #     else:
+        #         output_hids[row[1]] = row[5]
+        #         output_cids[row[1]] = row[4]
+        # return {
+        #     "op_name": op_name,
+        #     "cid": rows[0][3],
+        #     "hid": call_history_id,
+        #     "input_hids": input_hids,
+        #     "output_hids": output_hids,
+        #     "input_cids": input_cids,
+        #     "output_cids": output_cids,
+        # }
 
     ### provenance queries
     @transaction
