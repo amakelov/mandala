@@ -1,4 +1,5 @@
 from .common_imports import *
+from tqdm import tqdm
 import uuid
 from .utils import serialize, deserialize
 from .model import Call
@@ -134,6 +135,7 @@ class SQLiteDictStorage(DictStorage):
     def set(
         self, key: str, value: Any, conn: Optional[sqlite3.Connection] = None
     ) -> None:
+        sess.d()
         conn.execute(
             f"INSERT OR REPLACE INTO {self.table} (key, value) VALUES (?, ?)",
             (key, serialize(value)),
@@ -266,7 +268,7 @@ class InMemCallStorage:
         grouped = filtered_df.groupby(level=0)
         groups = {key: value for key, value in grouped}
         res_dict = {}
-        for hid, group_df in groups.items():
+        for hid, group_df in tqdm(groups.items(), delay=5):
             rows = group_df.reset_index().to_dict(orient="records")
             input_hids, output_hids = {}, {}
             input_cids, output_cids = {}, {}

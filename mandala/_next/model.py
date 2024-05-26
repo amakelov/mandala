@@ -71,12 +71,14 @@ class Op:
         skip_outputs: Optional[List[str]] = None,
         version: Optional[int] = 0,
         __structural__: bool = False,
+        __allow_side_effects__: bool = False,
     ) -> None:
         self.name = name
         self.nout = nout
         self.version = version
         self.output_names = output_names
         self.__structural__ = __structural__
+        self.__allow_side_effects__ = __allow_side_effects__
         self.f = f
 
     def __repr__(self) -> str:
@@ -312,6 +314,7 @@ def op(
     skip_inputs: Optional[List[str]] = None,
     skip_outputs: Optional[List[str]] = None,
     __structural__: bool = False,
+    __allow_side_effects__: bool = False,
 ):
     def decorator(f: Callable) -> 'f': # some IDE magic to make it recognize that @op(f) has the same type as f
         res = Op(
@@ -319,9 +322,10 @@ def op(
             f,
             output_names=None,
             nout=nout,
-            __structural__=__structural__,
             skip_inputs=skip_inputs,
             skip_outputs=skip_outputs,
+            __structural__=__structural__,
+            __allow_side_effects__=__allow_side_effects__,
         )
         return functools.wraps(f)(res) # more magic 
 

@@ -512,17 +512,18 @@ class Storage:
                 args, kwargs = dump_args(sig=sig, inputs=raw_values)
             #! call the function
             returns = f(*args, **kwargs)
-            # capture changes in the inputs; TODO: this is hacky; ideally, we would
-            # avoid calling `construct` and instead recurse on the values, looking for differences.
-            cids_after = {
-                k: self.construct(tp=input_tps[k], val=v)[0].cid
-                for k, v in raw_values.items()
-            }
-            changed_inputs = {k for k in cids_before if cids_before[k] != cids_after[k]}
-            if len(changed_inputs) > 0:
-                raise ValueError(
-                    f"Function {f.__name__} has side effects on inputs {changed_inputs}; aborting call."
-                )
+            if not op.__allow_side_effects__:
+                # capture changes in the inputs; TODO: this is hacky; ideally, we would
+                # avoid calling `construct` and instead recurse on the values, looking for differences.
+                cids_after = {
+                    k: self.construct(tp=input_tps[k], val=v)[0].cid
+                    for k, v in raw_values.items()
+                }
+                changed_inputs = {k for k in cids_before if cids_before[k] != cids_after[k]}
+                if len(changed_inputs) > 0:
+                    raise ValueError(
+                        f"Function {f.__name__} has side effects on inputs {changed_inputs}; aborting call."
+                    )
         # wrap the outputs
         outputs_dict, outputs_annotations = parse_returns(
             sig=sig, returns=returns, nout=op.nout, output_names=op.output_names
