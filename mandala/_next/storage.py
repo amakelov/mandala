@@ -297,13 +297,15 @@ class Storage:
         if self.in_context():
             raise NotImplementedError("Method not supported while in a context.")
         call_hids = self.call_storage.get_creator_hids(ref_hids)
-        return [self.get_call(call_hid, lazy=True) for call_hid in call_hids]
+        # return [self.get_call(call_hid, lazy=True) for call_hid in call_hids]
+        return self.mget_call(hids=call_hids, lazy=True)
 
     def get_consumers(self, ref_hids: Iterable[str]) -> List[Call]:
         if self.in_context():
             raise NotImplementedError("Method not supported while in a context.")
         call_hids = self.call_storage.get_consumer_hids(ref_hids)
-        return [self.get_call(call_hid, lazy=True) for call_hid in call_hids]
+        # return [self.get_call(call_hid, lazy=True) for call_hid in call_hids]
+        return self.mget_call(hids=call_hids, lazy=True)
 
     def get_orphans(self) -> Set[str]:
         """
@@ -495,7 +497,10 @@ class Storage:
             return main_call.outputs, main_call, input_calls
 
         ### execute the call if it doesn't exist
-        if not op.__structural__: logger.debug(f"Call to {op.name} with hid {call_hid} does not exist; executing.")
+        if not op.__structural__: 
+            logger.debug(f"Call to {op.name} with hid {call_hid} does not exist; executing.")
+            input_hids = {k: v.hid for k, v in wrapped_inputs.items()}
+            logger.debug(f"HIDs of inputs: {input_hids}")
         # call the function
         f, sig = op.f, inspect.signature(op.f)
         if op.__structural__:

@@ -60,6 +60,17 @@ class AtomRef(Ref):
         return "Atom" + super().__repr__()
 
 
+
+
+
+class NewArgDefault:
+    """
+    A class for defaults that should be ignored when computing the hash of a function call.
+    """
+    pass
+
+
+
 class Op:
     def __init__(
         self,
@@ -88,14 +99,19 @@ class Op:
     def id(self) -> str:
         return self.name
 
+    def _get_hashable_inputs(self, inputs: Dict[str, Ref]) -> Dict[str, Any]:
+        return {k: v for k, v in inputs.items() if not isinstance(v.obj, NewArgDefault)}
+
     def get_call_history_id(self, inputs: Dict[str, Ref]) -> str:
+        hashable_inputs = self._get_hashable_inputs(inputs)
         return get_content_hash(
-            ({k: v.hid for k, v in inputs.items()}, self.name, self.version)
+            ({k: v.hid for k, v in hashable_inputs.items()}, self.name, self.version)
         )
 
     def get_call_content_id(self, inputs: Dict[str, Ref]) -> str:
+        hashable_inputs = self._get_hashable_inputs(inputs)
         return get_content_hash(
-            ({k: v.cid for k, v in inputs.items()}, self.name, self.version)
+            ({k: v.cid for k, v in hashable_inputs.items()}, self.name, self.version)
         )
 
     def get_output_history_ids(
