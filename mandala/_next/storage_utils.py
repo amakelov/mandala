@@ -45,7 +45,10 @@ def is_in_memory_db(conn):
         raise ValueError("Expected exactly one database")
     return db_list[0][2] == ''
 
-def transaction(method):  # transaction decorator for classes with a `get_conn` method
+def transaction(method):  # transaction decorator for classes with a `conn` method
+    """
+
+    """
     def wrapper(self, *args, **kwargs):
         if kwargs.get("conn") is not None:  # already in a transaction
             logging.debug("Folding into existing transaction")
@@ -68,7 +71,6 @@ def transaction(method):  # transaction decorator for classes with a `get_conn` 
                 else:
                     # in-memory databases are kept open
                     pass
-
     return wrapper
 
 
@@ -221,6 +223,8 @@ class InMemCallStorage:
         "ref_content_id",
         "ref_history_id",
         "op",
+        "semantic_version",
+        "content_version",
     ]
 
     def __init__(self, df: Optional[pd.DataFrame] = None):
@@ -242,7 +246,7 @@ class InMemCallStorage:
         if call.hid in self.call_hids:
             return
         for k, v in call.inputs.items():
-            self.df.loc[(call.hid, k), :] = ("in", call.cid, v.cid, v.hid, call.op.name)
+            self.df.loc[(call.hid, k), :] = ("in", call.cid, v.cid, v.hid, call.op.name, call.semantic_version, call.content_version)
         for k, v in call.outputs.items():
             self.df.loc[(call.hid, k), :] = (
                 "out",
@@ -250,6 +254,8 @@ class InMemCallStorage:
                 v.cid,
                 v.hid,
                 call.op.name,
+                call.semantic_version,
+                call.content_version,
             )
         self.call_hids.add(call.hid)
 
@@ -265,9 +271,12 @@ class InMemCallStorage:
         self.df.index = self.df.index.remove_unused_levels()
         self.call_hids.remove(hid)
 
-    def exists(self, call_history_id: str) -> bool:
+    def exists(self, hid: str) -> bool:
         # return call_history_id in self.df.index.levels[0]
-        return call_history_id in self.call_hids
+        return hid in self.call_hids
+    
+    def exists_content(self, cid: str) -> bool:
+        return cid in self.df.call_content_id.unique()
     
     def mget_data(self, call_hids: List[str]) -> List[Dict[str, Any]]:
         idx = pd.IndexSlice
@@ -295,6 +304,8 @@ class InMemCallStorage:
                 "output_hids": output_hids,
                 "input_cids": input_cids,
                 "output_cids": output_cids,
+                "semantic_version": rows[0]["semantic_version"],
+                "content_version": rows[0]["content_version"],
             }
         return [res_dict[hid] for hid in call_hids]
 
@@ -305,27 +316,11 @@ class InMemCallStorage:
         if not self.exists(call_history_id):
             raise ValueError(f"Call with history_id {call_history_id} does not exist")
         return self.mget_data([call_history_id])[0]
-        # rows = self.df.loc[call_history_id].reset_index().to_dict(orient="records")
-        # input_hids, output_hids = {}, {}
-        # input_cids, output_cids = {}, {}
-        # for row in rows:
-        #     if row["direction"] == "in":
-        #         input_hids[row["name"]] = row["ref_history_id"]
-        #         input_cids[row["name"]] = row["ref_content_id"]
-        #     else:
-        #         output_hids[row["name"]] = row["ref_history_id"]
-        #         output_cids[row["name"]] = row["ref_content_id"]
-        # # return Call(op=op, cid=rows[0]["call_content_id"], hid=call_history_id, inputs=inputs, outputs=outputs)
-        # op_name = rows[0]["op"]
-        # return {
-        #     "op_name": op_name,
-        #     "cid": rows[0]["call_content_id"],
-        #     "hid": call_history_id,
-        #     "input_hids": input_hids,
-        #     "output_hids": output_hids,
-        #     "input_cids": input_cids,
-        #     "output_cids": output_cids,
-        # }
+    
+    def get_data_content(self, cid: str) -> Dict[str, Any]:
+        # find one hid associated with this cid
+        hid = self.df.query('call_content_id == @cid').index.get_level_values(0).unique()[0]
+        return self.get_data(hid)
 
     def get_creator_hids(self, ref_hids: Iterable[str]) -> Set[str]:
         #! slow
@@ -405,7 +400,8 @@ class SQLiteCallStorage:
         with self.db.conn() as conn:
             conn.execute(
                 f"CREATE TABLE IF NOT EXISTS {table_name} (call_history_id TEXT, name TEXT, direction TEXT, "
-                "call_content_id TEXT, ref_content_id TEXT, ref_history_id TEXT, op TEXT, PRIMARY KEY (call_history_id, name))"
+                "call_content_id TEXT, ref_content_id TEXT, ref_history_id TEXT, op TEXT, semantic_version TEXT, "
+                "content_version TEXT, PRIMARY KEY (call_history_id, name))"
             )
     
     def conn(self) -> sqlite3.Connection:
@@ -431,20 +427,22 @@ class SQLiteCallStorage:
     def save(
         self, call_data: Dict[str, Any], conn: Optional[sqlite3.Connection] = None
     ):
+        semantic_version = call_data["semantic_version"]
+        content_version = call_data["content_version"]
         op_name = call_data["op_name"]
         for k in call_data["input_hids"]:
             hid = call_data["input_hids"][k]
             cid = call_data["input_cids"][k]
             conn.execute(
-                f"INSERT INTO {self.table_name} VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (call_data["hid"], k, "in", call_data["cid"], cid, hid, op_name),
+                f"INSERT INTO {self.table_name} VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (call_data["hid"], k, "in", call_data["cid"], cid, hid, op_name, semantic_version, content_version),
             )
         for k in call_data["output_hids"]:
             hid = call_data["output_hids"][k]
             cid = call_data["output_cids"][k]
             conn.execute(
-                f"INSERT INTO {self.table_name} VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (call_data["hid"], k, "out", call_data["cid"], cid, hid, op_name),
+                f"INSERT INTO {self.table_name} VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (call_data["hid"], k, "out", call_data["cid"], cid, hid, op_name, semantic_version, content_version),
             )
 
     @transaction
@@ -489,7 +487,10 @@ class SQLiteCallStorage:
         for row in rows:
             hid = row[0]
             if hid not in call_data:
-                call_data[hid] = {"op_name": row[6], "cid": row[3], "hid": hid, "input_hids": {}, "output_hids": {}, "input_cids": {}, "output_cids": {}}
+                call_data[hid] = {
+                    "op_name": row[6], "cid": row[3], "hid": hid, "input_hids": {}, "output_hids": {}, "input_cids": {}, "output_cids": {}, 
+                    "semantic_version": row[7], "content_version": row[8]
+                    }
             if row[2] == "in":
                 call_data[hid]["input_hids"][row[1]] = row[5]
                 call_data[hid]["input_cids"][row[1]] = row[4]
@@ -506,32 +507,6 @@ class SQLiteCallStorage:
         Get the data of a `Call` object given its history_id.
         """
         return self.mget_data([call_history_id], conn)[0]
-        # cursor = conn.execute(
-        #     f"SELECT * FROM {self.table_name} WHERE call_history_id = ?",
-        #     (call_history_id,),
-        # )
-        # rows = cursor.fetchall()
-        # input_hids, output_hids = {}, {}
-        # input_cids, output_cids = {}, {}
-        # op_name = None
-        # for row in rows:
-        #     if op_name is None:
-        #         op_name = row[6]
-        #     if row[2] == "in":
-        #         input_hids[row[1]] = row[5]
-        #         input_cids[row[1]] = row[4]
-        #     else:
-        #         output_hids[row[1]] = row[5]
-        #         output_cids[row[1]] = row[4]
-        # return {
-        #     "op_name": op_name,
-        #     "cid": rows[0][3],
-        #     "hid": call_history_id,
-        #     "input_hids": input_hids,
-        #     "output_hids": output_hids,
-        #     "input_cids": input_cids,
-        #     "output_cids": output_cids,
-        # }
 
     ### provenance queries
     @transaction

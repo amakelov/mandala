@@ -102,17 +102,36 @@ class Op:
     def _get_hashable_inputs(self, inputs: Dict[str, Ref]) -> Dict[str, Any]:
         return {k: v for k, v in inputs.items() if not isinstance(v.obj, NewArgDefault)}
 
-    def get_call_history_id(self, inputs: Dict[str, Ref]) -> str:
+    def get_call_history_id(self,
+                            inputs: Dict[str, Ref],
+                            semantic_version: Optional[str] = None,
+                            ) -> str:
+        """
+        Combine the inputs' history IDs, the name of the op, and the semantic
+        version to get a unique id for the call history.
+        """
         hashable_inputs = self._get_hashable_inputs(inputs)
-        return get_content_hash(
-            ({k: v.hid for k, v in hashable_inputs.items()}, self.name, self.version)
-        )
+        obj = ({k: v.hid for k, v in hashable_inputs.items()}, self.name, self.version)
+        if semantic_version is not None:
+            obj = obj + (semantic_version,)
+        return get_content_hash(obj)
 
-    def get_call_content_id(self, inputs: Dict[str, Ref]) -> str:
+    def get_call_content_id(self, inputs: Dict[str, Ref],
+                            semantic_version: Optional[str] = None) -> str:
         hashable_inputs = self._get_hashable_inputs(inputs)
-        return get_content_hash(
-            ({k: v.cid for k, v in hashable_inputs.items()}, self.name, self.version)
-        )
+        obj = ({k: v.cid for k, v in hashable_inputs.items()}, self.name, self.version)
+        if semantic_version is not None:
+            obj = obj + (semantic_version,)
+        return get_content_hash(obj)
+    
+    def get_pre_call_id(self, inputs: Dict[str, Ref]) -> str:
+        """
+        Combine the inputs' content IDs and the name of the op to get a unique
+        id for the pre-call, to be used to search for matching semantic
+        versions.
+        """
+        hashable_inputs = self._get_hashable_inputs(inputs)
+        return get_content_hash((self.name, {k: v.cid for k, v in hashable_inputs.items()}))
 
     def get_output_history_ids(
         self, call_history_id: str, output_names: List[str]
@@ -156,23 +175,32 @@ class Call:
         hid: str,
         inputs: Dict[str, Ref],
         outputs: Dict[str, Ref],
+        semantic_version: Optional[str] = None,
+        content_version: Optional[str] = None,
     ) -> None:
         self.op = op
         self.cid = cid
         self.hid = hid
         self.inputs = inputs
         self.outputs = outputs
+        self.semantic_version = semantic_version
+        self.content_version = content_version
 
     def __repr__(self) -> str:
         return f"Call({self.op.name}, cid='{self.cid[:3]}...', hid='{self.hid[:3]}...')"
 
     def detached(self) -> "Call":
+        """
+        Return the call with the inputs, outputs and op detached.
+        """
         return Call(
-            op=self.op,
+            op=self.op.detached(),
             cid=self.cid,
             hid=self.hid,
             inputs={k: v.detached() for k, v in self.inputs.items()},
             outputs={k: v.detached() for k, v in self.outputs.items()},
+            semantic_version=self.semantic_version,
+            content_version=self.content_version,
         )
 
 
@@ -351,29 +379,6 @@ def op(
         return decorator
 
 
-# class OpDecorator:
-#     def __init__(self, output_names: Optional[List[str]] = None,
-#                  nout: Union[Literal['var', 'auto'], int] = 'auto',
-#                  skip_inputs: Optional[List[str]] = None,
-#                  skip_outputs: Optional[List[str]] = None,
-#                  __structural__: bool = False
-#                  ) -> None:
-#         self.output_names = output_names
-#         self.skip_inputs = skip_inputs
-#         self.skip_outputs = skip_outputs
-#         self.nout = nout
-#         self.__structural__ = __structural__
-#
-#     def __call__(self, f: Callable) -> 'f':
-#         return Op(f.__name__, f, output_names=self.output_names, nout=self.nout, __structural__=self.__structural__, skip_inputs=self.skip_inputs, skip_outputs=self.skip_outputs)
-#         # @wraps(f)
-#         # def wrapper(*args, **kwargs):
-#         #     return Op(f, output_names=self.output_names, nout=self.nout, __structural__=self.__structural__)(*args, **kwargs)
-#         # return wrapper
-#
-# op = OpDecorator
-
-
 class Context:
 
     current_context: Optional["Context"] = None
@@ -401,5 +406,3 @@ class Context:
     def __exit__(self, exc_type, exc_value, traceback) -> None:
         Context.current_context = None
 
-
-# from .storage import Storage

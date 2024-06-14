@@ -6,6 +6,10 @@ from .model import *
 import sqlite3
 from .model import __make_list__, __get_list_item__, __make_dict__, __get_dict_value__
 from .utils import dataframe_to_prettytable
+from .viz import _get_colorized_diff
+from .deps.versioner import Versioner, CodeState
+from .deps.utils import get_dep_key_from_func, extract_func_obj
+from .deps.tracers import DecTracer, SysTracer, TracerABC
 
 from .storage_utils import (
     DBAdapter,
@@ -14,11 +18,16 @@ from .storage_utils import (
     CachedDictStorage,
     SQLiteDictStorage,
     CachedCallStorage,
+    transaction
 )
 
 
 class Storage:
-    def __init__(self, db_path: str = ":memory:"):
+    def __init__(self, db_path: str = ":memory:", 
+                 deps_path: Optional[Union[str, Path]] = None,
+                 tracer_impl: Optional[type] = None,
+                 deps_package: Optional[str] = None,
+                 ):
         self.db = DBAdapter(db_path=db_path)
 
         self.call_storage = SQLiteCallStorage(db=self.db, table_name="calls")
@@ -34,6 +43,47 @@ class Storage:
         self.ops = CachedDictStorage(
             persistent=SQLiteDictStorage(self.db, table="ops")
         )
+
+        self.sources = CachedDictStorage(
+            persistent=SQLiteDictStorage(self.db, table="sources")
+        )
+        if not self.sources.exists(key='versioner'):
+            current_versioner = None
+        else:
+            current_versioner = self.sources['versioner']
+
+        # self.version_adapter = VersionAdapter(rel_adapter=self.rel_adapter)
+        if deps_path is not None:
+            deps_path = (
+                Path(deps_path).absolute().resolve()
+                if deps_path != "__main__"
+                else "__main__"
+            )
+            roots = [] if deps_path == "__main__" else [deps_path]
+            self._versioned = True
+            if current_versioner is not None:
+                if current_versioner.paths != roots:
+                    raise ValueError(
+                        f"Found existing versioner with roots {current_versioner.paths}, but "
+                        f"was asked to use {roots}"
+                    )
+            else:
+                versioner = Versioner(
+                    paths=roots,
+                    TracerCls=DecTracer if tracer_impl is None else tracer_impl,
+                    strict=True,
+                    track_methods=True,
+                    package_name=deps_package,
+                )
+                # self.version_adapter.dump_state(state=versioner)
+                self.sources["versioner"] = versioner
+        else:
+            self._versioned = False
+        
+        self.cached_versioner = None
+        self.code_state = None
+        self.suspended_trace_obj = None
+
     
     def conn(self) -> sqlite3.Connection:
         return self.db.conn()
@@ -224,45 +274,30 @@ class Storage:
 
         calls = []
         for call_data in call_datas:
-            op_name = call_data["op_name"]
-            call = Call(
-                op=self.ops[op_name],
-                cid=call_data["cid"],
-                hid=call_data["hid"],
-                inputs={
-                    k: self.load_ref(v, lazy=lazy)
-                    for k, v in call_data["input_hids"].items()
-                },
-                outputs={
-                    k: self.load_ref(v, lazy=lazy)
-                    for k, v in call_data["output_hids"].items()
-                },
-            )
-            calls.append(call)
+            calls.append(self._get_call_from_data(call_data, lazy=lazy))
         return calls
-
+    
+    def _get_call_from_data(self, call_data: Dict[str, Any], lazy: bool) -> Call:
+        op_name = call_data["op_name"]
+        call = Call(
+            op=self.ops[op_name],
+            cid=call_data["cid"],
+            hid=call_data["hid"],
+            inputs={
+                k: self.load_ref(v, lazy=lazy)
+                for k, v in call_data["input_hids"].items()
+            },
+            outputs={
+                k: self.load_ref(v, lazy=lazy)
+                for k, v in call_data["output_hids"].items()
+            },
+            semantic_version=call_data.get("semantic_version", None),
+            content_version=call_data.get("content_version", None),
+        )
+        return call
 
     def get_call(self, hid: str, lazy: bool) -> Call:
         return self.mget_call([hid], lazy=lazy)[0]
-        # if self.call_cache.exists(hid):
-        #     call_data = self.call_cache.get_data(hid)
-        # else:
-        #     with self.call_storage.conn() as conn:
-        #         call_data = self.call_storage.get_data(hid, conn=conn)
-        # op_name = call_data["op_name"]
-        # return Call(
-        #     op=self.ops[op_name],
-        #     cid=call_data["cid"],
-        #     hid=call_data["hid"],
-        #     inputs={
-        #         k: self.load_ref(v, lazy=lazy)
-        #         for k, v in call_data["input_hids"].items()
-        #     },
-        #     outputs={
-        #         k: self.load_ref(v, lazy=lazy)
-        #         for k, v in call_data["output_hids"].items()
-        #     },
-        # )
 
     def drop_calls(self, hids: Iterable[str], delete_dependents: bool):
         """
@@ -466,6 +501,57 @@ class Storage:
             return res, destr_calls
         else:
             raise NotImplementedError
+    
+    def lookup_call(
+        self,
+        op: Op,
+        inputs: Dict[str, Ref],
+        pre_call_uid: Optional[str] = None,
+        code_state: Optional[CodeState] = None,
+        versioner: Optional[Versioner] = None,
+    ) -> Optional[Call]:
+        """
+        Look up the call to the given op. If the storage is versioned, the
+        current code state is used to resolve the right version of the function
+        to use.
+        """
+        if not self.versioned:
+            semantic_version = None
+        else:
+            assert code_state is not None and versioner is not None and pre_call_uid is not None
+            component = get_dep_key_from_func(func=op.f)
+            lookup_outcome = versioner.lookup_call(
+                component=component, pre_call_uid=pre_call_uid, code_state=code_state
+            )
+            if lookup_outcome is None:
+                print(f"Could not find a version for {op.name}.")
+                return
+            else:
+                _, semantic_version = lookup_outcome
+        ### first, look up by history ID
+        call_hid = op.get_call_history_id(
+            inputs=inputs,
+            semantic_version=semantic_version,
+        )
+        if self.call_cache.exists(hid=call_hid):
+            call_data = self.call_cache.get_data(call_history_id=call_hid)
+            return self._get_call_from_data(call_data, lazy=True)
+        ### if this fails, look up by content ID, and apply the correct history IDs
+        call_cid = op.get_call_content_id(
+            inputs=inputs, semantic_version=semantic_version
+        )
+        if self.call_cache.exists_content(cid=call_cid):
+            call_data = self.call_cache.get_data_content(cid=call_cid)
+            call_prototype = self._get_call_from_data(call_data, lazy=True)
+            #!!! set the hids here on both the call and the outputs
+            call_prototype.hid = call_hid
+            output_names_identity = {k: k for k in call_data['output_hids'].keys()}
+            output_history_ids = op.get_output_history_ids(call_history_id=call_hid, output_names=list(op.get_ordered_outputs(output_dict=output_names_identity)))
+            for k, v in call_prototype.outputs.items():
+                v.hid = output_history_ids[k]
+            return call_prototype
+        print(f"Could not find a call to {op.name} with hid {call_hid} or cid {call_cid}.")
+        return None
 
     def call_internal(
         self,
@@ -490,26 +576,44 @@ class Storage:
             input_calls.extend(struct_calls)
         if len(input_calls) > 0:
             if not op.__structural__: logger.debug(f"Collected {len(input_calls)} calls for inputs.")
+
+        if self.versioned:
+            suspended_trace_obj = self.cached_versioner.TracerCls.get_active_trace_obj()
+            self.cached_versioner.TracerCls.set_active_trace_obj(trace_obj=None)
+        else:
+            suspended_trace_obj = None
+
         ### check for the call
-        call_hid = op.get_call_history_id(wrapped_inputs)
-        call_exists_start = time.time()
-        call_exists = self.exists_call(hid=call_hid)
-        call_exists_end = time.time()
-        Context._profiling_stats['call_exists_time'] += call_exists_end - call_exists_start
+        # call_hid = op.get_call_history_id(wrapped_inputs)
+        pre_call_id = op.get_pre_call_id(wrapped_inputs)
+        # call_exists_start = time.time()
+        # call_exists = self.exists_call(hid=call_hid)
+        # call_exists_end = time.time()
+        # Context._profiling_stats['call_exists_time'] += call_exists_end - call_exists_start
+        call_option = self.lookup_call(
+            op=op,
+            pre_call_uid=pre_call_id,
+            inputs=wrapped_inputs,
+            code_state=self.guess_code_state(),
+            versioner=self.cached_versioner,
+        )
+        tracer_option = (
+            self.cached_versioner.make_tracer() if self.versioned else None
+        )
+
+        call_exists = (call_option is not None)
         if call_exists:
+            print(f"Call to {op.name} with hid {call_option.hid} already exists.")
+            call_hid = call_option.hid
             # ! TODO: do the lookup by content ID, not history ID!!!
             if not op.__structural__: logger.debug(f"Call to {op.name} with hid {call_hid} already exists.")
-            get_call_start = time.time()
-            main_call = self.get_call(hid=call_hid, lazy=True)
-            get_call_end = time.time()
-            Context._profiling_stats['get_call_time'] += get_call_end - get_call_start
-            end_time = time.time()
-            Context._profiling_stats['total_time'] += end_time - start_time
+            # main_call = self.get_call(hid=call_hid, lazy=True)
+            main_call = call_option
             return main_call.outputs, main_call, input_calls
 
         ### execute the call if it doesn't exist
         if not op.__structural__: 
-            logger.debug(f"Call to {op.name} with hid {call_hid} does not exist; executing.")
+            # logger.debug(f"Call to {op.name} with hid {call_hid} does not exist; executing.")
             input_hids = {k: v.hid for k, v in wrapped_inputs.items()}
             logger.debug(f"HIDs of inputs: {input_hids}")
         # call the function
@@ -527,7 +631,18 @@ class Storage:
             else:
                 args, kwargs = dump_args(sig=sig, inputs=raw_values)
             #! call the function
-            returns = f(*args, **kwargs)
+
+            if tracer_option is not None:
+                tracer = tracer_option
+                with tracer:
+                    if isinstance(tracer, DecTracer):
+                        node = tracer.register_call(func=op.f)
+                    returns = f(*args, **kwargs)
+                    if isinstance(tracer, DecTracer):
+                        tracer.register_return(node=node)
+            else:
+                returns = f(*args, **kwargs)
+
             if not op.__allow_side_effects__:
                 # capture changes in the inputs; TODO: this is hacky; ideally, we would
                 # avoid calling `construct` and instead recurse on the values, looking for differences.
@@ -540,6 +655,29 @@ class Storage:
                     raise ValueError(
                         f"Function {f.__name__} has side effects on inputs {changed_inputs}; aborting call."
                     )
+
+
+        if tracer_option is not None:
+            # check the trace against the code state hypothesis
+            self.cached_versioner.apply_state_hypothesis(
+                hypothesis=self.code_state, trace_result=tracer_option.graph.nodes
+            )
+            # update the global topology and code state
+            self.cached_versioner.update_global_topology(graph=tracer_option.graph)
+            self.code_state.add_globals_from(graph=tracer_option.graph)
+
+        content_version, semantic_version = (
+            self.cached_versioner.get_version_ids(
+                pre_call_uid=pre_call_id,
+                tracer_option=tracer_option,
+                is_recompute=False,
+            )
+            if self.versioned
+            else (None, None)
+        )
+
+        print(f"Content version: {content_version}, Semantic version: {semantic_version}, pre_call_id: {pre_call_id}")
+
         # wrap the outputs
         outputs_dict, outputs_annotations = parse_returns(
             sig=sig, returns=returns, nout=op.nout, output_names=op.output_names
@@ -548,8 +686,8 @@ class Storage:
             k: Type.from_annotation(annotation=v)
             for k, v in outputs_annotations.items()
         }
-        call_content_id = op.get_call_content_id(wrapped_inputs)
-        call_hid = op.get_call_history_id(wrapped_inputs)
+        call_content_id = op.get_call_content_id(wrapped_inputs, semantic_version=semantic_version)
+        call_hid = op.get_call_history_id(wrapped_inputs, semantic_version=semantic_version)
         output_history_ids = op.get_output_history_ids(
             call_history_id=call_hid, output_names=list(outputs_dict.keys())
         )
@@ -573,10 +711,176 @@ class Storage:
             hid=call_hid,
             inputs=wrapped_inputs,
             outputs=wrapped_outputs,
+            semantic_version=semantic_version,
+            content_version=content_version,
         )
         end_time = time.time()
         Context._profiling_stats['total_time'] += end_time - start_time
         return main_call.outputs, main_call, input_calls + output_calls
+
+    ############################################################################
+    ### versioning
+    ############################################################################
+    @transaction
+    def get_versioner(self, conn: Optional[sqlite3.Connection] = None) -> Versioner:
+        result = self.sources["versioner"]
+        if result is None:
+            raise ValueError("This storage is not versioned.")
+        return result
+
+    @property
+    def versioned(self) -> bool:
+        return self._versioned
+
+    @transaction
+    def guess_code_state(
+        self, versioner: Optional[Versioner] = None, conn: Optional[sqlite3.Connection] = None
+    ) -> CodeState:
+        if versioner is None:
+            versioner = self.get_versioner(conn=conn)
+        return versioner.guess_code_state()
+
+    @transaction
+    def sync_code(
+        self, conn: Optional[sqlite3.Connection] = None
+    ) -> Tuple[Versioner, CodeState]:
+        versioner = self.get_versioner(conn=conn)
+        code_state = self.guess_code_state(versioner=versioner, conn=conn)
+        versioner.sync_codebase(code_state=code_state)
+        return versioner, code_state
+
+    @transaction
+    def sync_component(
+        self,
+        component: types.FunctionType,
+        is_semantic_change: Optional[bool],
+        conn: Optional[sqlite3.Connection] = None,
+    ):
+        # low-level versioning
+        dep_key = get_dep_key_from_func(func=component)
+        versioner = self.get_versioner(conn=conn)
+        code_state = self.guess_code_state(versioner=versioner, conn=conn)
+        result = versioner.sync_component(
+            component=dep_key,
+            is_semantic_change=is_semantic_change,
+            code_state=code_state,
+        )
+        self.version_adapter.dump_state(state=versioner, conn=conn)
+        return result
+
+    @transaction
+    def _show_version_data(
+        self,
+        f: Union[Callable, "funcs.FuncInterface"],
+        deps: bool = True,
+        meta: bool = False,
+        plain: bool = False,
+        compact: bool = False,
+        conn: Optional[sqlite3.Connection] = None,
+    ):
+        # show the versions of a function, with/without its dependencies
+        func = extract_func_obj(obj=f, strict=True)
+        component = get_dep_key_from_func(func=func)
+        versioner = self.get_versioner(conn=conn)
+        if deps:
+            versioner.show_versions(
+                component=component,
+                include_metadata=meta,
+                plain=plain,
+            )
+        else:
+            versioner.component_dags[component].show(
+                compact=compact, plain=plain, include_metadata=meta
+            )
+
+    @transaction
+    def versions(
+        self,
+        f: Union[Callable, "funcs.FuncInterface"],
+        meta: bool = False,
+        plain: bool = False,
+        conn: Optional[sqlite3.Connection] = None,
+    ):
+        self._show_version_data(
+            f=f,
+            deps=True,
+            meta=meta,
+            plain=plain,
+            compact=False,
+            conn=conn,
+        )
+
+    # @transaction
+    # def sources(
+    #     self,
+    #     f: Union[Callable, "funcs.FuncInterface"],
+    #     meta: bool = False,
+    #     plain: bool = False,
+    #     compact: bool = False,
+    #     conn: Optional[sqlite3.Connection] = None,
+    # ):
+    #     func = extract_func_obj(obj=f, strict=True)
+    #     component = get_dep_key_from_func(func=func)
+    #     versioner = self.get_versioner(conn=conn)
+    #     print(
+    #         f"Revision history for the source code of function {component[1]} from module {component[0]} "
+    #         '("===HEAD===" is the current version):'
+    #     )
+    #     versioner.component_dags[component].show(
+    #         compact=compact, plain=plain, include_metadata=meta
+    #     )
+
+    @transaction
+    def code(
+        self, version_id: str, meta: bool = False, conn: Optional[sqlite3.Connection] = None
+    ):
+        # show a copy-pastable version of the code for a given version id. Plain
+        # by design.
+        result = self.get_code(version_id=version_id, show=False, meta=meta, conn=conn)
+        print(result)
+
+    @transaction
+    def get_code(
+        self,
+        version_id: str,
+        show: bool = True,
+        meta: bool = False,
+        conn: Optional[sqlite3.Connection] = None,
+    ) -> str:
+        versioner = self.get_versioner(conn=conn)
+        for dag in versioner.component_dags.values():
+            if version_id in dag.commits.keys():
+                text = dag.get_content(commit=version_id)
+                if show:
+                    print(text)
+                return text
+        for (
+            content_version,
+            version,
+        ) in versioner.get_flat_versions().items():
+            if version_id == content_version:
+                raw_string = versioner.present_dependencies(
+                    commits=version.semantic_expansion,
+                    include_metadata=meta,
+                )
+                if show:
+                    print(raw_string)
+                return raw_string
+        raise ValueError(f"version id {version_id} not found")
+
+    @transaction
+    def diff(
+        self,
+        id_1: str,
+        id_2: str,
+        context_lines: int = 2,
+        conn: Optional[sqlite3.Connection] = None,
+    ):
+        code_1: str = self.get_code(version_id=id_1, show=False, conn=conn)
+        code_2: str = self.get_code(version_id=id_2, show=False, conn=conn)
+        print(
+            _get_colorized_diff(current=code_1, new=code_2, context_lines=context_lines)
+        )
 
     ############################################################################
     ### user-facing functions
@@ -632,11 +936,22 @@ class Storage:
 
     def __enter__(self) -> "Storage":
         Context.current_context = Context(storage=self)
+        versioner, code_state = self.sync_code()
+        self.cached_versioner = versioner
+        self.code_state = code_state
         return self
 
     def __exit__(self, exc_type, exc_value, traceback) -> None:
         Context.current_context = None
-        self.commit()
+        try:
+            self.commit()
+        except Exception as e:
+            raise e
+        finally:
+            self.cached_versioner = None
+            self.code_state = None
+
     
 
 from .cf import ComputationFrame
+

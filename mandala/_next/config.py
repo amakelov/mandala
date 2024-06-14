@@ -1,7 +1,20 @@
 from .common_imports import *
 
+def get_mandala_path() -> Path:
+    import mandala
+
+    return Path(os.path.dirname(mandala.__file__))
 
 class Config:
+    func_interface_cls_name = "Op"
+    mandala_path = get_mandala_path()
+
+    try:
+        import PIL
+
+        has_pil = True
+    except ImportError:
+        has_pil = False
 
     try:
         import torch
@@ -9,6 +22,13 @@ class Config:
         has_torch = True
     except ImportError:
         has_torch = False
+    
+    try:
+        import rich
+
+        has_rich = True
+    except ImportError:
+        has_rich = False
 
 
 if Config.has_torch:

@@ -639,6 +639,11 @@ class FuncOp:
         input_causal_uids: Dict[str, str],
         semantic_version: Optional[str],
     ) -> str:
+        """
+        Combine the causal UIDs of the inputs, the semantic version of the call,
+        and the versioned internal name of the function to generate a unique
+        causal UID for the call.
+        """
         active_inputs = self.get_active_inputs(input_uids=input_uids)
         return Hashing.get_content_hash(
             obj=[

@@ -267,3 +267,36 @@ def parse_returns(
             assert nout == 1
             annotations_dict = {k: output_annotation for k in outputs_dict.keys()}
     return outputs_dict, annotations_dict
+
+
+def unwrap_decorators(
+    obj: Callable, strict: bool = True
+) -> Union[types.FunctionType, types.MethodType]:
+    while hasattr(obj, "__wrapped__"):
+        obj = obj.__wrapped__
+    if not isinstance(obj, (types.FunctionType, types.MethodType)):
+        msg = f"Expected a function or method, but got {type(obj)}"
+        if strict:
+            raise RuntimeError(msg)
+        else:
+            logger.debug(msg)
+    return obj
+
+def is_subdict(a: Dict, b: Dict) -> bool:
+    """
+    Check that all keys in `a` are in `b` with the same value.
+    """
+    return all((k in b and a[k] == b[k]) for k in a)
+
+def ask_user(question: str, valid_options: List[str]) -> str:
+    """
+    Ask the user a question and return their response.
+    """
+    prompt = f"{question} "
+    while True:
+        print(prompt)
+        response = input().strip().lower()
+        if response in valid_options:
+            return response
+        else:
+            print(f"Invalid response: {response}")
