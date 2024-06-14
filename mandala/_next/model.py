@@ -36,9 +36,9 @@ class Ref:
 
     def __repr__(self) -> str:
         if self.in_memory:
-            return f"Ref({self.obj}, hid={self.hid[:3]}...)"
+            return f"Ref({self.obj}, hid='{self.hid[:3]}...', cid='{self.cid[:3]}...')"
         else:
-            return f"Ref(hid={self.hid[:3]}..., in_memory={self.in_memory})"
+            return f"Ref(hid='{self.hid[:3]}...', cid='{self.cid[:3]}...', in_memory={self.in_memory})"
 
     def __hash__(self) -> int:
         return hash(self.hid)
@@ -164,7 +164,7 @@ class Call:
         self.outputs = outputs
 
     def __repr__(self) -> str:
-        return f"Call({self.op.name}, cid={self.hid[:3]}..., hid={self.hid[:3]}...)"
+        return f"Call({self.op.name}, cid='{self.cid[:3]}...', hid='{self.hid[:3]}...')"
 
     def detached(self) -> "Call":
         return Call(
@@ -377,6 +377,19 @@ def op(
 class Context:
 
     current_context: Optional["Context"] = None
+    _profiling_stats: Dict[str, float] = {
+        'total_time': 0.0,
+        'get_call_time': 0.0,
+        'call_exists_time': 0.0,
+    }
+
+    @staticmethod
+    def reset_profiling_stats():
+        Context._profiling_stats = {
+            'total_time': 0.0,
+            'get_call_time': 0.0,
+            'call_exists_time': 0.0,
+        }
 
     def __init__(self, storage: "Storage") -> None:
         self.storage = storage

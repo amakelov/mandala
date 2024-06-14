@@ -59,6 +59,7 @@ mandala.egg-info/*
 mandala/demos/data/
 mandala/__archive__
 scratchpad/
+mandala/scipy/
 
 # visualizations
 # Ignore files cached by Hypothesis

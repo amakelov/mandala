@@ -226,16 +226,20 @@ class InMemCallStorage:
     def __init__(self, df: Optional[pd.DataFrame] = None):
         if df is not None:
             self.df = df
+            # for faster lookups
+            self.call_hids = set(df.index.levels[0].unique())
         else:
             self.df = pd.DataFrame(columns=InMemCallStorage.COLUMNS).set_index(
                 ["call_history_id", "name"]
             )
+            self.call_hids = set()
         
     def __len__(self) -> int:
         return self.df.index.get_level_values(0).nunique()
 
     def save(self, call: Call):
-        if call.hid in self.df.index.levels[0]:
+        # if call.hid in self.df.index.levels[0]:
+        if call.hid in self.call_hids:
             return
         for k, v in call.inputs.items():
             self.df.loc[(call.hid, k), :] = ("in", call.cid, v.cid, v.hid, call.op.name)
@@ -247,6 +251,7 @@ class InMemCallStorage:
                 v.hid,
                 call.op.name,
             )
+        self.call_hids.add(call.hid)
 
     def drop(self, hid: str):
         """
@@ -258,9 +263,11 @@ class InMemCallStorage:
         self.df = self.df.drop(index=hid, level=0)
         #! this step is crucial, because otherwise the old `hid` remains in the index
         self.df.index = self.df.index.remove_unused_levels()
+        self.call_hids.remove(hid)
 
     def exists(self, call_history_id: str) -> bool:
-        return call_history_id in self.df.index.levels[0]
+        # return call_history_id in self.df.index.levels[0]
+        return call_history_id in self.call_hids
     
     def mget_data(self, call_hids: List[str]) -> List[Dict[str, Any]]:
         idx = pd.IndexSlice

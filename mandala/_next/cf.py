@@ -820,7 +820,8 @@ class ComputationFrame:
         if varnames is None:  # full expansion until fixed point
             while True:
                 current_size = len(res.nodes)
-                sources = res.sources
+                # sources = res.sources
+                sources = res.vs.keys()
                 res.expand_back(sources, inplace=True, skip_existing=skip_existing)
                 new_size = len(res.nodes)
                 if new_size == current_size:
@@ -853,7 +854,8 @@ class ComputationFrame:
         if varnames is None:  # full expansion until fixed point
             while True:
                 current_size = len(res.nodes)
-                sinks = res.sinks
+                # sinks = res.sinks
+                sinks = res.vs.keys()
                 res.expand_forward(sinks, inplace=True, skip_existing=skip_existing)
                 new_size = len(res.nodes)
                 if new_size == current_size:

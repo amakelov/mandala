@@ -61,6 +61,7 @@ class Storage:
     def preload_calls(self):
         df = self.call_storage.get_df()
         self.call_cache.df = df
+        self.call_cache.call_hids = set(df.index.levels[0].unique())
     
     def preload_shapes(self):
         self.shapes.cache = self.shapes.persistent.load_all()
@@ -480,6 +481,7 @@ class Storage:
         Main function to call an op, operating on the representations used
         internally by the storage.
         """
+        start_time = time.time()
         ### wrap the inputs
         if not op.__structural__: logger.debug(f"Calling {op.name} with input {list(inputs.keys())}.")
         wrapped_inputs = {}
@@ -491,9 +493,19 @@ class Storage:
             if not op.__structural__: logger.debug(f"Collected {len(input_calls)} calls for inputs.")
         ### check for the call
         call_hid = op.get_call_history_id(wrapped_inputs)
-        if self.exists_call(hid=call_hid):
+        call_exists_start = time.time()
+        call_exists = self.exists_call(hid=call_hid)
+        call_exists_end = time.time()
+        Context._profiling_stats['call_exists_time'] += call_exists_end - call_exists_start
+        if call_exists:
+            # ! TODO: do the lookup by content ID, not history ID!!!
             if not op.__structural__: logger.debug(f"Call to {op.name} with hid {call_hid} already exists.")
+            get_call_start = time.time()
             main_call = self.get_call(hid=call_hid, lazy=True)
+            get_call_end = time.time()
+            Context._profiling_stats['get_call_time'] += get_call_end - get_call_start
+            end_time = time.time()
+            Context._profiling_stats['total_time'] += end_time - start_time
             return main_call.outputs, main_call, input_calls
 
         ### execute the call if it doesn't exist
@@ -563,6 +575,8 @@ class Storage:
             inputs=wrapped_inputs,
             outputs=wrapped_outputs,
         )
+        end_time = time.time()
+        Context._profiling_stats['total_time'] += end_time - start_time
         return main_call.outputs, main_call, input_calls + output_calls
 
     ############################################################################
