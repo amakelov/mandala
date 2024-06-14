@@ -220,7 +220,6 @@ class Storage:
         # cache_datas = [self.call_cache.get_data(hid) for hid in tqdm(cache_part)]
         cache_datas = self.call_cache.mget_data(call_hids=cache_part)
         db_datas = self.call_storage.mget_data(call_hids=db_part)
-        sess.d()
         call_datas = merge_lists(cache_datas, db_datas, mask)
 
         calls = []

@@ -31,7 +31,11 @@ def get_reverse_proj(call: Call) -> Callable[[str], Set[str]]:
 
 class ComputationFrame:
     """
-    A view of a slice of storage
+    A view of a slice of storage.
+
+    - use `.info()` to get summary information about this `ComputationFrame`
+    - use `.info(*variables)` or `.info(*functions)` to get information 
+    about specific variables/functions in this `ComputationFrame`
     """
 
     def __init__(
@@ -508,7 +512,7 @@ class ComputationFrame:
             calls=calls,
         )
 
-    def downstream(self, *nodes: str) -> "ComputationFrame":
+    def downstream(self, *nodes: str, how: Literal["strong", "weak"] = "strong") -> "ComputationFrame":
         """
         Return the sub-`ComputationFrame` representing the computations
         downstream of the elements in the given `nodes`.
@@ -533,11 +537,11 @@ class ComputationFrame:
         downstream_view = res.get_reachable_elts(
             initial_state={node: res.sets[node] for node in nodes},
             direction="forward",
-            how="strong",
+            how=how,
         )
         return res.select_subsets(downstream_view)
 
-    def upstream(self, *nodes: str) -> "ComputationFrame":
+    def upstream(self, *nodes: str, how: Literal["strong", "weak"] = "strong") -> "ComputationFrame":
         """
         Return the sub-`ComputationFrame` representing the computations upstream
         of the elements in the given `nodes`.
@@ -555,17 +559,20 @@ class ComputationFrame:
         upstream_view = res.get_reachable_elts(
             initial_state={node: res.sets[node] for node in nodes},
             direction="back",
-            how="strong",
+            how=how,
         )
         return res.select_subsets(upstream_view)
 
-    def midstream(self, *nodes: str) -> "ComputationFrame":
+    def midstream(self, *nodes: str, how: Literal["strong", "weak"] = "strong") -> "ComputationFrame":
         """
-        Get the subprogram "spanned by" the given nodes, i.e. consisting of all
-        nodes on paths connecting the given nodes.
+        Get the subprogram "spanned by" the given nodes. 
 
-        This is done by first restricting to the graph induced by the given
-        nodes, then keeping only `downstream()` of the sources of this subgraph.
+        Specifically, this means:
+        - obtain all nodes on paths between the given nodes;
+        - restrict to the subgraph induced by these nodes;
+        - restrict to the computations which are reachable (in a sense
+        controlled by the `how` parameter) from **the source elements in this
+        subgraph that belong to a node in `nodes`**. 
         """
         paths = set()
         for start_node in nodes:
@@ -573,8 +580,19 @@ class ComputationFrame:
                 if start_node != end_node:
                     paths |= self.get_all_vertex_paths(start_node, end_node)
         midstream_nodes = get_nullable_union(*[set(path) for path in paths])
-        res = self.select_nodes(midstream_nodes)
-        return res.downstream(*res.sources)
+        logging.debug(f'Selected {midstream_nodes} from {self.nodes}')
+        # first, restrict to the subgraph induced by the midstream nodes
+        pre_res = self.select_nodes(midstream_nodes)
+        # now, figure out the source elements
+        source_elts = {k: v for k, v in pre_res.get_source_elts().items() if k in nodes}
+        # compute reachability
+        res_view = pre_res.get_reachable_elts(
+            initial_state=source_elts, 
+            direction="forward",
+            how=how,
+        )
+        return pre_res.select_subsets(res_view)
+        # return res.downstream(*res.sources, how=how)
 
     ############################################################################
     ### union and intersection (over shared namespaces)
@@ -777,8 +795,6 @@ class ComputationFrame:
                     dual_side_labels_list.append(
                         set([name_projector(name) for name in call.inputs])
                     )
-                    if call.op.name == "__make_list__":
-                        sess.d()
                 dual_side_labels = get_nullable_union(*dual_side_labels_list)
             elif side_to_glue == "inputs":
                 # dual_side_labels = get_nullable_union(*[set(call.outputs.keys()) for call in group_calls])
@@ -976,10 +992,12 @@ class ComputationFrame:
         *nodes: str,
         values: Literal["refs", "objs"] = "objs",
         verbose: bool = True,
-        include_calls: bool = False,
+        include_calls: bool = True,
     ) -> pd.DataFrame:
         """
-        A general method for extracting data from the computation frame:
+        A general method for extracting data from the computation frame.
+
+        It works as follows:
         - finds the nodes on paths between any two nodes in `nodes`
         - among these nodes, considers only the elements that are results of
         (partial) computations starting from the inputs (sources) of this
@@ -991,23 +1009,24 @@ class ComputationFrame:
         elif len(nodes) == 1:
             values = list(self.get_var_values(nodes[0]))
             return pd.DataFrame(values, columns=[nodes[0]])
-        cf = self.midstream(*nodes)
+        restricted_cf = self.midstream(*nodes)
         if verbose:
             print(
-                f"Extracting tuples from the computation graph:\n{cf.get_graph_desc()}..."
+                f"Extracting tuples from the computation graph:\n{restricted_cf.get_graph_desc()}..."
             )
         vnames = {
             x
-            for x, sink_elts in cf.get_sink_elts().items()
-            if x in cf.vnames and sink_elts
+            for x, sink_elts in restricted_cf.get_sink_elts().items()
+            if x in restricted_cf.vnames and sink_elts
         }
-        df = cf.get_joint_history_df(
+        df = restricted_cf.get_joint_history_df(
             vnames=vnames, how="outer", include_calls=include_calls
         )[list(nodes)]
         if values == "refs":
             res = df
         elif values == "objs":
-            res = cf.eval_df(df)
+            res = restricted_cf.eval_df(df)
+        sess.d()
         return self._sort_df(res)
 
     ############################################################################
@@ -1171,7 +1190,7 @@ class ComputationFrame:
         self,
         vnames: Iterable[str],
         how: Literal["inner", "outer"] = "outer",
-        include_calls: bool = False,
+        include_calls: bool = True,
     ) -> pd.DataFrame:
         def extract_hids(
             x: Union[None, Ref, Call, Set[Ref], Set[Call]]
@@ -1578,15 +1597,14 @@ class ComputationFrame:
         print(self.get_graph_desc())
 
     def __repr__(self) -> str:
-        # well, at least it's simple
         graph_desc = self.get_graph_desc()
         graph_desc = textwrap.indent(graph_desc, "    ")
         summary_line = f"{self.__class__.__name__} with {len(self.vs)} variable(s) ({len(self.refs)} unique refs), {len(self.fs)} operation(s) ({len(self.calls)} unique calls)"
         graph_title_line = "Computational graph:"
-        info_line = "Use `.info()` to get more information about the CF, or `.info(*variable_name)` and `.info(*operation_name)` to get information about specific variable(s)/operation(s)"
-        info_lines = textwrap.wrap(info_line, width=80)
-        info_lines = "\n".join(info_lines)
-        return f"{summary_line}\n{graph_title_line}\n{graph_desc}\n{info_lines}"
+        # info_line = "Use `.info()` to get more information about the CF, or `.info(*variable_name)` and `.info(*operation_name)` to get information about specific variable(s)/operation(s)"
+        # info_lines = textwrap.wrap(info_line, width=80)
+        # info_lines = "\n".join(info_lines)
+        return f"{summary_line}\n{graph_title_line}\n{graph_desc}"
 
     def get_var_stats(self) -> pd.DataFrame:
         rows = []
