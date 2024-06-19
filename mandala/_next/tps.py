@@ -14,7 +14,9 @@ class MList(List[T], Generic[T]):
         return "Type annotation for `mandala` lists"
 
 
-class MDict(Dict[str, T], Generic[T]):
+_KT = TypeVar("_KT")
+_VT = TypeVar("_VT")
+class MDict(Dict[_KT, _VT], Generic[_KT, _VT]):
     def identify(self):
         return "Type annotation for `mandala` dictionaries"
 

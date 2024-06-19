@@ -376,6 +376,7 @@ class ComputationFrame:
                     if any(
                         self.calls[call_hid].inputs[name].hid in hids
                         for name in self.get_names_projecting_to(call_hid, label)
+                        if name in self.calls[call_hid].inputs.keys()
                     )
                 }
             else:  # this is an op node; we are looking for the outputs of the calls that have the hids as inputs
@@ -1026,7 +1027,6 @@ class ComputationFrame:
             res = df
         elif values == "objs":
             res = restricted_cf.eval_df(df)
-        sess.d()
         return self._sort_df(res)
 
     ############################################################################
@@ -1113,6 +1113,7 @@ class ComputationFrame:
                     inv_proj_input_names = creator_inv_proj(edge_label)
                     for inv_input_name in inv_proj_input_names:
                         if (
+                            inv_input_name in creator_call.inputs and
                             creator_call.inputs[inv_input_name].hid
                             in self.vs[edge_source]
                         ):

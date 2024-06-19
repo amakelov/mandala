@@ -594,8 +594,8 @@ class Storage:
             op=op,
             pre_call_uid=pre_call_id,
             inputs=wrapped_inputs,
-            code_state=self.guess_code_state(),
-            versioner=self.cached_versioner,
+            code_state=self.guess_code_state() if self.versioned else None,
+            versioner=self.cached_versioner if self.versioned else None,
         )
         tracer_option = (
             self.cached_versioner.make_tracer() if self.versioned else None
@@ -603,7 +603,6 @@ class Storage:
 
         call_exists = (call_option is not None)
         if call_exists:
-            print(f"Call to {op.name} with hid {call_option.hid} already exists.")
             call_hid = call_option.hid
             # ! TODO: do the lookup by content ID, not history ID!!!
             if not op.__structural__: logger.debug(f"Call to {op.name} with hid {call_hid} already exists.")
@@ -675,8 +674,6 @@ class Storage:
             if self.versioned
             else (None, None)
         )
-
-        print(f"Content version: {content_version}, Semantic version: {semantic_version}, pre_call_id: {pre_call_id}")
 
         # wrap the outputs
         outputs_dict, outputs_annotations = parse_returns(
@@ -936,9 +933,10 @@ class Storage:
 
     def __enter__(self) -> "Storage":
         Context.current_context = Context(storage=self)
-        versioner, code_state = self.sync_code()
-        self.cached_versioner = versioner
-        self.code_state = code_state
+        if self.versioned:
+            versioner, code_state = self.sync_code()
+            self.cached_versioner = versioner
+            self.code_state = code_state
         return self
 
     def __exit__(self, exc_type, exc_value, traceback) -> None:
