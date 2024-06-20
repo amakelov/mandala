@@ -286,9 +286,17 @@ class ComputationFrame:
         pass
 
     def in_edges(self, node: str) -> Set[Tuple[str, str, str]]:
+        """
+        Return (source, destination, label) tuples for all edges pointing to the
+        given node.
+        """
         return {(src, dst, label) for src, dst, label in self.edges() if dst == node}
 
     def out_edges(self, node: str) -> Set[Tuple[str, str, str]]:
+        """
+        Return (source, destination, label) tuples for all edges pointing from
+        the given node.
+        """
         return {(src, dst, label) for src, dst, label in self.edges() if src == node}
 
     @property
@@ -296,20 +304,32 @@ class ComputationFrame:
         return {node for node in self.vs.keys() if len(self.inp[node]) == 0}
 
     def get_source_elts(self) -> Dict[str, Set[str]]:
-        return {
-            node: {hid for hid in self.sets[node] if hid not in self.creator}
-            for node in self.nodes
-        }
+        """
+        Get a view of the elements of each node which do not have an element
+        connected to them from an input node.
+        """
+        res = {}
+        for node in self.nodes:
+            in_edges = self.in_edges(node)
+            hids_with_creators = set()
+            for src, dst, label in in_edges:
+                hids_with_creators |= self.get_adj_elts_edge((src, dst, label), self.sets[src], "forward")
+            res[node] = self.sets[node] - hids_with_creators
+        return res
 
     @property
     def sinks(self) -> Set[str]:
         return {node for node in self.vs.keys() if len(self.out[node]) == 0}
 
     def get_sink_elts(self) -> Dict[str, Set[str]]:
-        return {
-            node: {hid for hid in self.sets[node] if hid not in self.consumers}
-            for node in self.nodes
-        }
+        res = {}
+        for node in self.nodes:
+            out_edges = self.out_edges(node)
+            hids_with_consumers = set()
+            for src, dst, label in out_edges:
+                hids_with_consumers |= self.get_adj_elts_edge((src, dst, label), self.sets[dst], "back")
+            res[node] = self.sets[node] - hids_with_consumers
+        return res
 
     ############################################################################
     ### core "low-level" interface
@@ -380,7 +400,9 @@ class ComputationFrame:
         self, node: str, hids: Set[str], direction: Literal["back", "forward", "both"]
     ) -> Dict[str, Set[str]]:
         """
-        Return the elements connected to the given elements along the given direction
+        Given a node, and a subset of the elements in this node, return a view
+        of the elements of the adjacent nodes (in the given direction(s)) that
+        are connected to the given elements.
         """
         res = {}
         if direction in ["back", "both"]:

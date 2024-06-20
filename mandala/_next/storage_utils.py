@@ -137,7 +137,6 @@ class SQLiteDictStorage(DictStorage):
     def set(
         self, key: str, value: Any, conn: Optional[sqlite3.Connection] = None
     ) -> None:
-        sess.d()
         conn.execute(
             f"INSERT OR REPLACE INTO {self.table} (key, value) VALUES (?, ?)",
             (key, serialize(value)),

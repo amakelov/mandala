@@ -591,7 +591,8 @@ class Storage:
     
     def parse_args(self, sig: inspect.Signature, args, kwargs, apply_defaults: bool) -> Tuple[inspect.BoundArguments, Dict[str, Any], Dict[str, Any]]:
         """
-        Figure out the inputs we should pass to storage functions, their type
+        Given the inputs passed to an @op call (could be wrapped or unwrapped),
+        figure out the inputs we should pass to storage functions, their type
         annotations, and the inputs we should pass to function calls.
          
         Handles ignored values and/or new arg defaults that should be ignored.
@@ -715,6 +716,8 @@ class Storage:
             raw_values = {k: self.unwrap(v) for k, v in wrapped_inputs.items()}
             #! call the function
             args, kwargs = bound_arguments.args, bound_arguments.kwargs
+            args = self.unwrap(args)
+            kwargs = self.unwrap(kwargs)
 
             if tracer_option is not None:
                 tracer = tracer_option
@@ -796,6 +799,7 @@ class Storage:
             semantic_version=semantic_version,
             content_version=content_version,
         )
+        sess.d()
         return main_call.outputs, main_call, input_calls + output_calls
 
     ############################################################################
@@ -988,13 +992,6 @@ class Storage:
         self, __op__: Op, args, kwargs, __config__: Optional[dict] = None
     ) -> Union[Tuple[Ref, ...], Ref]:
         __config__ = {} if __config__ is None else __config__
-        # raw_inputs, input_annotations = parse_args(
-        #     sig=inspect.signature(__op__.f),
-        #     args=args,
-        #     kwargs=kwargs,
-        #     apply_defaults=True,
-        # )
-
         bound_arguments, storage_inputs, storage_annotations = self.parse_args(
             sig=inspect.signature(__op__.f),
             args=args,
