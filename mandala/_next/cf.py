@@ -148,16 +148,40 @@ class ComputationFrame:
         del self.inp[vname]
         del self.out[vname]
 
-    def rename_var(self, vname: str, new_vname: str):
-        self.vs[new_vname] = self.vs[vname]
-        self.inp[new_vname] = self.inp[vname]
-        self.out[new_vname] = self.out[vname]
-        del self.vs[vname]
-        del self.inp[vname]
-        del self.out[vname]
-        for ref in self.vs[new_vname]:
-            self.refinv[ref].remove(vname)
-            self.refinv[ref].add(new_vname)
+    def rename_var(self, vname: str, new_vname: str, inplace: bool = False) -> "ComputationFrame":
+        res = self if inplace else self.copy()
+        res.vs[new_vname] = res.vs[vname]
+        res.inp[new_vname] = res.inp[vname]
+        res.out[new_vname] = res.out[vname]
+        del res.vs[vname]
+        del res.inp[vname]
+        del res.out[vname]
+        # now, rename the node in the adjacency lists
+        for node in res.nodes:
+            for neighbor_nodes in res.inp[node].values():
+                if vname in neighbor_nodes:
+                    neighbor_nodes.remove(vname)
+                    neighbor_nodes.add(new_vname)
+            for neighbor_nodes in res.out[node].values():
+                if vname in neighbor_nodes:
+                    neighbor_nodes.remove(vname)
+                    neighbor_nodes.add(new_vname)
+        for ref in res.vs[new_vname]:
+            res.refinv[ref].remove(vname)
+            res.refinv[ref].add(new_vname)
+        return res
+    
+    def rename(self, 
+               vars: Optional[Dict[str, str]] = None,
+               funcs: Optional[Dict[str, str]] = None,
+               inplace: bool = False) -> "ComputationFrame":
+        res = self if inplace else self.copy()
+        if vars is not None:
+            for vname, new_vname in vars.items():
+                res.rename_var(vname, new_vname, inplace=True)
+        if funcs is not None:
+            raise NotImplementedError
+        return res
 
     def add_func(
         self,
