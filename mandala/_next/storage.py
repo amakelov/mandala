@@ -4,8 +4,8 @@ import prettytable
 import datetime
 from .model import *
 import sqlite3
-from .model import __make_list__, __get_list_item__, __make_dict__, __get_dict_value__
-from .utils import dataframe_to_prettytable
+from .model import __make_list__, __get_list_item__, __make_dict__, __get_dict_value__, _Ignore, _NewArgDefault
+from .utils import dataframe_to_prettytable, parse_returns
 from .viz import _get_colorized_diff
 from .deps.versioner import Versioner, CodeState
 from .deps.utils import get_dep_key_from_func, extract_func_obj
@@ -450,7 +450,7 @@ class Storage:
         struct_inputs = self.get_struct_inputs(tp=tp, val=val)
         struct_tps = self.get_struct_tps(tp=tp, struct_inputs=struct_inputs)
         res, main_call, calls = self.call_internal(
-            op=struct_builder, inputs=struct_inputs, input_tps=struct_tps
+            op=struct_builder, storage_inputs=struct_inputs, storage_tps=struct_tps
         )
         calls.append(main_call)
         output_ref = main_call.outputs[list(main_call.outputs.keys())[0]]
@@ -472,8 +472,8 @@ class Storage:
             for i, elt in enumerate(ref):
                 getitem_dict, item_call, _ = self.call_internal(
                     op=__get_list_item__,
-                    inputs={"obj": ref, "attr": i},
-                    input_tps={"obj": tp, "attr": AtomType()},
+                    storage_inputs={"obj": ref, "attr": i},
+                    storage_tps={"obj": tp, "attr": AtomType()},
                 )
                 new_elt = getitem_dict["output_0"]
                 destr_calls.append(item_call)
@@ -489,8 +489,8 @@ class Storage:
             for k, v in ref.items():
                 getvalue_dict, value_call, _ = self.call_internal(
                     op=__get_dict_value__,
-                    inputs={"obj": ref, "key": k},
-                    input_tps={"obj": tp, "key": tp.key},
+                    storage_inputs={"obj": ref, "key": k},
+                    storage_tps={"obj": tp, "key": tp.key},
                 )
                 new_v = getvalue_dict["output_0"]
                 destr_calls.append(value_call)
@@ -550,29 +550,126 @@ class Storage:
             for k, v in call_prototype.outputs.items():
                 v.hid = output_history_ids[k]
             return call_prototype
-        print(f"Could not find a call to {op.name} with hid {call_hid} or cid {call_cid}.")
+        logging.debug(f"Could not find a call to {op.name} with hid {call_hid} or cid {call_cid}.")
         return None
-
+    
+    def get_defaults(self, f: Callable) -> Dict[str, Any]:
+        return {
+            k: v.default
+            for k, v in inspect.signature(f).parameters.items()
+            if v.default is not inspect.Parameter.empty
+        }
+    
+    def preprocess_args_kwargs(self,
+                               f: Callable,
+                               args: Tuple[Any, ...],
+                               kwargs: Dict[str, Any]):
+        """
+        Find which inputs should be ignored by the storage, and replace them
+        with their underlying objects.
+        """
+        sig = inspect.signature(f)
+        defaults = self.get_defaults(f)
+        bound_args = sig.bind(*args, **kwargs)
+        bound_args.apply_defaults()
+        ignored_inputs = set()
+        for k, v in bound_args.arguments.items():
+            if isinstance(v, _Ignore):
+                ignored_inputs.add(k)
+        # now, check for defaults we should ignore
+        for k, v in defaults.items():
+            given_value = bound_args.arguments[v]
+            if isinstance(given_value, _Ignore):
+                ignored_inputs.add(k)
+            elif isinstance(v, _NewArgDefault):
+                if isinstance(given_value, Ref):
+                    if self.unwrap(given_value) == v.value:
+                        ignored_inputs.add(k)
+                else:
+                    if given_value == v.value:
+                        ignored_inputs.add(k)
+    
+    def parse_args(self, sig: inspect.Signature, args, kwargs, apply_defaults: bool) -> Tuple[inspect.BoundArguments, Dict[str, Any], Dict[str, Any]]:
+        """
+        Figure out the inputs we should pass to storage functions, their type
+        annotations, and the inputs we should pass to function calls.
+         
+        Handles ignored values and/or new arg defaults that should be ignored.
+        """
+        var_positional = [p for p in sig.parameters.values() if p.kind == p.VAR_POSITIONAL]
+        var_positional = var_positional[0] if len(var_positional) > 0 else None
+        var_keyword = [p for p in sig.parameters.values() if p.kind == p.VAR_KEYWORD]
+        var_keyword = var_keyword[0] if len(var_keyword) > 0 else None
+        default_values = {k: v.default for k, v in sig.parameters.items() if v.default is not inspect.Parameter.empty}
+        bound_arguments = sig.bind(*args, **kwargs)
+        if apply_defaults:
+            bound_arguments.apply_defaults()
+        
+        storage_inputs = {}
+        storage_annotations = {}
+        
+        for k, v in bound_arguments.arguments.items():
+            if var_positional is not None and k == var_positional.name:
+                # there are no defaults here
+                # we must unwrap any _Ignore instances
+                new_v = [arg.value if isinstance(arg, _Ignore) else arg for arg in v]
+                ignored_mask = [True if isinstance(arg, _Ignore) else False for arg in v]
+                names = [f'{k}_{i}' for i in range(len(new_v))]
+                #! update the bound arguments inplace
+                bound_arguments.arguments[k] = tuple(new_v)
+                for name, val, ignored in zip(names, new_v, ignored_mask):
+                    if not ignored:
+                        storage_inputs[name] = val
+                        storage_annotations[name] = var_positional.annotation
+            elif var_keyword is not None and k == var_keyword.name:
+                # there are no defaults here either
+                new_v = {k: arg.value if isinstance(arg, _Ignore) else arg for k, arg in v.items()}
+                ignored_mask = {k: True if isinstance(arg, _Ignore) else False for k, arg in v.items()}
+                bound_arguments.arguments[k] = new_v
+                for name, val in new_v.items():
+                    if not ignored_mask[name]:
+                        storage_inputs[name] = val
+                        storage_annotations[name] = var_keyword.annotation
+            else:
+                # could have a default
+                if isinstance(v, _Ignore):
+                    # regardless of defaults, any _Ignore instance should be ignored
+                    bound_arguments.arguments[k] = v.value
+                elif k in default_values and isinstance(default_values[k], _NewArgDefault):
+                    if isinstance(v, Ref) and self.unwrap(v) == default_values[k].value:
+                        # the value is wrapped
+                        bound_arguments.arguments[k] = default_values[k].value
+                    elif v == default_values[k].value:
+                        # the value is unwrapped
+                        bound_arguments.arguments[k] = default_values[k].value
+                    else:
+                        # the given value is different from the default
+                        storage_inputs[k] = v
+                        storage_annotations[k] = sig.parameters[k].annotation
+                else:
+                    # this is a regular argument
+                    storage_inputs[k] = v
+                    storage_annotations[k] = sig.parameters[k].annotation
+        return bound_arguments, storage_inputs, storage_annotations
+        
     def call_internal(
         self,
         op: Op,
-        inputs: Dict[str, Any],
-        input_tps: Dict[str, Type],
-        #! a little hack to preserve original function behavior
-        _original_args: Optional[Dict[str, Any]] = None,
-        _original_kwargs: Optional[Dict[str, Any]] = None,
+        storage_inputs: Dict[str, Any],
+        storage_tps: Dict[str, Type],
+        bound_arguments: Optional[inspect.BoundArguments] = None,
     ) -> Tuple[Dict[str, Ref], Call, List[Call]]:
         """
         Main function to call an op, operating on the representations used
         internally by the storage.
         """
-        start_time = time.time()
         ### wrap the inputs
-        if not op.__structural__: logger.debug(f"Calling {op.name} with input {list(inputs.keys())}.")
+        if not op.__structural__: logger.debug(f"Calling {op.name} with args {bound_arguments}.")
+
         wrapped_inputs = {}
         input_calls = []
-        for k, v in inputs.items():
-            wrapped_inputs[k], struct_calls = self.construct(tp=input_tps[k], val=v)
+        for k, v in storage_inputs.items():
+            wrapped_inputs[k], struct_calls = self.construct(tp=storage_tps[k], val=v)
             input_calls.extend(struct_calls)
         if len(input_calls) > 0:
             if not op.__structural__: logger.debug(f"Collected {len(input_calls)} calls for inputs.")
@@ -584,12 +681,7 @@ class Storage:
             suspended_trace_obj = None
 
         ### check for the call
-        # call_hid = op.get_call_history_id(wrapped_inputs)
         pre_call_id = op.get_pre_call_id(wrapped_inputs)
-        # call_exists_start = time.time()
-        # call_exists = self.exists_call(hid=call_hid)
-        # call_exists_end = time.time()
-        # Context._profiling_stats['call_exists_time'] += call_exists_end - call_exists_start
         call_option = self.lookup_call(
             op=op,
             pre_call_uid=pre_call_id,
@@ -604,9 +696,7 @@ class Storage:
         call_exists = (call_option is not None)
         if call_exists:
             call_hid = call_option.hid
-            # ! TODO: do the lookup by content ID, not history ID!!!
             if not op.__structural__: logger.debug(f"Call to {op.name} with hid {call_hid} already exists.")
-            # main_call = self.get_call(hid=call_hid, lazy=True)
             main_call = call_option
             return main_call.outputs, main_call, input_calls
 
@@ -623,13 +713,8 @@ class Storage:
             #! guard against side effects
             cids_before = {k: v.cid for k, v in wrapped_inputs.items()}
             raw_values = {k: self.unwrap(v) for k, v in wrapped_inputs.items()}
-            if _original_args is not None and _original_kwargs is not None:
-                args, kwargs = _original_args, _original_kwargs
-                args = tuple([self.unwrap(v) for v in args])
-                kwargs = {k: self.unwrap(v) for k, v in kwargs.items()}
-            else:
-                args, kwargs = dump_args(sig=sig, inputs=raw_values)
             #! call the function
+            args, kwargs = bound_arguments.args, bound_arguments.kwargs
 
             if tracer_option is not None:
                 tracer = tracer_option
@@ -646,7 +731,7 @@ class Storage:
                 # capture changes in the inputs; TODO: this is hacky; ideally, we would
                 # avoid calling `construct` and instead recurse on the values, looking for differences.
                 cids_after = {
-                    k: self.construct(tp=input_tps[k], val=v)[0].cid
+                    k: self.construct(tp=storage_tps[k], val=v)[0].cid
                     for k, v in raw_values.items()
                 }
                 changed_inputs = {k for k in cids_before if cids_before[k] != cids_after[k]}
@@ -711,8 +796,6 @@ class Storage:
             semantic_version=semantic_version,
             content_version=content_version,
         )
-        end_time = time.time()
-        Context._profiling_stats['total_time'] += end_time - start_time
         return main_call.outputs, main_call, input_calls + output_calls
 
     ############################################################################
@@ -905,21 +988,28 @@ class Storage:
         self, __op__: Op, args, kwargs, __config__: Optional[dict] = None
     ) -> Union[Tuple[Ref, ...], Ref]:
         __config__ = {} if __config__ is None else __config__
-        raw_inputs, input_annotations = parse_args(
+        # raw_inputs, input_annotations = parse_args(
+        #     sig=inspect.signature(__op__.f),
+        #     args=args,
+        #     kwargs=kwargs,
+        #     apply_defaults=True,
+        # )
+
+        bound_arguments, storage_inputs, storage_annotations = self.parse_args(
             sig=inspect.signature(__op__.f),
             args=args,
             kwargs=kwargs,
             apply_defaults=True,
         )
-        input_tps = {
-            k: Type.from_annotation(annotation=v) for k, v in input_annotations.items()
+
+        storage_tps = {
+            k: Type.from_annotation(annotation=v) for k, v in storage_annotations.items()
         }
         res, main_call, calls = self.call_internal(
             op=__op__,
-            inputs=raw_inputs,
-            input_tps=input_tps,
-            _original_args=args,
-            _original_kwargs=kwargs,
+            storage_inputs = storage_inputs,
+            bound_arguments = bound_arguments,
+            storage_tps=storage_tps,
         )
         if __config__.get("save_calls", False):
             self.save_call(main_call)

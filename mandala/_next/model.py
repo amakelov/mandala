@@ -7,11 +7,7 @@ from typing import Literal
 from .tps import *
 from .config import *
 from .utils import (
-    parse_args,
-    dump_args,
     parse_output_name,
-    dump_output_name,
-    parse_returns,
 )
 from .utils import serialize, deserialize, get_content_hash
 
@@ -60,15 +56,33 @@ class AtomRef(Ref):
         return "Atom" + super().__repr__()
 
 
-
-
-
-class NewArgDefault:
+class _Ignore:
     """
-    A class for defaults that should be ignored when computing the hash of a function call.
+    Used to mark values that should be ignored by the storage, but still
+    passed to the function. In this case, the wrapped value `value` will be 
+    directly passed to the function.
+    """
+    def __init__(self, value: Any = None) -> None:
+        self.value = value
+
+class _NewArgDefault(_Ignore):
+    """
+    Like `_Ignore`, but should be used as default value when adding new
+    arguments to functions to enable backwards compatibility.
+
+    Has the additional effect that, if the default value is
+    `_NewArgDefault(obj)`, then when the function is called with `obj`, the
+    value of the argument will also be ignored by the storage.
     """
     pass
 
+    
+T = TypeVar("T")
+def Ignore(value: T = None) -> T:
+    return _Ignore(value)
+
+def NewArgDefault(value: T = None) -> T:
+    return _NewArgDefault(value)
 
 
 class Op:
@@ -100,7 +114,7 @@ class Op:
         return self.name
 
     def _get_hashable_inputs(self, inputs: Dict[str, Ref]) -> Dict[str, Any]:
-        return {k: v for k, v in inputs.items() if not isinstance(v.obj, NewArgDefault)}
+        return {k: v for k, v in inputs.items() if not isinstance(v.obj, _Ignore)}
 
     def get_call_history_id(self,
                             inputs: Dict[str, Ref],
@@ -247,7 +261,13 @@ class DictRef(Ref):
     
     def __getitem__(self, key: str) -> Ref:
         assert self.in_memory
-        return self.obj[key.obj]
+        if isinstance(key, str):
+            return self.obj[key]
+        elif isinstance(key, Ref):
+            assert key.in_memory
+            return self.obj[key.obj]
+        else:
+            raise ValueError(key)
     
     def __repr__(self) -> str:
         return "Dict" + super().__repr__()

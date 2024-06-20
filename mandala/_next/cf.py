@@ -42,31 +42,15 @@ class ComputationFrame:
         self,
         storage: "Storage",
         # graph schema
-        inp: Dict[
-            str, Dict[str, Set[str]]
-        ] = None,  # node name -> input name -> {node name}
-        out: Dict[
-            str, Dict[str, Set[str]]
-        ] = None,  # node name -> output name -> {node name}
+        inp: Dict[str, Dict[str, Set[str]]] = None,  # node name -> input name -> {node name}
+        out: Dict[str, Dict[str, Set[str]]] = None,  # node name -> output name -> {node name}
         # graph instance data
-        vs: Dict[
-            str, Set[str]
-        ] = None,  # variable name -> {history_id}: the set of refs in the variable
-        fs: Dict[
-            str, Set[str]
-        ] = None,  # function name -> {history_id}: the set of calls in the function
-        refinv: Dict[
-            str, Set[str]
-        ] = None,  # (ref) history_id -> {variable name}: the set of variables containing the ref
-        callinv: Dict[
-            str, Set[str]
-        ] = None,  # (call) history_id -> {function name}: the set of functions containing the call
-        creator: Dict[
-            str, str
-        ] = None,  # (ref) history_id -> (call) history_id: the call that created the ref, if any
-        consumers: Dict[
-            str, Set[str]
-        ] = None,  # (ref) history_id -> {(call) history_id}: the calls that consume the ref
+        vs: Dict[str, Set[str]] = None,  # variable name -> {history_id}: the set of refs in the variable
+        fs: Dict[str, Set[str]] = None,  # function name -> {history_id}: the set of calls in the function
+        refinv: Dict[str, Set[str]] = None,  # (ref) history_id -> {variable name}: the set of variables containing the ref
+        callinv: Dict[str, Set[str]] = None,  # (call) history_id -> {function name}: the set of functions containing the call
+        creator: Dict[str, str] = None,  # (ref) history_id -> (call) history_id: the call that created the ref, if any
+        consumers: Dict[str, Set[str]] = None,  # (ref) history_id -> {(call) history_id}: the calls that consume the ref
         # objects
         refs: Dict[str, Union[Ref, Any]] = None,  # history_id -> Ref
         calls: Dict[str, Call] = None,  # history_id -> Call
@@ -198,7 +182,7 @@ class ComputationFrame:
         del self.fs[fname]
         del self.inp[fname]
         del self.out[fname]
-        # raise NotImplementedError("We must also "
+
 
     def add_edge(self, src: str, dst: str, label: str):
         if label not in self.out[src]:
@@ -272,6 +256,10 @@ class ComputationFrame:
                     self.add_ref(vname, output_ref)
 
     def drop_call(self, fname: str, hid: str):
+        """
+        Drop a call from the given function node only. This checks
+        if the call is referenced by multiple function nodes.
+        """
         if (
             len(self.callinv[hid]) == 1
         ):  # if this is the only function containing the call
@@ -1018,7 +1006,7 @@ class ComputationFrame:
         vnames = {
             x
             for x, sink_elts in restricted_cf.get_sink_elts().items()
-            if x in restricted_cf.vnames and sink_elts
+            if x in restricted_cf.vnames and len(sink_elts) > 0
         }
         df = restricted_cf.get_joint_history_df(
             vnames=vnames, how="outer", include_calls=include_calls
@@ -1580,9 +1568,13 @@ class ComputationFrame:
         if isolated_vars:
             lines.append(", ".join(sorted(isolated_vars)))
         for fname in self.sort_nodes(self.fnames):
-            input_edges = self.inp[fname]
-            output_edges = self.out[fname]
-            lhs = ", ".join([" | ".join(output_edges[k]) for k in output_edges.keys()])
+            input_edges = self.inp[fname] # input name -> {variables connected}
+            output_edges = self.out[fname] # output name -> {variables connected}
+            
+            output_names = output_edges.keys()
+            # sort the output names according to their order as returns
+            ordered_output_names = sorted(output_names, key=lambda x: int(x.split('_')[1]))
+            lhs = ", ".join([" | ".join(output_edges[k]) for k in ordered_output_names])
             rhs = ", ".join(
                 [
                     f"{k}={' | '.join(input_edges[k])}"
