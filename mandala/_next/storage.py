@@ -799,7 +799,6 @@ class Storage:
             semantic_version=semantic_version,
             content_version=content_version,
         )
-        sess.d()
         return main_call.outputs, main_call, input_calls + output_calls
 
     ############################################################################

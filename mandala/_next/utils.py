@@ -221,6 +221,18 @@ def is_subdict(a: Dict, b: Dict) -> bool:
     """
     return all((k in b and a[k] == b[k]) for k in a)
 
+_KT, _VT = TypeVar("_KT"), TypeVar("_VT")
+def invert_dict(d: Dict[_KT, _VT]) -> Dict[_VT, List[_KT]]:
+    """
+    Invert a dictionary
+    """
+    out = {}
+    for k, v in d.items():
+        if v not in out:
+            out[v] = []
+        out[v].append(k)
+    return out
+
 def ask_user(question: str, valid_options: List[str]) -> str:
     """
     Ask the user a question and return their response.

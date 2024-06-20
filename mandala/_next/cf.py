@@ -10,6 +10,7 @@ from .utils import (
     get_adjacency_union,
     get_adjacency_intersection,
     get_adj_from_edges,
+    invert_dict,
     get_nullable_intersection,
 )
 from .model import Call, Ref, Op, __make_list__
@@ -305,8 +306,18 @@ class ComputationFrame:
 
     def get_source_elts(self) -> Dict[str, Set[str]]:
         """
-        Get a view of the elements of each node which do not have an element
-        connected to them from an input node.
+        Get a view of the elements in the CF which are not connected as outputs
+        to any element in the CF.
+
+        Important distinctions from other natural ways of defining "sources":
+            - this is **not the same** as getting the elements in the source nodes
+            of the graph. There could be an intermediate node where some of the
+            elements have a history in the graph and some don't.
+            - this is also **not the same** as getting the elements that do not
+            have a creator *anywhere* in the graph. For example, there could be 
+            a ref in some node which has a creator call somewhere in the graph,
+            but the node is not connected as an output to the node containing
+            that call.
         """
         res = {}
         for node in self.nodes:
@@ -322,6 +333,12 @@ class ComputationFrame:
         return {node for node in self.vs.keys() if len(self.out[node]) == 0}
 
     def get_sink_elts(self) -> Dict[str, Set[str]]:
+        """
+        Get a view of the elements in the CF which are not connected as inputs
+        to any element in the CF.
+
+        Similar caveats as for `get_source_elts`.
+        """
         res = {}
         for node in self.nodes:
             out_edges = self.out_edges(node)
@@ -372,6 +389,7 @@ class ComputationFrame:
                     self.calls[call_hid].inputs[name].hid
                     for call_hid in hids
                     for name in self.get_names_projecting_to(call_hid, label)
+                    if name in self.calls[call_hid].inputs
                 }
         else:  # direction == "forward"
             if (
@@ -1336,23 +1354,20 @@ class ComputationFrame:
         reachability.
 
         Computational reachability:
-        When going forward, reachability means that a call is reachable iff
-        all its inputs are reachable. When going backward, reachability means
-        that a call is reachable iff all its outputs are reachable.
+            When going forward, reachability means that a call is reachable iff
+            *all* its inputs *in nodes of the graph* are reachable. When going
+            backward, reachability means that a call is reachable iff *all* its
+            outputs *in nodes of the graph* are reachable.
 
         Relational reachability:
-        When going forward, reachability means that a call is reachable iff
-        any of its inputs are reachable. When going backward, reachability means
-        that a call is reachable iff any of its outputs are reachable.
+            When going forward, reachability means that a call is reachable iff
+            any of its inputs are reachable. When going backward, reachability
+            means that a call is reachable iff any of its outputs are reachable.
         """
         result = {k: v.copy() for k, v in initial_state.items()}
         node_order = self.topsort() if direction == "forward" else self.topsort()[::-1]
-        for node in node_order:
-            # if node in initial_state:
-            #     continue
-            adj_edges = (
-                self.in_edges(node) if direction == "forward" else self.out_edges(node)
-            )
+
+        def get_input_elts(node, adj_edges):
             adj_elts = []  # will be a list of neighbor elts along the `adj_edges`.
             for edge in adj_edges:
                 other_endpoint = edge[0] if direction == "forward" else edge[1]
@@ -1360,13 +1375,45 @@ class ComputationFrame:
                 adj_elts.append(
                     self.get_adj_elts_edge(edge=edge, hids=hids, direction=direction)
                 )
+            return adj_elts
+
+        for node in node_order:
+            adj_edges = (
+                self.in_edges(node) if direction == "forward" else self.out_edges(node)
+            )
+
             if node in self.vnames:
+                # the flavor of reachability doesn't matter here, because every
+                # ref is created by at most 1 call. We simply take the union
+                # over all elements connected as inputs.
+                adj_elts = get_input_elts(node, adj_edges)
                 to_add = get_nullable_union(*adj_elts)
-            else:  # node in self.fnames
-                if how == "strong":
-                    to_add = get_nullable_intersection(*adj_elts)
-                else:  # how == "weak"
+            else: # node in self.fnames
+                if how != "strong":
+                    # we have to do the same thing
+                    adj_elts = get_input_elts(node, adj_edges)
                     to_add = get_nullable_union(*adj_elts)
+                else:
+                    # interesting case
+                    to_add = set()
+                    for call_hid in self.sets[node]:
+                        call = self.calls[call_hid]
+                        io_refs = call.inputs if direction == "forward" else call.outputs
+                        io_name_projections = {name: self.get_io_proj(call_hid=call_hid, name=name) for name in io_refs.keys()}
+                        io_label_to_names = invert_dict(io_name_projections)
+                        # now, we must check that for each label there's something at the other end
+                        is_reachable = True
+                        for edge in adj_edges:
+                            src, dst, label = edge
+                            if label in io_label_to_names.keys():
+                                other_end = src if direction == "forward" else dst
+                                other_end_hids = result.get(other_end, set())
+                                io_ref_hids = {io_refs[name].hid for name in io_label_to_names[label]}
+                                if not io_ref_hids <= other_end_hids:
+                                    is_reachable = False
+                                    break
+                        if is_reachable:
+                            to_add.add(call_hid)
             result[node] = to_add | result.get(node, set())
         if pad:
             for node in self.nodes - set(result.keys()):
