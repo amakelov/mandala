@@ -299,7 +299,7 @@ class Storage:
     def get_call(self, hid: str, lazy: bool) -> Call:
         return self.mget_call([hid], lazy=lazy)[0]
 
-    def drop_calls(self, hids: Iterable[str], delete_dependents: bool):
+    def drop_calls(self, calls_or_hids: Union[Iterable[str], Iterable[Call]], delete_dependents: bool):
         """
         Remove the calls with the given HIDs (and optionally their dependents)
         from the storage *and* the cache. 
@@ -307,6 +307,11 @@ class Storage:
         Removing from the cache is necessary to ensure that future lookups don't
         hit a false positive.
         """
+        # figure out what we're given    
+        if all(isinstance(c, Call) for c in calls_or_hids):
+            hids = [c.hid for c in calls_or_hids]
+        else:
+            hids = list(calls_or_hids)
         hids = set(hids)
         if delete_dependents:
             _, dependent_call_hids = self.call_storage.get_dependents(
