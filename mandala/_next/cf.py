@@ -148,7 +148,7 @@ class ComputationFrame:
         del self.inp[vname]
         del self.out[vname]
 
-    def rename_var(self, vname: str, new_vname: str, inplace: bool = False) -> "ComputationFrame":
+    def rename_var(self, vname: str, new_vname: str, inplace: bool = False) -> Optional["ComputationFrame"]:
         res = self if inplace else self.copy()
         res.vs[new_vname] = res.vs[vname]
         res.inp[new_vname] = res.inp[vname]
@@ -169,19 +169,19 @@ class ComputationFrame:
         for ref in res.vs[new_vname]:
             res.refinv[ref].remove(vname)
             res.refinv[ref].add(new_vname)
-        return res
+        return res if not inplace else None
     
     def rename(self, 
                vars: Optional[Dict[str, str]] = None,
                funcs: Optional[Dict[str, str]] = None,
-               inplace: bool = False) -> "ComputationFrame":
+               inplace: bool = False) -> Optional["ComputationFrame"]:
         res = self if inplace else self.copy()
         if vars is not None:
             for vname, new_vname in vars.items():
                 res.rename_var(vname, new_vname, inplace=True)
         if funcs is not None:
             raise NotImplementedError
-        return res
+        return res if not inplace else None
 
     def add_func(
         self,
@@ -881,7 +881,7 @@ class ComputationFrame:
         varnames: Optional[Union[str, Set[str]]] = None,
         skip_existing: bool = True,
         inplace: bool = False,
-    ) -> "ComputationFrame":
+    ) -> Optional["ComputationFrame"]:
         """
         Join the calls that created the given variables.
         """
@@ -895,7 +895,7 @@ class ComputationFrame:
                 new_size = len(res.nodes)
                 if new_size == current_size:
                     break
-            return res
+            return res if not inplace else None
         if isinstance(varnames, str):
             varnames = {varnames}
         ref_uids = set.union(*[res.vs[v] for v in varnames])
@@ -908,14 +908,14 @@ class ComputationFrame:
             call_groups,
             side_to_glue="outputs",
         )
-        return res
+        return res if not inplace else None
 
     def expand_forward(
         self,
         varnames: Optional[Union[str, Set[str]]] = None,
         skip_existing: bool = True,
         inplace: bool = False,
-    ) -> "ComputationFrame":
+    ) -> Optional["ComputationFrame"]:
         """
         Join the calls that consume the given variables.
         """
@@ -929,7 +929,7 @@ class ComputationFrame:
                 new_size = len(res.nodes)
                 if new_size == current_size:
                     break
-            return res
+            return res if not inplace else None
         if isinstance(varnames, str):
             varnames = {varnames}
         ref_hids = set.union(*[res.vs[v] for v in varnames])
@@ -941,13 +941,13 @@ class ComputationFrame:
             call_groups,
             side_to_glue="inputs",
         )
-        return res
+        return res if not inplace else None
 
     def expand(
         self,
         inplace: bool = False,
         skip_existing: bool = True,
-    ) -> "ComputationFrame":
+    ) -> Optional["ComputationFrame"]:
         """
         Expand the computation frame by joining all calls that are not currently
         in the CF.
@@ -955,7 +955,7 @@ class ComputationFrame:
         res = self if inplace else self.copy()
         res.expand_back(inplace=True, skip_existing=skip_existing)
         res.expand_forward(inplace=True, skip_existing=skip_existing)
-        return res
+        return res if not inplace else None
 
     def complete_func(self, fname: str, direction: Literal["inputs", "outputs"]):
         """
@@ -1372,7 +1372,7 @@ class ComputationFrame:
         nodes: Iterable[str],
         inplace: bool = False,
         with_dependents: bool = False,
-    ) -> "ComputationFrame":
+    ) -> Optional["ComputationFrame"]:
         if with_dependents:
             raise NotImplementedError()
         res = self if inplace else self.copy()
@@ -1383,7 +1383,7 @@ class ComputationFrame:
                 res.drop_func(node)
             else:
                 raise ValueError(f"Node {node} not found")
-        return res
+        return res if not inplace else None
 
     def __getitem__(
         self, indexer: Union[str, Iterable[str], "ComputationFrame"]
@@ -1524,7 +1524,7 @@ class ComputationFrame:
     ############################################################################
     def merge_into(
         self, node_to_merge: str, merge_into: str, inplace: bool = False
-    ) -> "ComputationFrame":
+    ) -> Optional["ComputationFrame"]:
         """
         Given a node whose elements are a subset of the elements of another
         node, merge the subset into the superset, and remove the subset node
@@ -1542,7 +1542,7 @@ class ComputationFrame:
             res.drop_edge(src, dst, label)
             res.add_edge(merge_into, dst, label)
         res.drop_node(node_to_merge)
-        return res
+        return res if not inplace else None
 
     def merge(self, vars: Set[str], new_name: Optional[str] = None) -> str:
         raise NotImplementedError()
@@ -1586,13 +1586,13 @@ class ComputationFrame:
         #             if self.sets[node] <= self.sets[other_node]:
         #                 self.merge_into(node, other_node, inplace=True)
 
-    def cleanup(self, inplace: bool = False) -> "ComputationFrame":
+    def cleanup(self, inplace: bool = False) -> Optional["ComputationFrame"]:
         res = self if inplace else self.copy()
         # remove empty nodes
         for node in list(res.nodes):
             if not res.sets[node]:
                 res.drop_node(node)
-        return res
+        return res if not inplace else None
 
     ############################################################################
     ### constructors
@@ -1691,18 +1691,23 @@ class ComputationFrame:
         if isolated_vars:
             lines.append(", ".join(sorted(isolated_vars)))
         for fname in self.sort_nodes(self.fnames):
-            input_edges = self.inp[fname] # input name -> {variables connected}
-            output_edges = self.out[fname] # output name -> {variables connected}
+            input_name_to_vars = self.inp[fname] # input name -> {variables connected}
+            output_name_to_vars = self.out[fname] # output name -> {variables connected}
             
-            output_names = output_edges.keys()
+            output_names = output_name_to_vars.keys()
             # sort the output names according to their order as returns
             ordered_output_names = sorted(output_names, key=lambda x: int(x.split('_')[1]))
-            lhs = ", ".join([" | ".join(output_edges[k]) for k in ordered_output_names])
+            # add the output names to the output variables in order to avoid
+            # confusion when outputs are present only partially in the graph
+            output_labels = copy.deepcopy(output_name_to_vars)
+            for output_name in output_labels.keys():
+                output_labels[output_name] = {f'{varname}' for varname in output_labels[output_name]}
+            lhs = ", ".join([" | ".join(output_labels[k]) + f"@{k}" for k in ordered_output_names])
             rhs = ", ".join(
                 [
-                    f"{k}={' | '.join(input_edges[k])}"
-                    for k in input_edges.keys()
-                    if len(input_edges[k]) > 0
+                    f"{k}={' | '.join(input_name_to_vars[k])}"
+                    for k in input_name_to_vars.keys()
+                    if len(input_name_to_vars[k]) > 0
                 ]
             )
             lines.append(f"{lhs} = {fname}({rhs})")
