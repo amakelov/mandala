@@ -1044,6 +1044,7 @@ class ComputationFrame:
         self,
         *nodes: str,
         values: Literal["refs", "objs"] = "objs",
+        lazy_vars: Optional[Iterable[str]] = None,
         verbose: bool = True,
         include_calls: bool = True,
     ) -> pd.DataFrame:
@@ -1064,8 +1065,10 @@ class ComputationFrame:
             return pd.DataFrame(values, columns=[nodes[0]])
         restricted_cf = self.midstream(*nodes)
         if verbose:
+            graph_desc = restricted_cf.get_graph_desc()
+            graph_desc = textwrap.indent(graph_desc, "    ")
             print(
-                f"Extracting tuples from the computation graph:\n{restricted_cf.get_graph_desc()}..."
+                f"Extracting tuples from the computation graph:\n{graph_desc}"
             )
         vnames = {
             x
@@ -1074,11 +1077,13 @@ class ComputationFrame:
         }
         df = restricted_cf.get_joint_history_df(
             vnames=vnames, how="outer", include_calls=include_calls
-        )[list(nodes)]
+        )
+        # depending on `include_calls`, we may have dropped some columns in `nodes`
+        df = df[[x for x in list(nodes) if x in df.columns]]
         if values == "refs":
             res = df
         elif values == "objs":
-            res = restricted_cf.eval_df(df)
+            res = restricted_cf.eval_df(df, skip_cols=lazy_vars)
         return self._sort_df(res)
 
     ############################################################################
@@ -1087,9 +1092,34 @@ class ComputationFrame:
     def attach(self):
         self.storage.attach(list(self.refs.values()))
 
-    def eval_df(self, df: pd.DataFrame) -> pd.DataFrame:
-        values = self.storage.unwrap(df.values.tolist())
-        return pd.DataFrame(values, columns=df.columns)
+    def eval_df(self, 
+                df: pd.DataFrame,
+                skip_cols: Optional[Iterable[str]] = None,
+                skip_calls: bool = False
+                ) -> pd.DataFrame:
+        """
+        Main tool to evaluate dataframes of `Ref`s and `Call`s by applying
+        `unwrap` to chosen columns.
+        """
+        if len(df) == 0:
+            return df 
+        # figure out which columns contain what kinds of objects
+        def classify_obj(obj: Union[Ref, Call, Any]) -> str:
+            if isinstance(obj, Ref):
+                return "ref"
+            elif isinstance(obj, Call):
+                return "call"
+            else:
+                return "value"
+        col_types = {col: classify_obj(df[col].iloc[0]) for col in df.columns}
+        if skip_calls:
+            df = df[[col for col, t in col_types.items() if t != "call"]]
+        if skip_cols is None:
+            values = self.storage.unwrap(df.values.tolist())
+            return pd.DataFrame(values, columns=df.columns)
+        else:
+            columns_dict = {col: df[col] if col in skip_cols else self.storage.unwrap(df[col].values.tolist()) for col in df.columns}
+            return pd.DataFrame(columns_dict)
 
     def get(self, hids: Set[str]) -> Set[Ref]:
         return {self.refs[hid] for hid in hids}
