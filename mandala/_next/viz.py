@@ -8,6 +8,8 @@ import tempfile
 import subprocess
 import webbrowser
 from typing import Literal
+from graphviz import Source
+from IPython import display
 
 if Config.has_pil:
     from PIL import Image
@@ -172,24 +174,67 @@ class HTMLBuilder:
         return start + "".join(rows) + end
 
 
-class Node:
+class _Node:
     def __init__(
         self,
-        internal_name: str,
         label: str,
         color: Color = SOLARIZED_LIGHT["base3"],
-        shape: str = "rect",
+        shape: Literal["rect", "record", "Mrecord"] = "rect",
+        internal_name: Optional[str] = None,
+        additional_lines: Optional[str] = None,
     ):
         """
         `shape` can be "rect", "record" or "Mrecord" for a record with rounded corners.
         """
+        if internal_name is None:
+            internal_name = label
         self.internal_name = internal_name
         self.label = label
         self.color = color
         self.shape = shape
+        self.additional_lines = additional_lines
 
     def to_dot_string(self) -> str:
-        dot_label = f'"{self.label}"' if self.shape != "plain" else f"<{self.label}>"
+        text = self.label if self.additional_lines is None else f"{self.label}\\n{self.additional_lines}"
+        dot_label = f'"{text}"' if self.shape != "plain" else f"<{text}>"
+        return f'"{self.internal_name}" [label={dot_label}, color="{self.color}", shape="{self.shape}"];'
+
+
+class Node:
+    def __init__(
+        self,
+        label: str,
+        color: str = "#fdf6e3",  # SOLARIZED_LIGHT["base3"]
+        shape: Literal["rect", "record", "Mrecord"] = "rect",
+        internal_name: Optional[str] = None,
+        additional_lines: Optional[str] = None,
+        additional_lines_format: Optional[Dict[str, str]] = None,
+    ):
+        """
+        `shape` can be "rect", "record" or "Mrecord" for a record with rounded corners.
+        `additional_lines_format` is a dictionary with formatting options like 
+        {'font': 'bold', 'color': 'red', 'point-size': '10'}
+        """
+        if internal_name is None:
+            internal_name = label
+        self.internal_name = internal_name
+        self.label = label
+        self.color = color
+        self.shape = shape
+        self.additional_lines = additional_lines
+        self.additional_lines_format = additional_lines_format or {}
+        if 'color' in self.additional_lines_format:
+            self.additional_lines_format['color'] = SOLARIZED_LIGHT[self.additional_lines_format['color']]
+        if 'font' in self.additional_lines_format:
+            raise NotImplementedError # should use <B> tag in the additional_lines, not font='bold'
+
+    def to_dot_string(self) -> str:
+        if self.additional_lines is None:
+            label_content = self.label
+        else:
+            format_attrs = ' '.join(f'{k}="{v}"' for k, v in self.additional_lines_format.items())
+            label_content = f'<B>{self.label}</B><BR/><FONT {format_attrs}>{self.additional_lines}</FONT>'
+        dot_label = f'<{label_content}>'
         return f'"{self.internal_name}" [label={dot_label}, color="{self.color}", shape="{self.shape}"];'
 
 
@@ -364,12 +409,15 @@ def write_output(
         ], "Can only show png, jpg, jpeg, or svg in browser"
         webbrowser.open(str(output_path))
         return
-    if show_how == "inline" or show_how == "open":
-        assert (
-            Config.has_pil
-        ), "Pillow is not installed. Please install it to show images inline"
-        img = Image.open(output_path, "r")
-        if show_how == "inline":
-            return img
-        else:
-            img.show()
+    if show_how == "inline":
+        src = Source(dot_string)
+        display.display(src)
+    # if show_how == "inline" or show_how == "open":
+    #     assert (
+    #         Config.has_pil
+    #     ), "Pillow is not installed. Please install it to show images inline"
+    #     img = Image.open(output_path, "r")
+    #     if show_how == "inline":
+    #         return img
+    #     else:
+    #         img.show()

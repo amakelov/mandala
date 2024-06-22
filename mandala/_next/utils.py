@@ -43,9 +43,11 @@ def get_content_hash(obj: Any) -> str:
     if hasattr(obj, "__get_mandala_dict__"):
         obj = obj.__get_mandala_dict__()
     if Config.has_torch:
-        obj = tensor_to_numpy(obj)
+        # TODO: ideally, should add a label to distinguish this from a numpy
+        # array with the same contents!
+        obj = tensor_to_numpy(obj) 
     if isinstance(obj, pd.DataFrame):
-        # DataFrames cause collisions with joblib hashing for some reason
+        # DataFrames cause collisions for joblib hashing for some reason
         # TODO: the below may be incomplete
         obj = {
             "columns": obj.columns,

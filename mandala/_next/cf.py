@@ -15,6 +15,8 @@ from .utils import (
 )
 from .model import Call, Ref, Op, __make_list__
 
+from .viz import Node, Edge, SOLARIZED_LIGHT, to_dot_string, write_output
+
 
 def get_name_proj(op: Op) -> Callable[[str], str]:
     if op.name == __make_list__.name:
@@ -1713,6 +1715,29 @@ class ComputationFrame:
             lines.append(f"{lhs} = {fname}({rhs})")
         lines = "\n".join(lines)
         return lines
+
+    def draw(self):
+        vnodes = {vname: Node(color=SOLARIZED_LIGHT['blue'], label=vname, internal_name=vname, additional_lines=f'({len(self.vs[vname])} refs)',
+                              additional_lines_format={ 'color': 'blue', 'point-size': 10}) for vname in self.vnames}
+        fnodes = {fname: Node(color=SOLARIZED_LIGHT['red'], label=fname, internal_name=fname,
+                                additional_lines=f'({len(self.fs[fname])} calls)',
+                                additional_lines_format={ 'color': 'red', 'point-size': 10}
+                              ) for fname in self.fnames}
+        nodes = {**vnodes, **fnodes}
+        edges = []
+        for src, dst, label in self.edges():
+            edges.append(
+                Edge(source_node=nodes[src], 
+                     target_node=nodes[dst],
+                     source_port=None, # if src in self.vnames else label,
+                     target_port=None, # if dst in self.vnames else label,
+                     label=label)
+            )
+        dot_string = to_dot_string(nodes=list(nodes.values()),
+                                   edges=edges, 
+                                   groups=[])
+        write_output(dot_string, output_ext='svg', output_path=None, show_how='inline')
+
 
     def print_graph(self):
         print(self.get_graph_desc())
