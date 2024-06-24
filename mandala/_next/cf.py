@@ -1716,7 +1716,11 @@ class ComputationFrame:
         lines = "\n".join(lines)
         return lines
 
-    def draw(self):
+    def draw(self, show_how: str = "inline"):
+        """
+        Draw the computational graph for this CF using graphviz, and annotate
+        the nodes with some additional information.
+        """
         vnodes = {vname: Node(color=SOLARIZED_LIGHT['blue'], label=vname, internal_name=vname, additional_lines=f'({len(self.vs[vname])} refs)',
                               additional_lines_format={ 'color': 'blue', 'point-size': 10}) for vname in self.vnames}
         fnodes = {fname: Node(color=SOLARIZED_LIGHT['red'], label=fname, internal_name=fname,
@@ -1729,14 +1733,15 @@ class ComputationFrame:
             edges.append(
                 Edge(source_node=nodes[src], 
                      target_node=nodes[dst],
-                     source_port=None, # if src in self.vnames else label,
-                     target_port=None, # if dst in self.vnames else label,
+                     source_port=None, 
+                     target_port=None,
                      label=label)
             )
         dot_string = to_dot_string(nodes=list(nodes.values()),
                                    edges=edges, 
-                                   groups=[])
-        write_output(dot_string, output_ext='svg', output_path=None, show_how='inline')
+                                   groups=[],
+                                   rankdir="LR")
+        write_output(dot_string, output_ext='svg', output_path=None, show_how=show_how,)
 
 
     def print_graph(self):

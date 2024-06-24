@@ -529,7 +529,7 @@ class Storage:
                 component=component, pre_call_uid=pre_call_uid, code_state=code_state
             )
             if lookup_outcome is None:
-                print(f"Could not find a version for {op.name}.")
+                logging.debug(f"Could not find a version for {op.name}.")
                 return
             else:
                 _, semantic_version = lookup_outcome
