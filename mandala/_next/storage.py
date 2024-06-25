@@ -563,7 +563,8 @@ class Storage:
         if self.call_cache.exists_content(cid=call_cid):
             call_data = self.call_cache.get_data_content(cid=call_cid)
             call_prototype = self._get_call_from_data(call_data, lazy=True)
-            #!!! set the hids here on both the call and the outputs
+            #! very important: set the hids here on both the call and the inputs
+            # and outputs
             call_prototype.hid = call_hid
             output_names_identity = {k: k for k in call_data['output_hids'].keys()}
             output_history_ids = op.get_output_history_ids(call_history_id=call_hid, output_names=list(op.get_ordered_outputs(output_dict=output_names_identity)))

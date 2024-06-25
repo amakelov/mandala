@@ -281,10 +281,14 @@ class ComputationFrame:
         del res.out[fname]
         return res if not inplace else None
 
-    def _add_edge(self, src: str, dst: str, label: str) -> None:
+    def _add_edge(self, src: str, dst: str, label: str, allow_existing: bool = False) -> None:
         """
         Internal method to add an edge to the computation frame inplace.
         """
+        if (src, dst, label) in self.edges():
+            if not allow_existing:
+                raise ValueError(f"Edge ({src}, {dst}, {label}) already exists")
+            return
         if label not in self.out[src]:
             self.out[src][label] = set()
         self.out[src][label].add(dst)
@@ -328,7 +332,11 @@ class ComputationFrame:
         else:  # if there are other variables containing the ref
             self.refinv[hid].remove(vname)
 
-    def add_call(self, fname: str, call: Call, with_refs: bool):
+    def add_call(self, fname: str, call: Call, with_refs: bool, allow_existing: bool = False):
+        if call.hid in self.fs[fname]:
+            if not allow_existing:
+                raise ValueError(f"Call {call.hid} already exists")
+            return
         self.calls[call.hid] = call
         self.fs[fname].add(call.hid)
         if call.hid not in self.callinv:
@@ -905,6 +913,7 @@ class ComputationFrame:
         call_groups: Dict[Tuple[str, Tuple[Tuple[str, Tuple[str, ...]]]], List[Call]],
         side_to_glue: Literal["inputs", "outputs"],
         verbose: bool = False,
+        reuse_existing: bool = False,
     ):
         """
         Core internal function that actually expands the computation frame from
@@ -922,19 +931,35 @@ class ComputationFrame:
             label_to_connected_vnames = {
                 label: vnames for label, vnames in connected_vnames_tuple
             }
-            ### create the function node for this group
-            funcname = self._add_func(fname=self.get_new_fname(op_id))
-            if verbose: print(f"Adding function {funcname} for group {group_id}")
+            if reuse_existing:
+                group_hids = {call.hid for call in group_calls}
+                found_match = False
+                for fname in self.fs:
+                    if group_hids <= self.fs[fname]:
+                        found_match = True
+                        break
+                if found_match:
+                    if verbose: print(f"Reusing function {fname} for group {group_id}")
+                else:
+                    ### create the function node for this group
+                    fname = self._add_func(fname=self.get_new_fname(op_id))
+                    if verbose: print(f"Adding function {fname} for group {group_id}")
+            else:
+                ### create the function node for this group
+                fname = self._add_func(fname=self.get_new_fname(op_id))
+                if verbose: print(f"Adding function {fname} for group {group_id}")
+            
+            ### create edges on the side to glue
             for label, connected_vnames in label_to_connected_vnames.items():
                 if not connected_vnames:
                     continue
                 for connected_vname in connected_vnames:
-                    src = funcname if side_to_glue == "outputs" else connected_vname
-                    dst = connected_vname if side_to_glue == "outputs" else funcname
-                    self._add_edge(src, dst, label)
+                    src = fname if side_to_glue == "outputs" else connected_vname
+                    dst = connected_vname if side_to_glue == "outputs" else fname
+                    self._add_edge(src, dst, label, allow_existing=reuse_existing)
 
-            ### figure out how to connect the function node to the rest of the
-            ### graph
+            ### figure out what new variables to add to the dual side to the one
+            ### we're gluing
             if side_to_glue == "outputs":
                 # dual_side_labels = get_nullable_union(*[set(call.inputs.keys()) for call in group_calls])
                 dual_side_labels_list = []
@@ -955,15 +980,18 @@ class ComputationFrame:
                 dual_side_labels = get_nullable_union(*dual_side_labels_list)
 
             ### create the variables for the dual side to the one we're gluing
+            present_labels = set(self.inp[fname].keys()) if side_to_glue == "outputs" else set(self.out[fname].keys())
             for label in dual_side_labels:
+                if label in present_labels:
+                    continue
                 varname = self._add_var(vname=self.get_new_vname(label))
-                src = varname if side_to_glue == "outputs" else funcname
-                dst = funcname if side_to_glue == "outputs" else varname
+                src = varname if side_to_glue == "outputs" else fname
+                dst = fname if side_to_glue == "outputs" else varname
                 self._add_edge(src, dst, label)
             
             ### finally, add the calls to the CF
             for call in group_calls:
-                self.add_call(funcname, call, with_refs=True)
+                self.add_call(fname, call, with_refs=True, allow_existing=reuse_existing)
 
     def get_creators(self, indexer: Union[str, Set[str]]):
         # return information about the calls that created the variables in the
@@ -982,6 +1010,7 @@ class ComputationFrame:
             skip_existing: bool = False,
             inplace: bool = False,
             verbose: bool = False,
+            reuse_existing: bool = False,
     ) -> Optional["ComputationFrame"]:
         res = self if inplace else self.copy()
         if varnames is None:
@@ -994,6 +1023,7 @@ class ComputationFrame:
                     skip_existing=skip_existing,
                     inplace=True,
                     verbose=verbose,
+                    reuse_existing=reuse_existing,
                 )
                 new_size = len(res.nodes)
                 if new_size == current_size:
@@ -1020,6 +1050,7 @@ class ComputationFrame:
             call_groups,
             side_to_glue=side_to_glue,
             verbose=verbose,
+            reuse_existing=reuse_existing,
         )
         return res if not inplace else None
     
@@ -1031,6 +1062,8 @@ class ComputationFrame:
         skip_existing: bool = False, 
         inplace: bool = False,
         verbose: bool = False,
+        reuse_existing: bool = False,
+        
     ) -> Optional["ComputationFrame"]:
         """
         Join to the CF the calls that created all refs in the given variables
@@ -1049,6 +1082,7 @@ class ComputationFrame:
             skip_existing=skip_existing,
             inplace=inplace,
             verbose=verbose,
+            reuse_existing=reuse_existing,
         )
 
     def expand_forward(
@@ -1057,6 +1091,7 @@ class ComputationFrame:
         skip_existing: bool = False,
         inplace: bool = False,
         verbose: bool = False,
+        reuse_existing: bool = False,
     ) -> Optional["ComputationFrame"]:
         """
         Join the calls that consume the given variables; see `expand_back` (the 
@@ -1068,6 +1103,7 @@ class ComputationFrame:
             skip_existing=skip_existing,
             inplace=inplace,
             verbose=verbose,
+            reuse_existing=reuse_existing,
         )
 
     def expand(
@@ -1075,6 +1111,7 @@ class ComputationFrame:
         inplace: bool = False,
         skip_existing: bool = False,
         verbose: bool = False,
+        reuse_existing: bool = False,
     ) -> Optional["ComputationFrame"]:
         """
         Expand the computation frame by repeatedly applying `expand_back` and
@@ -1086,8 +1123,8 @@ class ComputationFrame:
         res = self if inplace else self.copy()
         cur_size = len(res.refs) + len(res.calls)
         while True:
-            res.expand_back(inplace=True, skip_existing=skip_existing, verbose=verbose)
-            res.expand_forward(inplace=True, skip_existing=skip_existing, verbose=verbose)
+            res.expand_back(inplace=True, skip_existing=skip_existing, verbose=verbose, reuse_existing=reuse_existing)
+            res.expand_forward(inplace=True, skip_existing=skip_existing, verbose=verbose, reuse_existing=reuse_existing)
             new_size = len(res.refs) + len(res.calls)
             if new_size == cur_size:
                 break
@@ -1736,7 +1773,8 @@ class ComputationFrame:
     def from_op(storage: "Storage", f: Op) -> "ComputationFrame":
         call_hids = storage.call_storage.execute_df(
             f'SELECT call_history_id FROM calls WHERE op="{f.name}"'
-        )["call_history_id"].values.tolist()
+        )["call_history_id"].unique().tolist()
+        sess.d()
         calls = storage.mget_call(hids=call_hids, lazy=True)
         # calls = {
         #     call_hid: storage.get_call(call_hid, lazy=True) for call_hid in call_hids
@@ -1858,7 +1896,11 @@ class ComputationFrame:
         lines = "\n".join(lines)
         return lines
 
-    def draw(self, show_how: str = "inline", verbose: bool = False):
+    def draw(self,
+             show_how: str = "inline", 
+             verbose: bool = False,
+             orientation: Literal["LR", "TB"] = "LR"
+             ):
         """
         Draw the computational graph for this CF using graphviz, and annotate
         the nodes with some additional information.
@@ -1910,7 +1952,7 @@ class ComputationFrame:
         dot_string = to_dot_string(nodes=list(nodes.values()),
                                    edges=edges, 
                                    groups=[],
-                                   rankdir="LR")
+                                   rankdir=orientation)
         write_output(dot_string, output_ext='svg', output_path=None, show_how=show_how,)
 
 
