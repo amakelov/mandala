@@ -275,6 +275,9 @@ class DictRef(Ref):
     def items(self) -> Iterable[Tuple[str, Ref]]:
         return self.obj.items()
     
+    def values(self) -> Iterable[Ref]:
+        return self.obj.values()
+    
     def shape(self) -> "DictRef":
         return DictRef(
             cid=self.cid,

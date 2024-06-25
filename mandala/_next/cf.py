@@ -34,11 +34,44 @@ def get_reverse_proj(call: Call) -> Callable[[str], Set[str]]:
 
 class ComputationFrame:
     """
-    A view of a slice of storage.
+    A high-level view of a slice of storage that enables bulk operations on the
+    memoized computation graph.
 
     - use `.info()` to get summary information about this `ComputationFrame`
     - use `.info(*variables)` or `.info(*functions)` to get information 
     about specific variables/functions in this `ComputationFrame`
+
+    # `ComputationFrame` from first principles
+    The storage is in general a collection of memoized `Call`s and their
+    input/output `Ref`s (even collections like lists are represented as
+    collections of `Call`s binding their elements to the collection object
+    itself).  
+
+    However, this collection frequently has interesting structure: the same 
+    or nearly the same compositions of functions are called multiple times, 
+    with different arguments. It is this structure we typically have in mind
+    when we think about the computations we've done.
+
+
+    # How `ComputationFrame` generalizes `pandas.DataFrame`
+    - a dataframe has an ordered collection of columns; a `ComputationFrame`
+    generalizes this to a **computational graph**, where nodes are variables and
+    operations on them. The edges of the graph define a (partial) order on the
+    variables and operations.
+    - a dataframe has an ordered collection of rows; a `ComputationFrame` has an
+    unordered collection of **computations that follow the given computational
+    graph**. A computation is allowed to follow the computation graph
+    *partially*, meaning that it doesn't have to provide values for all
+    variables and/or calls for all operations in the graph.
+
+    # Consistency with `pandas.DataFrame` interfaces
+    To make it easier to work with `ComputationFrame`s, we provide methods that
+    mimic the `pandas.DataFrame` API to the extent possible:
+    - methods that modify the `ComputationFrame` (such as `.drop(), .rename()`)
+    come with an `inplace` parameter, such that when `inplace=True`, the method
+    modifies the `ComputationFrame` in place and returns `None`, while when
+    `inplace=False` (default), the method returns a new `ComputationFrame` with
+    the modifications.
     """
 
     def __init__(
@@ -121,34 +154,78 @@ class ComputationFrame:
         return self.vnames | self.fnames
 
     ############################################################################
-    ### atomic operations on the CF (and their batched versions)
+    ### modifying the CF
     ############################################################################
-    def add_var(self, vname: Optional[str]) -> str:
-        if vname is None:
-            vname = self.get_new_vname("v")
-        self.vs[vname] = set()
-        self.inp[vname] = {}
-        self.out[vname] = {}
-        return vname
+    ### bulk operations
+    def drop(
+        self,
+        nodes: Iterable[str],
+        inplace: bool = False,
+        with_dependents: bool = False,
+    ) -> Optional["ComputationFrame"]:
+        if with_dependents:
+            raise NotImplementedError()
+        res = self if inplace else self.copy()
+        for node in nodes:
+            res.drop_node(node, inplace=True)
+        return res if not inplace else None
 
-    def drop_node(self, node: str):
-        if node in self.vs:
-            self.drop_var(node)
-        elif node in self.fs:
-            self.drop_func(node)
+    def drop_node(self, node: str, inplace: bool = False) -> Optional["ComputationFrame"]:
+        res = self if inplace else self.copy()
+        if node in res.vs:
+            logging.debug(f"Dropping variable {node}")
+            res.drop_var(node, inplace=True)
+        elif node in res.fs:
+            logging.debug(f"Dropping function {node}")
+            res.drop_func(node, inplace=True)
         else:
             raise ValueError(f"Node {node} not found in the CF")
+        return res if not inplace else None
 
-    def drop_var(self, vname: str):
-        for (src, dst, label) in self.edges():
+    def rename(self, 
+               vars: Optional[Dict[str, str]] = None,
+               funcs: Optional[Dict[str, str]] = None,
+               inplace: bool = False) -> Optional["ComputationFrame"]:
+        res = self if inplace else self.copy()
+        if vars is not None:
+            for vname, new_vname in vars.items():
+                res.rename_var(vname, new_vname, inplace=True)
+        if funcs is not None:
+            raise NotImplementedError
+        return res if not inplace else None
+
+
+    ### var operations
+    def _add_var(self, vname: Optional[str]) -> str:
+        """
+        Internal method to add a variable node to the computation frame inplace.
+        """
+        res = self
+        if vname is None:
+            vname = res.get_new_vname("v")
+        res.vs[vname] = set()
+        res.inp[vname] = {}
+        res.out[vname] = {}
+        return vname
+
+    def drop_var(self, vname: str, inplace: bool = False
+                 ) -> Optional["ComputationFrame"]:
+        """
+        Remove the given variable, all adjacent edges in the graph, and all
+        `Ref`s this variable points to, as long as they are not pointed to by
+        any other variable. 
+        """
+        res = self if inplace else self.copy()
+        for (src, dst, label) in res.edges():
             if src == vname or dst == vname:
-                self.drop_edge(src, dst, label)
-        hids = list(self.vs[vname])
+                res._drop_edge(src, dst, label)
+        hids = list(res.vs[vname])
         for hid in hids:
-            self.drop_ref(vname, hid)
-        del self.vs[vname]
-        del self.inp[vname]
-        del self.out[vname]
+            res.drop_ref(vname, hid)
+        del res.vs[vname]
+        del res.inp[vname]
+        del res.out[vname]
+        return res if not inplace else None
 
     def rename_var(self, vname: str, new_vname: str, inplace: bool = False) -> Optional["ComputationFrame"]:
         res = self if inplace else self.copy()
@@ -173,22 +250,13 @@ class ComputationFrame:
             res.refinv[ref].add(new_vname)
         return res if not inplace else None
     
-    def rename(self, 
-               vars: Optional[Dict[str, str]] = None,
-               funcs: Optional[Dict[str, str]] = None,
-               inplace: bool = False) -> Optional["ComputationFrame"]:
-        res = self if inplace else self.copy()
-        if vars is not None:
-            for vname, new_vname in vars.items():
-                res.rename_var(vname, new_vname, inplace=True)
-        if funcs is not None:
-            raise NotImplementedError
-        return res if not inplace else None
-
-    def add_func(
+    def _add_func(
         self,
         fname: Optional[str],
     ) -> str:
+        """
+        Internal method to add a function node to the computation frame inplace.
+        """
         if fname is None:
             fname = self.get_new_fname("f")
         logging.debug(
@@ -199,19 +267,23 @@ class ComputationFrame:
         self.out[fname] = {}
         return fname
 
-    def drop_func(self, fname: str):
-        for (src, dst, label) in self.edges():
+    def drop_func(self, fname: str, inplace: bool = False) -> Optional["ComputationFrame"]:
+        res = self if inplace else self.copy()
+        for (src, dst, label) in res.edges():
             if src == fname or dst == fname:
-                self.drop_edge(src, dst, label)
-        hids = self.fs[fname]
+                res._drop_edge(src, dst, label)
+        hids = res.fs[fname]
         for hid in hids:
-            self.drop_call(fname, hid)
-        del self.fs[fname]
-        del self.inp[fname]
-        del self.out[fname]
+            res.drop_call(fname, hid)
+        del res.fs[fname]
+        del res.inp[fname]
+        del res.out[fname]
+        return res if not inplace else None
 
-
-    def add_edge(self, src: str, dst: str, label: str):
+    def _add_edge(self, src: str, dst: str, label: str) -> None:
+        """
+        Internal method to add an edge to the computation frame inplace.
+        """
         if label not in self.out[src]:
             self.out[src][label] = set()
         self.out[src][label].add(dst)
@@ -219,7 +291,10 @@ class ComputationFrame:
             self.inp[dst][label] = set()
         self.inp[dst][label].add(src)
 
-    def drop_edge(self, src: str, dst: str, label: str):
+    def _drop_edge(self, src: str, dst: str, label: str):
+        """
+        Internal method to remove an edge from the computation frame inplace.
+        """
         self.out[src][label].remove(dst)
         self.inp[dst][label].remove(src)
 
@@ -829,19 +904,27 @@ class ComputationFrame:
         call_groups: Dict[Tuple[str, Tuple[Tuple[str, Tuple[str, ...]]]], List[Call]],
         side_to_glue: Literal["inputs", "outputs"],
     ):
+        """
+        Core internal function that actually expands the computation frame from
+        the given call groups. 
+        """
         for group_id, group_calls in sorted(call_groups.items()):
             op_id, connected_vnames_tuple = group_id
             label_to_connected_vnames = {
                 label: vnames for label, vnames in connected_vnames_tuple
             }
-            funcname = self.add_func(fname=self.get_new_fname(op_id))
+            ### create the function node for this group
+            funcname = self._add_func(fname=self.get_new_fname(op_id))
             for label, connected_vnames in label_to_connected_vnames.items():
                 if not connected_vnames:
                     continue
                 for connected_vname in connected_vnames:
                     src = funcname if side_to_glue == "outputs" else connected_vname
                     dst = connected_vname if side_to_glue == "outputs" else funcname
-                    self.add_edge(src, dst, label)
+                    self._add_edge(src, dst, label)
+
+            ### figure out how to connect the function node to the rest of the
+            ### graph
             if side_to_glue == "outputs":
                 # dual_side_labels = get_nullable_union(*[set(call.inputs.keys()) for call in group_calls])
                 dual_side_labels_list = []
@@ -860,11 +943,15 @@ class ComputationFrame:
                         set([name_projector(name) for name in call.outputs])
                     )
                 dual_side_labels = get_nullable_union(*dual_side_labels_list)
+
+            ### create the variables for the dual side to the one we're gluing
             for label in dual_side_labels:
-                varname = self.add_var(vname=self.get_new_vname(label))
+                varname = self._add_var(vname=self.get_new_vname(label))
                 src = varname if side_to_glue == "outputs" else funcname
                 dst = funcname if side_to_glue == "outputs" else varname
-                self.add_edge(src, dst, label)
+                self._add_edge(src, dst, label)
+            
+            ### finally, add the calls to the CF
             for call in group_calls:
                 self.add_call(funcname, call, with_refs=True)
 
@@ -877,15 +964,25 @@ class ComputationFrame:
         # return information about the calls that consume the variables in the
         # indexer without actually adding them to the CF
         raise NotImplementedError()
-
+    
     def expand_back(
         self,
-        varnames: Optional[Union[str, Set[str]]] = None,
-        skip_existing: bool = True,
+        varnames: Optional[Union[str, Iterable[str]]] = None,
+        # whether to skip calls that already exist in the CF (even if they're
+        # not connected to the given variables)
+        skip_existing: bool = False, 
         inplace: bool = False,
     ) -> Optional["ComputationFrame"]:
         """
-        Join the calls that created the given variables.
+        Join to the CF the calls that created all refs in the given variables
+        that currently do not have a connected creator call in the CF.
+
+        If such refs are found, this will result to the addition of 
+        - new function nodes for the calls that created these refs;
+        - new variable nodes for the *inputs* of these calls.
+
+        The number of these nodes and how they connect to the CF will depend on
+        the structure of the calls that created the refs. 
         """
         res = self if inplace else self.copy()
         if varnames is None:  # full expansion until fixed point
@@ -900,11 +997,18 @@ class ComputationFrame:
             return res if not inplace else None
         if isinstance(varnames, str):
             varnames = {varnames}
-        ref_uids = set.union(*[res.vs[v] for v in varnames])
+        ### which refs should we use for expansion?
+        # option 1: all the refs in the given variables - seems too aggressive
+        # ref_uids = set.union(*[res.vs[v] for v in varnames])
+        # option 2: only the refs that are source elts - what we want intuitively
+        sources_view = {k: v for k, v in self.get_source_elts().items() if k in varnames}
+        ref_uids = set.union(*sources_view.values())
         calls = res.storage.get_creators(ref_uids)
         if skip_existing:
             calls = [call for call in calls if call.hid not in res.calls]
         call_groups = res._group_calls(calls, by="outputs", available_nodes=varnames)
+        # find the call groups subsumed by the current graph
+        
         logging.debug(f"Found call groups with keys: {call_groups.keys()}")
         res._expand_from_call_groups(
             call_groups,
@@ -915,11 +1019,12 @@ class ComputationFrame:
     def expand_forward(
         self,
         varnames: Optional[Union[str, Set[str]]] = None,
-        skip_existing: bool = True,
+        skip_existing: bool = False,
         inplace: bool = False,
     ) -> Optional["ComputationFrame"]:
         """
-        Join the calls that consume the given variables.
+        Join the calls that consume the given variables; see `expand_back` (the 
+        dual operation) for more details.
         """
         res = self if inplace else self.copy()
         if varnames is None:  # full expansion until fixed point
@@ -934,7 +1039,9 @@ class ComputationFrame:
             return res if not inplace else None
         if isinstance(varnames, str):
             varnames = {varnames}
-        ref_hids = set.union(*[res.vs[v] for v in varnames])
+        # ref_hids = set.union(*[res.vs[v] for v in varnames])
+        sink_elts = {k: v for k, v in self.get_sink_elts().items() if k in varnames}
+        ref_hids = set.union(*sink_elts.values())
         calls = res.storage.get_consumers(ref_hids)
         if skip_existing:
             calls = [call for call in calls if call.hid not in res.calls]
@@ -948,15 +1055,25 @@ class ComputationFrame:
     def expand(
         self,
         inplace: bool = False,
-        skip_existing: bool = True,
+        skip_existing: bool = False,
     ) -> Optional["ComputationFrame"]:
         """
-        Expand the computation frame by joining all calls that are not currently
-        in the CF.
+        Expand the computation frame by repeatedly applying `expand_back` and
+        `expand_forward` on all variables until a fixed point is reached.
+
+        This is guaranteed to terminate, because we always expand only the 
+        source/sink elements of the graph.
         """
         res = self if inplace else self.copy()
-        res.expand_back(inplace=True, skip_existing=skip_existing)
-        res.expand_forward(inplace=True, skip_existing=skip_existing)
+        cur_size = len(res.refs) + len(res.calls)
+        while True:
+            res.expand_back(inplace=True, skip_existing=skip_existing)
+            res.expand_forward(inplace=True, skip_existing=skip_existing)
+            new_size = len(res.refs) + len(res.calls)
+            if new_size == cur_size:
+                break
+            else:
+                cur_size = new_size
         return res if not inplace else None
 
     def complete_func(self, fname: str, direction: Literal["inputs", "outputs"]):
@@ -1158,15 +1275,22 @@ class ComputationFrame:
         )
 
     def get_direct_history(
-        self, node: str, hids: Set[str], include_calls: bool
+        self, vname: str, hids: Set[str], include_calls: bool
     ) -> Dict[str, Set[str]]:
         """
+        Return a view of the refs (and optionally calls) that immediately
+        precede the given refs in the computation graph.
+
         Given some hids of refs belonging to a variable,
         - find the creator calls (if any) for these refs contained in
         in-neighbors of the variable
         - for each call, trace the in-edges of its function node to find the
         inputs of the call
         - gather all this data in the form of a {vname: {hid}} dict
+            - NOTE: the values of the dictionary are SETS of hids, because there
+            could be multiple paths leading to the same ref. This is especially
+            relevant when there are data structures present in the computation
+            graph.
         - optionally, include the calls themselves in the result as {fname: {hid}}
         pairs.
 
@@ -1174,8 +1298,8 @@ class ComputationFrame:
         inputs in the CF, but we only gather the ones reachable along edges that
         are connected to the variable in the appropriate way.
         """
-        total_res = {node: hids}
-        if node not in self.vnames:
+        total_res = {vname: hids}
+        if vname not in self.vnames:
             raise NotImplementedError()
         for hid in hids:
             if hid not in self.creator:
@@ -1186,7 +1310,7 @@ class ComputationFrame:
             creator_inv_proj = get_reverse_proj(creator_call)
             # creator_input_uids = {r.hid for r in creator_call.inputs.values()}
             # nodes where creator call appears
-            creator_fnames = self.callinv[creator_hid] & self.in_neighbors(node=node)
+            creator_fnames = self.callinv[creator_hid] & self.in_neighbors(node=vname)
             for creator_fname in creator_fnames:
                 if include_calls:
                     if creator_fname not in res:
@@ -1216,6 +1340,10 @@ class ComputationFrame:
         result: Optional[Dict[str, Set[str]]] = None,
         include_calls: bool = False,
     ) -> Dict[str, Set[str]]:
+        """
+        Return a view of the refs (and optionally calls) that precede the given
+        refs in the computation graph.
+        """
         direct_history = self.get_direct_history(
             node, hids, include_calls=include_calls
         )
@@ -1241,10 +1369,14 @@ class ComputationFrame:
             return total_res
 
     def get_history_df(self, vname: str, include_calls: bool = False) -> pd.DataFrame:
+        """
+        Returns a dataframe where the rows represent the views of the full
+        history of all the refs in the variable `vname`.
+        """
         rows = []
-        for history_id in self.vs[vname]:
+        for hid in self.vs[vname]:
             total_history = self.get_total_history(
-                vname, {history_id}, include_calls=include_calls
+                vname, {hid}, include_calls=include_calls
             )
             total_history_objs = {
                 vname: {self.refs[ref_uid] for ref_uid in ref_uids}
@@ -1368,24 +1500,6 @@ class ComputationFrame:
             refs={k: v for k, v in self.refs.items()},
             calls={k: v for k, v in self.calls.items()},
         )
-
-    def drop(
-        self,
-        nodes: Iterable[str],
-        inplace: bool = False,
-        with_dependents: bool = False,
-    ) -> Optional["ComputationFrame"]:
-        if with_dependents:
-            raise NotImplementedError()
-        res = self if inplace else self.copy()
-        for node in nodes:
-            if node in res.vnames:
-                res.drop_var(node)
-            elif node in res.fnames:
-                res.drop_func(node)
-            else:
-                raise ValueError(f"Node {node} not found")
-        return res if not inplace else None
 
     def __getitem__(
         self, indexer: Union[str, Iterable[str], "ComputationFrame"]
@@ -1538,11 +1652,11 @@ class ComputationFrame:
                 f"Node {node_to_merge} is not a subset of node {merge_into}"
             )
         for src, dst, label in res.in_edges(node_to_merge):
-            res.drop_edge(src, dst, label)
-            res.add_edge(src, merge_into, label)
+            res._drop_edge(src, dst, label)
+            res._add_edge(src, merge_into, label)
         for src, dst, label in res.out_edges(node_to_merge):
-            res.drop_edge(src, dst, label)
-            res.add_edge(merge_into, dst, label)
+            res._drop_edge(src, dst, label)
+            res._add_edge(merge_into, dst, label)
         res.drop_node(node_to_merge)
         return res if not inplace else None
 
@@ -1623,15 +1737,15 @@ class ComputationFrame:
             consumers={},
             storage=storage,
         )
-        res.add_func(fname=res.get_new_fname(f.name))
+        res._add_func(fname=res.get_new_fname(f.name))
         for input_name in input_names:
             input_label = get_name_proj(op=f)(input_name)
-            input_var = res.add_var(vname=res.get_new_vname(input_label))
-            res.add_edge(input_var, f.name, input_label)
+            input_var = res._add_var(vname=res.get_new_vname(input_label))
+            res._add_edge(input_var, f.name, input_label)
         for output_name in output_names:
             output_label = get_name_proj(op=f)(output_name)
-            output_var = res.add_var(vname=res.get_new_vname(output_label))
-            res.add_edge(f.name, output_var, output_label)
+            output_var = res._add_var(vname=res.get_new_vname(output_label))
+            res._add_edge(f.name, output_var, output_label)
         for call in calls:
             res.add_call(f.name, call, with_refs=True)
         return res
@@ -1639,9 +1753,18 @@ class ComputationFrame:
     @staticmethod
     def from_refs(storage: "Storage", refs: Iterable[Ref]) -> "ComputationFrame":
         res = ComputationFrame(storage=storage)
-        vname = res.add_var(vname=res.get_new_vname("v"))
+        vname = res._add_var(vname=res.get_new_vname("v"))
         for ref in refs:
             res.add_ref(vname, ref)
+        return res
+    
+    @staticmethod
+    def from_vars(storage: "Storage", vars: Dict[str, Set[Ref]]) -> "ComputationFrame":
+        res = ComputationFrame(storage=storage)
+        for vname, refs in vars.items():
+            vname = res._add_var(vname=vname)
+            for ref in refs:
+                res.add_ref(vname, ref)
         return res
 
     ############################################################################

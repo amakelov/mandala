@@ -163,10 +163,16 @@ class Storage:
     ### refs interface
     ############################################################################
     def save_ref(self, ref: Ref):
+        """
+        NOTE: the given ref may not be in memory, but may still be a new history
+        ID, if there was previously another ref with the same content ID but
+        different history ID.
+        """
         if ref.hid in self.shapes:  # ensure idempotence
             return
         if isinstance(ref, AtomRef):
-            self.atoms[ref.cid] = serialize(ref.obj)
+            if ref.in_memory: #! ONLY save the atom if it is in memory
+                self.atoms[ref.cid] = serialize(ref.obj)
             self.shapes[ref.hid] = ref.detached()
         elif isinstance(ref, ListRef):
             self.shapes[ref.hid] = ref.shape()
@@ -240,11 +246,20 @@ class Storage:
         return self.calls.exists(hid)
 
     def save_call(self, call: Call):
+        """
+        Save a *new* call to the storage. All inputs/outputs must be present.
+
+        If the op has not been seen before, it will be saved as well.
+        """
         if self.calls.exists(call.hid):
             return
         if not self.ops.exists(key=call.op.name):
+            # save the op
+            logging.info(f"Caching new op {call.op.name}.")
             self.ops[call.op.name] = call.op.detached()
-        for k, v in itertools.chain(call.inputs.items(), call.outputs.items()):
+        # (convert the iterator to a list to avoid double iteration)
+        io_refs = list(itertools.chain(call.inputs.values(), call.outputs.values()))
+        for v in io_refs:
             self.save_ref(v)
         self.calls.save(call)
     
