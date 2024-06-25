@@ -204,11 +204,12 @@ class Node:
     def __init__(
         self,
         label: str,
+        label_size: int = 10,
         color: str = "#fdf6e3",  # SOLARIZED_LIGHT["base3"]
         shape: Literal["rect", "record", "Mrecord"] = "rect",
         internal_name: Optional[str] = None,
-        additional_lines: Optional[str] = None,
-        additional_lines_format: Optional[Dict[str, str]] = None,
+        additional_lines: Optional[List[str]] = None,
+        additional_lines_formats: Optional[List[Dict[str, str]]] = None,
     ):
         """
         `shape` can be "rect", "record" or "Mrecord" for a record with rounded corners.
@@ -219,21 +220,26 @@ class Node:
             internal_name = label
         self.internal_name = internal_name
         self.label = label
+        self.label_size = label_size
         self.color = color
         self.shape = shape
         self.additional_lines = additional_lines
-        self.additional_lines_format = additional_lines_format or {}
-        if 'color' in self.additional_lines_format:
-            self.additional_lines_format['color'] = SOLARIZED_LIGHT[self.additional_lines_format['color']]
-        if 'font' in self.additional_lines_format:
-            raise NotImplementedError # should use <B> tag in the additional_lines, not font='bold'
+        self.additional_lines_format = additional_lines_formats or []
+        for fmt_dict in self.additional_lines_format:
+            if 'color' in fmt_dict:
+                fmt_dict['color'] = SOLARIZED_LIGHT[fmt_dict['color']]
+            if 'font' in fmt_dict:
+                raise NotImplementedError # should use <B> tag in the additional_lines, not font='bold'
 
     def to_dot_string(self) -> str:
         if self.additional_lines is None:
             label_content = self.label
         else:
-            format_attrs = ' '.join(f'{k}="{v}"' for k, v in self.additional_lines_format.items())
-            label_content = f'<B>{self.label}</B><BR/><FONT {format_attrs}>{self.additional_lines}</FONT>'
+            # label_content = f'<B>{self.label}</B><BR/>'
+            label_content = f'<B><FONT POINT-SIZE="{self.label_size}">{self.label}</FONT></B><BR/>'
+            for line, fmt_dict in zip(self.additional_lines, self.additional_lines_format):
+                format_attrs = ' '.join(f'{k}="{v}"' for k, v in fmt_dict.items())
+                label_content += f'<FONT {format_attrs}>{line}</FONT><BR/>'
         dot_label = f'<{label_content}>'
         return f'"{self.internal_name}" [label={dot_label}, color="{self.color}", shape="{self.shape}"];'
 

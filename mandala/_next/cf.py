@@ -1008,7 +1008,7 @@ class ComputationFrame:
             print(f'Found the following number elements to expand in direction {direction}:\n{textwrap.indent(pprint.pformat({k: len(v) for k, v in expandable_elts.items()}), "  ")}')
         ref_hids = set.union(*expandable_elts.values())
         calls = res.storage.get_creators(ref_hids) if direction == "back" else res.storage.get_consumers(ref_hids)
-        print(f'Found {len(calls)} calls to expand')
+        if verbose: print(f'Found {len(calls)} calls to expand')
         if skip_existing:
             calls = [call for call in calls if call.hid not in res.calls]
         side_to_glue = "outputs" if direction == "back" else "inputs"
@@ -1858,17 +1858,45 @@ class ComputationFrame:
         lines = "\n".join(lines)
         return lines
 
-    def draw(self, show_how: str = "inline"):
+    def draw(self, show_how: str = "inline", verbose: bool = False):
         """
         Draw the computational graph for this CF using graphviz, and annotate
         the nodes with some additional information.
         """
-        vnodes = {vname: Node(color=SOLARIZED_LIGHT['blue'], label=vname, internal_name=vname, additional_lines=f'({len(self.vs[vname])} refs)',
-                              additional_lines_format={ 'color': 'blue', 'point-size': 10}) for vname in self.vnames}
-        fnodes = {fname: Node(color=SOLARIZED_LIGHT['red'], label=fname, internal_name=fname,
-                                additional_lines=f'({len(self.fs[fname])} calls)',
-                                additional_lines_format={ 'color': 'red', 'point-size': 10}
-                              ) for fname in self.fnames}
+        if verbose:
+            # precompute statistics
+            sink_elts = self.get_sink_elts()
+            source_elts = self.get_source_elts()
+        vnodes = {}
+        for vname in self.vnames:
+            # a little summary of the variable
+            additional_lines = [f"{len(self.vs[vname])} refs"]
+            additional_lines_formats = [{'color': 'blue', 'point-size': 10}]
+            if verbose: 
+                if len(source_elts[vname]) > 0:
+                    additional_lines.append(f"{len(source_elts[vname])} source refs")
+                    additional_lines_formats.append({'color': 'green', 'point-size': 10})
+                if len(sink_elts[vname]) > 0:
+                    additional_lines.append(f"{len(sink_elts[vname])} sink refs")
+                    additional_lines_formats.append({'color': 'red', 'point-size': 10})
+            vnodes[vname] = Node(
+                color=SOLARIZED_LIGHT["blue"],
+                label=vname,
+                label_size=12,
+                internal_name=vname,
+                additional_lines=additional_lines,
+                additional_lines_formats=additional_lines_formats,
+            )
+        fnodes = {}
+        for fname in self.fnames:
+            op_name = self.calls[next(iter(self.fs[fname]))].op.name
+            fnodes[fname] = Node(color=SOLARIZED_LIGHT['red'], 
+                              label=fname,
+                              label_size=12,
+                              internal_name=fname,
+                              additional_lines=[f'@op:{op_name}', f'{len(self.fs[fname])} calls'],
+                              additional_lines_formats=[{ 'color': 'base03', 'point-size': 10}, { 'color': 'red', 'point-size': 10} ]
+                              )
         nodes = {**vnodes, **fnodes}
         edges = []
         for src, dst, label in self.edges():

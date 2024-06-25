@@ -255,7 +255,7 @@ class Storage:
             return
         if not self.ops.exists(key=call.op.name):
             # save the op
-            logging.info(f"Caching new op {call.op.name}.")
+            logger.debug(f"Caching new op {call.op.name}.")
             self.ops[call.op.name] = call.op.detached()
         # (convert the iterator to a list to avoid double iteration)
         io_refs = list(itertools.chain(call.inputs.values(), call.outputs.values()))
