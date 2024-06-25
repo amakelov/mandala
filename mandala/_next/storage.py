@@ -569,6 +569,8 @@ class Storage:
             output_history_ids = op.get_output_history_ids(call_history_id=call_hid, output_names=list(op.get_ordered_outputs(output_dict=output_names_identity)))
             for k, v in call_prototype.outputs.items():
                 v.hid = output_history_ids[k]
+            for k, v in call_prototype.inputs.items():
+                v.hid = inputs[k].hid
             return call_prototype
         logging.debug(f"Could not find a call to {op.name} with hid {call_hid} or cid {call_cid}.")
         return None

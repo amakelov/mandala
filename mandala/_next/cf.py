@@ -1,6 +1,7 @@
 from .common_imports import *
 from .common_imports import sess
 import textwrap
+import pprint
 from .utils import (
     get_nullable_union,
     get_setdict_union,
@@ -903,18 +904,27 @@ class ComputationFrame:
         self,
         call_groups: Dict[Tuple[str, Tuple[Tuple[str, Tuple[str, ...]]]], List[Call]],
         side_to_glue: Literal["inputs", "outputs"],
+        verbose: bool = False,
     ):
         """
         Core internal function that actually expands the computation frame from
         the given call groups. 
         """
         for group_id, group_calls in sorted(call_groups.items()):
+            if verbose:
+                # make a readable description of the call group
+                op_name, connections = group_id
+                connections_str = ", ".join(
+                    f"{label}: {vnames}" for label, vnames in connections
+                )
+                print(f"Expanding call group for op '{op_name}' with {len(group_calls)} calls, connections:\n{textwrap.indent(connections_str, '  ')}")
             op_id, connected_vnames_tuple = group_id
             label_to_connected_vnames = {
                 label: vnames for label, vnames in connected_vnames_tuple
             }
             ### create the function node for this group
             funcname = self._add_func(fname=self.get_new_fname(op_id))
+            if verbose: print(f"Adding function {funcname} for group {group_id}")
             for label, connected_vnames in label_to_connected_vnames.items():
                 if not connected_vnames:
                     continue
@@ -965,6 +975,54 @@ class ComputationFrame:
         # indexer without actually adding them to the CF
         raise NotImplementedError()
     
+    def _expand_unidirectional(
+            self,
+            direction: Literal["back", "forward"],
+            varnames: Optional[Union[str, Iterable[str]]] = None,
+            skip_existing: bool = False,
+            inplace: bool = False,
+            verbose: bool = False,
+    ) -> Optional["ComputationFrame"]:
+        res = self if inplace else self.copy()
+        if varnames is None:
+            while True: # recurse until a fixed point is reached
+                current_size = len(res.nodes)
+                varnames = res.vs.keys()
+                res._expand_unidirectional(
+                    direction=direction,
+                    varnames=varnames,
+                    skip_existing=skip_existing,
+                    inplace=True,
+                    verbose=verbose,
+                )
+                new_size = len(res.nodes)
+                if new_size == current_size:
+                    break
+            return res if not inplace else None
+        if isinstance(varnames, str):
+            varnames = {varnames}
+        
+        expandable_elts = res.get_source_elts() if direction == "back" else res.get_sink_elts()
+        expandable_elts = {k: v for k, v in expandable_elts.items() if k in varnames}
+        if verbose:
+            print(f'Found the following number elements to expand in direction {direction}:\n{textwrap.indent(pprint.pformat({k: len(v) for k, v in expandable_elts.items()}), "  ")}')
+        ref_hids = set.union(*expandable_elts.values())
+        calls = res.storage.get_creators(ref_hids) if direction == "back" else res.storage.get_consumers(ref_hids)
+        print(f'Found {len(calls)} calls to expand')
+        if skip_existing:
+            calls = [call for call in calls if call.hid not in res.calls]
+        side_to_glue = "outputs" if direction == "back" else "inputs"
+        call_groups = res._group_calls(calls, 
+                                       by=side_to_glue,
+                                       available_nodes=varnames)
+        # find the call groups subsumed by the current graph
+        res._expand_from_call_groups(
+            call_groups,
+            side_to_glue=side_to_glue,
+            verbose=verbose,
+        )
+        return res if not inplace else None
+    
     def expand_back(
         self,
         varnames: Optional[Union[str, Iterable[str]]] = None,
@@ -972,6 +1030,7 @@ class ComputationFrame:
         # not connected to the given variables)
         skip_existing: bool = False, 
         inplace: bool = False,
+        verbose: bool = False,
     ) -> Optional["ComputationFrame"]:
         """
         Join to the CF the calls that created all refs in the given variables
@@ -984,78 +1043,38 @@ class ComputationFrame:
         The number of these nodes and how they connect to the CF will depend on
         the structure of the calls that created the refs. 
         """
-        res = self if inplace else self.copy()
-        if varnames is None:  # full expansion until fixed point
-            while True:
-                current_size = len(res.nodes)
-                # sources = res.sources
-                sources = res.vs.keys()
-                res.expand_back(sources, inplace=True, skip_existing=skip_existing)
-                new_size = len(res.nodes)
-                if new_size == current_size:
-                    break
-            return res if not inplace else None
-        if isinstance(varnames, str):
-            varnames = {varnames}
-        ### which refs should we use for expansion?
-        # option 1: all the refs in the given variables - seems too aggressive
-        # ref_uids = set.union(*[res.vs[v] for v in varnames])
-        # option 2: only the refs that are source elts - what we want intuitively
-        sources_view = {k: v for k, v in self.get_source_elts().items() if k in varnames}
-        ref_uids = set.union(*sources_view.values())
-        calls = res.storage.get_creators(ref_uids)
-        if skip_existing:
-            calls = [call for call in calls if call.hid not in res.calls]
-        call_groups = res._group_calls(calls, by="outputs", available_nodes=varnames)
-        # find the call groups subsumed by the current graph
-        
-        logging.debug(f"Found call groups with keys: {call_groups.keys()}")
-        res._expand_from_call_groups(
-            call_groups,
-            side_to_glue="outputs",
+        return self._expand_unidirectional(
+            direction="back",
+            varnames=varnames,
+            skip_existing=skip_existing,
+            inplace=inplace,
+            verbose=verbose,
         )
-        return res if not inplace else None
 
     def expand_forward(
         self,
         varnames: Optional[Union[str, Set[str]]] = None,
         skip_existing: bool = False,
         inplace: bool = False,
+        verbose: bool = False,
     ) -> Optional["ComputationFrame"]:
         """
         Join the calls that consume the given variables; see `expand_back` (the 
         dual operation) for more details.
         """
-        res = self if inplace else self.copy()
-        if varnames is None:  # full expansion until fixed point
-            while True:
-                current_size = len(res.nodes)
-                # sinks = res.sinks
-                sinks = res.vs.keys()
-                res.expand_forward(sinks, inplace=True, skip_existing=skip_existing)
-                new_size = len(res.nodes)
-                if new_size == current_size:
-                    break
-            return res if not inplace else None
-        if isinstance(varnames, str):
-            varnames = {varnames}
-        # ref_hids = set.union(*[res.vs[v] for v in varnames])
-        sink_elts = {k: v for k, v in self.get_sink_elts().items() if k in varnames}
-        ref_hids = set.union(*sink_elts.values())
-        calls = res.storage.get_consumers(ref_hids)
-        if skip_existing:
-            calls = [call for call in calls if call.hid not in res.calls]
-        call_groups = res._group_calls(calls, by="inputs", available_nodes=varnames)
-        res._expand_from_call_groups(
-            call_groups,
-            side_to_glue="inputs",
+        return self._expand_unidirectional(
+            direction="forward",
+            varnames=varnames,
+            skip_existing=skip_existing,
+            inplace=inplace,
+            verbose=verbose,
         )
-        return res if not inplace else None
 
     def expand(
         self,
         inplace: bool = False,
         skip_existing: bool = False,
+        verbose: bool = False,
     ) -> Optional["ComputationFrame"]:
         """
         Expand the computation frame by repeatedly applying `expand_back` and
@@ -1067,8 +1086,8 @@ class ComputationFrame:
         res = self if inplace else self.copy()
         cur_size = len(res.refs) + len(res.calls)
         while True:
-            res.expand_back(inplace=True, skip_existing=skip_existing)
-            res.expand_forward(inplace=True, skip_existing=skip_existing)
+            res.expand_back(inplace=True, skip_existing=skip_existing, verbose=verbose)
+            res.expand_forward(inplace=True, skip_existing=skip_existing, verbose=verbose)
             new_size = len(res.refs) + len(res.calls)
             if new_size == cur_size:
                 break
