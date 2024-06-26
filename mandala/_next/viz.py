@@ -294,7 +294,8 @@ class Group:
         self.parent = parent
 
 
-FONT = "Helvetica"
+# FONT = "Helvetica"
+FONT = "RobotoMono"
 FONT_SIZE = 10
 
 GRAPH_CONFIG = {
@@ -304,6 +305,7 @@ GRAPH_CONFIG = {
     "fontname": FONT,
     "fontsize": FONT_SIZE,
     "fontcolor": SOLARIZED_LIGHT["base03"],
+    # "splines": "curved",
 }
 
 NODE_CONFIG = {

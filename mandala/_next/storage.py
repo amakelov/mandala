@@ -4,7 +4,7 @@ import prettytable
 import datetime
 from .model import *
 import sqlite3
-from .model import __make_list__, __get_list_item__, __make_dict__, __get_dict_value__, _Ignore, _NewArgDefault
+from .model import __make_list__, __list_getitem__, __make_dict__, __dict_getitem__, _Ignore, _NewArgDefault
 from .utils import dataframe_to_prettytable, parse_returns
 from .viz import _get_colorized_diff
 from .deps.versioner import Versioner, CodeState
@@ -396,18 +396,41 @@ class Storage:
         else:
             return obj.obj
 
-    def _attach_atom(self, obj: AtomRef) -> AtomRef:
-        assert isinstance(obj, AtomRef)
-        if not obj.in_memory:
-            obj.obj = deserialize(self.atoms[obj.cid])
-            obj.in_memory = True
-        return obj
+    def _attach_atom(self, ref: AtomRef, inplace: bool = False) -> Optional[AtomRef]:
+        assert isinstance(ref, AtomRef)
+        if ref.in_memory:
+            if inplace:
+                return None
+            else:
+                return ref.attached(obj=ref.obj)
+        else:
+            if inplace:
+                ref.obj = deserialize(self.atoms[ref.cid])
+                ref.in_memory = True
+                return None
+            else:
+                return ref.attached(obj=deserialize(self.atoms[ref.cid]))
 
     def unwrap(self, obj: Any) -> Any:
+        """
+        Given a `Ref` or a nested python collection containing `Ref`s, return
+        the "unwrapped" object, where all `Ref`s are replaced by the objects
+        they wrap. 
+        
+        NOTE: will trigger a load from the storage backend when some of the
+        objects are not in memory.
+        """
         return recurse_on_ref_collections(self._unwrap_atom, obj)
 
-    def attach(self, obj: T) -> T:
-        return recurse_on_ref_collections(self._attach_atom, obj)
+    def attach(self, obj: T, inplace: bool = False) -> Optional[T]:
+        """
+        Given a `Ref` or a nested python collection containing `Ref`s, return
+        the "attached" object, where all `Ref`s are loaded into memory. 
+
+        NOTE: 
+        """
+        attacher = lambda ref: self._attach_atom(ref, inplace=inplace)
+        return recurse_on_ref_collections(attacher, obj)
 
     def get_struct_builder(self, tp: Type) -> Op:
         # the builtin op that will construct instances of this type
@@ -491,9 +514,9 @@ class Storage:
             new_elts = []
             for i, elt in enumerate(ref):
                 getitem_dict, item_call, _ = self.call_internal(
-                    op=__get_list_item__,
-                    storage_inputs={"obj": ref, "attr": i},
-                    storage_tps={"obj": tp, "attr": AtomType()},
+                    op=__list_getitem__,
+                    storage_inputs={"list": ref, "i": i},
+                    storage_tps={"list": tp, "i": AtomType()},
                 )
                 new_elt = getitem_dict["output_0"]
                 destr_calls.append(item_call)
@@ -508,9 +531,9 @@ class Storage:
             new_items = {}
             for k, v in ref.items():
                 getvalue_dict, value_call, _ = self.call_internal(
-                    op=__get_dict_value__,
-                    storage_inputs={"obj": ref, "key": k},
-                    storage_tps={"obj": tp, "key": tp.key},
+                    op=__dict_getitem__,
+                    storage_inputs={"dict": ref, "key": k},
+                    storage_tps={"dict": tp, "key": tp.key},
                 )
                 new_v = getvalue_dict["output_0"]
                 destr_calls.append(value_call)
@@ -992,7 +1015,7 @@ class Storage:
     ### user-facing functions
     ############################################################################
     def cf(
-        self, source: Union[Op, Ref, Iterable[Ref], Iterable[str]]
+        self, source: Union[Op, Ref, Iterable[Ref], Iterable[str], Dict[str, Union[Ref, Iterable[Ref]]]]
     ) -> "ComputationFrame":
         """
         Main user-facing function to create a computation frame.
@@ -1003,6 +1026,11 @@ class Storage:
             return ComputationFrame.from_refs(refs=[source], storage=self)
         elif all(isinstance(elt, Ref) for elt in source):
             return ComputationFrame.from_refs(refs=source, storage=self)
+        elif isinstance(source, dict):
+            for k in source.keys():
+                if isinstance(source[k], Ref):
+                    source[k] = [source[k]]
+            return ComputationFrame.from_vars(vars=source, storage=self)
         elif all(isinstance(elt, str) for elt in source):
             # must be hids
             refs = [self.load_ref(hid, lazy=True) for hid in source]
@@ -1061,4 +1089,3 @@ class Storage:
     
 
 from .cf import ComputationFrame
-

@@ -311,7 +311,11 @@ class ComputationFrame:
             for dst in dsts
         ]
 
-    def add_ref(self, vname: str, ref: Ref):
+    def add_ref(self, vname: str, ref: Ref, allow_existing: bool = False):
+        if ref.hid in self.vs[vname]:
+            if not allow_existing:
+                raise ValueError(f"Ref {ref.hid} already exists in variable {vname}")
+            return
         self.refs[ref.hid] = ref
         self.vs[vname].add(ref.hid)
         if ref.hid not in self.refinv:
@@ -354,7 +358,7 @@ class ComputationFrame:
                 self.consumers[input_ref.hid].add(call.hid)
                 # add ref to corresponding variables
                 for vname in self.inp[fname][input_proj]:
-                    self.add_ref(vname, input_ref)
+                    self.add_ref(vname, input_ref, allow_existing=True)
             for output_name, output_ref in call.outputs.items():
                 output_proj = get_name_proj(call.op)(output_name)
                 # skip over outputs not tracked by the graph
@@ -364,7 +368,7 @@ class ComputationFrame:
                 self.creator[output_ref.hid] = call.hid
                 # add ref to corresponding variables
                 for vname in self.out[fname][output_proj]:
-                    self.add_ref(vname, output_ref)
+                    self.add_ref(vname, output_ref, allow_existing=True)
 
     def drop_call(self, fname: str, hid: str):
         """
@@ -935,7 +939,7 @@ class ComputationFrame:
                 group_hids = {call.hid for call in group_calls}
                 found_match = False
                 for fname in self.fs:
-                    if group_hids <= self.fs[fname]:
+                    if group_hids <= self.fs[fname] or self.fs[fname] <= group_hids:
                         found_match = True
                         break
                 if found_match:
@@ -1111,7 +1115,7 @@ class ComputationFrame:
         inplace: bool = False,
         skip_existing: bool = False,
         verbose: bool = False,
-        reuse_existing: bool = False,
+        reuse_existing: bool = True,
     ) -> Optional["ComputationFrame"]:
         """
         Expand the computation frame by repeatedly applying `expand_back` and
@@ -1151,7 +1155,8 @@ class ComputationFrame:
     ############################################################################
     def topsort(self) -> List[str]:
         """
-        Return a topological sort of the nodes in the graph
+        Return a topological sort of the nodes in the graph. If this is not 
+        possible (i.e., the graph contains cycles), raise an error.
         """
         # Kahn's algorithm
         in_degrees = {node: 0 for node in self.vs.keys() | self.fs.keys()}
@@ -1169,6 +1174,8 @@ class ComputationFrame:
                     in_degrees[dst] -= 1
                     if in_degrees[dst] == 0:
                         sources.append(dst)
+        if not len(result) == len(self.nodes):
+            raise NotImplementedError("Support for cycles not implemented yet")
         return result
 
     def sort_nodes(self, nodes: Iterable[str]) -> List[str]:
@@ -1213,9 +1220,9 @@ class ComputationFrame:
         """
         if len(nodes) == 0:
             nodes = tuple(self.nodes)
-        return self.get_df(*nodes, include_calls=True, values=values, verbose=verbose)
+        return self.df(*nodes, include_calls=True, values=values, verbose=verbose)
 
-    def get_df(
+    def df(
         self,
         *nodes: str,
         values: Literal["refs", "objs"] = "objs",
@@ -1899,7 +1906,7 @@ class ComputationFrame:
     def draw(self,
              show_how: str = "inline", 
              verbose: bool = False,
-             orientation: Literal["LR", "TB"] = "LR"
+             orientation: Literal["LR", "TB"] = "TB"
              ):
         """
         Draw the computational graph for this CF using graphviz, and annotate
@@ -1912,15 +1919,23 @@ class ComputationFrame:
         vnodes = {}
         for vname in self.vnames:
             # a little summary of the variable
-            additional_lines = [f"{len(self.vs[vname])} refs"]
+            additional_lines = [f"{len(self.vs[vname])} values"]
             additional_lines_formats = [{'color': 'blue', 'point-size': 10}]
             if verbose: 
-                if len(source_elts[vname]) > 0:
-                    additional_lines.append(f"{len(source_elts[vname])} source refs")
-                    additional_lines_formats.append({'color': 'green', 'point-size': 10})
-                if len(sink_elts[vname]) > 0:
-                    additional_lines.append(f"{len(sink_elts[vname])} sink refs")
-                    additional_lines_formats.append({'color': 'red', 'point-size': 10})
+                num_source = len(source_elts[vname])
+                num_sink = len(sink_elts[vname])
+                parts = []
+                if num_source > 0:
+                    parts.append(f"{num_source} source")
+                if num_sink > 0:
+                    parts.append(f"{num_sink} sink")
+                additional_lines[0] += f" ({'/'.join(parts)})"
+                # if len(source_elts[vname]) > 0:
+                #     additional_lines.append(f"{len(source_elts[vname])} source refs")
+                #     additional_lines_formats.append({'color': 'base03', 'point-size': 10})
+                # if len(sink_elts[vname]) > 0:
+                #     additional_lines.append(f"{len(sink_elts[vname])} sink refs")
+                #     additional_lines_formats.append({'color': 'base03', 'point-size': 10})
             vnodes[vname] = Node(
                 color=SOLARIZED_LIGHT["blue"],
                 label=vname,

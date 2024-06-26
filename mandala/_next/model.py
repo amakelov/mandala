@@ -40,9 +40,16 @@ class Ref:
         return hash(self.hid)
 
     def detached(self) -> "Ref":
+        """
+        Return a *copy* of this ref
+        """
         return type(self)(cid=self.cid, hid=self.hid, in_memory=False, obj=None)
 
     def attached(self, obj: Any) -> "Ref":
+        """
+        Return a *copy* of this ref that is in memory (taking the object from
+        `obj`)
+        """
         return type(self)(cid=self.cid, hid=self.hid, in_memory=True, obj=obj)
 
     def shallow_copy(self) -> "Ref":
@@ -320,8 +327,9 @@ def recurse_on_ref_collections(f: Callable, obj: Any, **kwargs: Any) -> Any:
         return obj
 
 
-def __make_list__(**kwargs: Any) -> MList[Any]:
-    elts = [kwargs[f"elts_{i}"] for i in range(len(kwargs))]
+def __make_list__(**items: Any) -> MList[Any]:
+    # items must be a dict with keys "elts_0", "elts_1", etc.
+    elts = [items[f"elts_{i}"] for i in range(len(items))]
     return ListRef(
         cid=get_content_hash([elt.cid for elt in elts]),
         hid=get_content_hash([elt.hid for elt in elts]),
@@ -353,19 +361,19 @@ def __make_tuple__(*elts: Any) -> tuple:
     return tuple(elts)
 
 
-def __get_list_item__(obj: MList[Any], attr: Any) -> Any:
-    return obj[attr.obj]
+def __list_getitem__(list: MList[Any], i: Any) -> Any:
+    return list[i.obj]
 
-def __get_dict_value__(obj: MDict[Any, Any], key: Any) -> Any:
-    return obj[key]
+def __dict_getitem__(dict: MDict[Any, Any], key: Any) -> Any:
+    return dict[key]
 
 
 __make_list__ = Op(name=__make_list__.__name__, f=__make_list__, __structural__=True)
 __make_dict__ = Op(name=__make_dict__.__name__, f=__make_dict__, __structural__=True)
 __make_set__ = Op(name=__make_set__.__name__, f=__make_set__, __structural__=True)
 __make_tuple__ = Op(name=__make_tuple__.__name__, f=__make_tuple__, __structural__=True)
-__get_list_item__ = Op(name=__get_list_item__.__name__, f=__get_list_item__, __structural__=True)
-__get_dict_value__ = Op(name=__get_dict_value__.__name__, f=__get_dict_value__, __structural__=True)
+__list_getitem__ = Op(name=__list_getitem__.__name__, f=__list_getitem__, __structural__=True)
+__dict_getitem__ = Op(name=__dict_getitem__.__name__, f=__dict_getitem__, __structural__=True)
 
 
 def make_ref_set(resf: Iterable[Ref]) -> SetRef:
