@@ -241,7 +241,7 @@ class DAG(Generic[T]):
                 )
             )
             answer = ask_user(
-                question="Does this change require recomputation of dependent calls? [y]es/[n]o/[a]bort",
+                question="Does this change require recomputation of dependent calls?\nWARNING: if the change created new dependencies and you choose 'no', you should add them by hand or risk missing changes in them.\nAnswer: [y]es/[n]o/[a]bort",
                 valid_options=["y", "n", "a"],
             )
             print(f'You answered: "{answer}"')

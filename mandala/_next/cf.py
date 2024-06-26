@@ -1916,6 +1916,7 @@ class ComputationFrame:
             # precompute statistics
             sink_elts = self.get_sink_elts()
             source_elts = self.get_source_elts()
+            num_versions = {fname: len(set(self.calls[hid].semantic_version for hid in self.fs[fname])) for fname in self.fnames}
         vnodes = {}
         for vname in self.vnames:
             # a little summary of the variable
@@ -1926,16 +1927,10 @@ class ComputationFrame:
                 num_sink = len(sink_elts[vname])
                 parts = []
                 if num_source > 0:
-                    parts.append(f"{num_source} source")
+                    parts.append(f"{num_source} sources")
                 if num_sink > 0:
-                    parts.append(f"{num_sink} sink")
+                    parts.append(f"{num_sink} sinks")
                 additional_lines[0] += f" ({'/'.join(parts)})"
-                # if len(source_elts[vname]) > 0:
-                #     additional_lines.append(f"{len(source_elts[vname])} source refs")
-                #     additional_lines_formats.append({'color': 'base03', 'point-size': 10})
-                # if len(sink_elts[vname]) > 0:
-                #     additional_lines.append(f"{len(sink_elts[vname])} sink refs")
-                #     additional_lines_formats.append({'color': 'base03', 'point-size': 10})
             vnodes[vname] = Node(
                 color=SOLARIZED_LIGHT["blue"],
                 label=vname,
@@ -1947,6 +1942,10 @@ class ComputationFrame:
         fnodes = {}
         for fname in self.fnames:
             op_name = self.calls[next(iter(self.fs[fname]))].op.name
+            if verbose:
+                fname_versions = num_versions[fname]
+                if fname_versions > 1:
+                    op_name = f"{op_name} ({fname_versions} versions)"
             fnodes[fname] = Node(color=SOLARIZED_LIGHT['red'], 
                               label=fname,
                               label_size=12,

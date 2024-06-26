@@ -420,12 +420,3 @@ def write_output(
     if show_how == "inline":
         src = Source(dot_string)
         display.display(src)
-    # if show_how == "inline" or show_how == "open":
-    #     assert (
-    #         Config.has_pil
-    #     ), "Pillow is not installed. Please install it to show images inline"
-    #     img = Image.open(output_path, "r")
-    #     if show_how == "inline":
-    #         return img
-    #     else:
-    #         img.show()
