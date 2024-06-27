@@ -458,6 +458,16 @@ class SQLiteCallStorage:
         )
         count = cursor.fetchone()[0]
         return count > 0
+    
+    @transaction
+    def exists_content(
+        self, cid: str, conn: Optional[sqlite3.Connection] = None
+    ) -> bool:
+        cursor = conn.execute(
+            f"SELECT COUNT(*) FROM {self.table_name} WHERE call_content_id = ?", (cid,)
+        )
+        count = cursor.fetchone()[0]
+        return count > 0
 
     @transaction
     def exists_ref_hid(
@@ -505,7 +515,18 @@ class SQLiteCallStorage:
         """
         Get the data of a `Call` object given its history_id.
         """
-        return self.mget_data([call_history_id], conn)[0]
+        return self.mget_data([call_history_id], conn=conn)[0]
+    
+    @transaction
+    def get_data_content(
+        self, cid: str, conn: Optional[sqlite3.Connection] = None
+    ) -> Dict[str, Any]:
+        cursor = conn.execute(
+            f"SELECT * FROM {self.table_name} WHERE call_content_id = ?", (cid,)
+        )
+        rows = cursor.fetchall()
+        hid = rows[0][0]
+        return self.get_data(hid, conn)
 
     ### provenance queries
     @transaction
@@ -598,16 +619,29 @@ class CachedCallStorage:
         else:
             res = self.persistent.exists(call_history_id)
             return res
+    
+    def exists_content(self, cid: str) -> bool:
+        if self.cache.exists_content(cid):
+            return True
+        else:
+            res = self.persistent.exists_ref_hid(cid)
+            return res
 
     def get_data(
-        self, call_history_id: str, conn: Optional[sqlite3.Connection] = None
+        self, call_history_id: str,
     ) -> Dict[str, Any]:
         if self.cache.exists(call_history_id):
             return self.cache.get_data(call_history_id)
         else:
-            # if conn is None:
-            #     conn = self.persistent.conn()
-            return self.persistent.get_data(call_history_id, conn)
+            return self.persistent.get_data(call_history_id)
+    
+    def get_data_content(
+        self, cid: str, conn: Optional[sqlite3.Connection] = None
+    ) -> Dict[str, Any]:
+        if self.cache.exists_content(cid):
+            return self.cache.get_data_content(cid)
+        else:
+            return self.persistent.get_data_content(cid, conn)
 
     def get_creator_hids(self, hids: Iterable[str]) -> Set[str]:
         raise NotImplementedError()

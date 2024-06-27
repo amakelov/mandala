@@ -406,7 +406,7 @@ def write_output(
         path = f.name
         with open(path, "w") as f:
             f.write(dot_string)
-        cmd = f"dot -T{output_ext} -o{output_path} {path}"
+        cmd = f"dot -T {output_ext} -o {output_path} {path} -Gsize=20,16"
         subprocess.call(cmd, shell=True)
     if show_how == "browser":
         assert output_ext in [
@@ -417,6 +417,8 @@ def write_output(
         ], "Can only show png, jpg, jpeg, or svg in browser"
         webbrowser.open(str(output_path))
         return
-    if show_how == "inline":
+    elif show_how == "inline":
         src = Source(dot_string)
         display.display(src)
+    elif show_how == "none":
+        pass

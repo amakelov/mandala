@@ -32,7 +32,8 @@ class Ref:
 
     def __repr__(self) -> str:
         if self.in_memory:
-            return f"Ref({self.obj}, hid='{self.hid[:3]}...', cid='{self.cid[:3]}...')"
+            obj_repr = repr(self.obj)
+            return f"Ref({obj_repr}, hid='{self.hid[:3]}...', cid='{self.cid[:3]}...')"
         else:
             return f"Ref(hid='{self.hid[:3]}...', cid='{self.cid[:3]}...', in_memory={self.in_memory})"
 

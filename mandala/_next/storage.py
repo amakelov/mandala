@@ -567,24 +567,27 @@ class Storage:
                 component=component, pre_call_uid=pre_call_uid, code_state=code_state
             )
             if lookup_outcome is None:
-                logging.debug(f"Could not find a version for {op.name}.")
+                logger.debug(f"Could not find a version for {op.name}.")
                 return
             else:
+                logger.debug(f"Found semantic version {lookup_outcome[1]} for {op.name}.")
                 _, semantic_version = lookup_outcome
         ### first, look up by history ID
         call_hid = op.get_call_history_id(
             inputs=inputs,
             semantic_version=semantic_version,
         )
-        if self.call_cache.exists(hid=call_hid):
-            call_data = self.call_cache.get_data(call_history_id=call_hid)
+        if self.calls.exists(call_history_id=call_hid):
+            call_data = self.calls.get_data(call_history_id=call_hid)
+            logger.debug(f"Found call to {op.name} with hid {call_hid}.")
             return self._get_call_from_data(call_data, lazy=True)
         ### if this fails, look up by content ID, and apply the correct history IDs
         call_cid = op.get_call_content_id(
             inputs=inputs, semantic_version=semantic_version
         )
-        if self.call_cache.exists_content(cid=call_cid):
-            call_data = self.call_cache.get_data_content(cid=call_cid)
+        if self.calls.exists_content(cid=call_cid):
+            logger.debug(f"Found call to {op.name} with cid {call_cid}.")
+            call_data = self.calls.get_data_content(cid=call_cid)
             call_prototype = self._get_call_from_data(call_data, lazy=True)
             #! very important: set the hids here on both the call and the inputs
             # and outputs
@@ -596,7 +599,7 @@ class Storage:
             for k, v in call_prototype.inputs.items():
                 v.hid = inputs[k].hid
             return call_prototype
-        logging.debug(f"Could not find a call to {op.name} with hid {call_hid} or cid {call_cid}.")
+        logger.debug(f"Could not find a call to {op.name} with hid {call_hid} or cid {call_cid}.")
         return None
     
     def get_defaults(self, f: Callable) -> Dict[str, Any]:

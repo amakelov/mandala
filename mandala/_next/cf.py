@@ -1904,9 +1904,10 @@ class ComputationFrame:
         return lines
 
     def draw(self,
-             show_how: str = "inline", 
+             show_how: Optional[str] = "inline", 
+             path: Optional[str] = None,
              verbose: bool = False,
-             orientation: Literal["LR", "TB"] = "TB"
+             orientation: Literal["LR", "TB"] = "TB",
              ):
         """
         Draw the computational graph for this CF using graphviz, and annotate
@@ -1967,7 +1968,8 @@ class ComputationFrame:
                                    edges=edges, 
                                    groups=[],
                                    rankdir=orientation)
-        write_output(dot_string, output_ext='svg', output_path=None, show_how=show_how,)
+        output_ext = 'svg' if path is None else path.split('.')[-1]
+        write_output(dot_string, output_ext='svg', output_path=path, show_how=show_how,)
 
 
     def print_graph(self):

@@ -1,6 +1,6 @@
 <div align="center">
   <br>
-    <img src="assets/logo-no-background.png" height=128 alt="logo" align="center">
+    <img src="../../assets/logo-no-background.png" height=128 alt="logo" align="center">
   <br>
 <a href="#install">Install</a> |
 <a href="#quickstart">Quickstart</a> |
@@ -15,155 +15,56 @@
 
 <br>
 
-**`mandala` eliminates the overhead of saving, loading,
-querying and versioning results in computational projects**. 
+`mandala` eliminates the effort and code overhead of ML experiment
+tracking ([and beyond!](#galaxybrained-explanation)) with two simple and powerful
+tools:
+- a decorator, `@op`, that automatically captures inputs, outputs and code
+(+dependencies) of Python function calls, and ensures the same call is never
+computed twice. `@op`s are **designed to be composed**.
+- a data structure, `ComputationFrame` (a generalization of dataframes), which
+enables explorations, queries and high-level operations over the saved web of
+`@op` calls. By automatically propagating relationships through `@op`
+composition, tables relating any variables in a project are readily available.
 
-To use it, you break your logic into functions whose outputs you want to save,
-and decorate them with `@op`. Then you write plain Python composing these
-functions, without any consideration for how results will be organized and
-accesssed.
-
-`mandala` automatically captures results, code and its dependencies as you
-compute. Repeating an already saved call reuses the saved results. The results
-form an interconnected web - a big computational graph that can be queried via
-`ComputationFrame`s, a generalization of `pandas` `DataFrame`s.
-
-While `mandala` is designed primarily with machine learning projects in mind,
-it is much more generic.
-
-## Main features
-
-- **plain-Python**: decorate the functions whose calls you want to save, and
-  just write ordinary Python code using them - including data structures
-and control flow. The results are automatically accessible upon a
-re-run, queriable, and versioned. No need to save, load, or name anything by yourself.
-- **never compute the same thing twice**: `mandala` saves the result of each
-  function call, and (hashes of) the inputs and the dependencies
-  (functions/globals) accessed by the call. If later the inputs and dependencies
-  are the same, it just loads the results from storage.
-- **query easily using `ComputationFrame`s**: your code
-  already knows the relationships between the variables in your project! To
-  easily explore and query these relationships, the `ComputationFrame`
-  generalizes `pandas` `DataFrame`s: the "columns" are a computational graph,
-  and the "rows" are computations that (partially) follow this graph. Computation frames can be iteratively expanded backward/forward to add more computational context to the graph, and plain old `DataFrame`s can be extracted from any `ComputationFrame` for further analysis.
-- **fine-grained versioning that's under your control**: each function's source
-  code has its own "mini git repo" behind the scenes, and each call tracks the
-  versions of all dependencies that went into it. You can decide when a change
-  to a dependency (e.g. refactoring a function to improve readability) doesn't change its semantics (so calls dependent on it won't be recomputed). 
-
-
-## Install
+# Install
 ```
 pip install git+https://github.com/amakelov/mandala
 ```
 
-## Testimonials
+# Quickstart
 
-> "`mandala` addresses a core challenge in my notebook workflow: being able to
-> explore data with code, without having to worry about losing the results of
-> expensive calculations." - *Adam Jermyn, Member of Technical Staff, Anthropic*
+[Run in Colab](https://colab.research.google.com/github/amakelov/mandala/blob/master/mandala/_next/tutorials/hello.ipynb)
 
+# FAQs
+- **how is this different from other experiment tracking frameworks** like W&B, MLFlow or Comet?
+    - tightly integrated with the actual Python code execution, as
+    opposed to being an external logging framework. 
+        - For instance, Python's collections can be (if so desired) made
+        transparent to the storage system, so that individual elements are
+        stored separately and can be reused across collections and calls.
+    - emphasizes memoization, which allows easy and transparent reuse of
+    previously computed artifacts 
+    - allows reuse, queries and versioning on a more granular level - the
+    function call - as opposed to entire scripts and/or notebooks. 
+- **how self-contained is it?**
+    - `mandala`'s core only depends on `pandas` and `joblib`. 
+    - for visualization of `ComputationFrame`s, you should have `dot` installed
+    on the system level, and/or the Python `graphviz` library installed.
+- **what magic is used to determine if a call has already been computed in
+the past?**
+    - internally, `mandala` uses `joblib` hashing to compute a content hash for
+    Python objects. This is not perfect TODO.
 
-## Walkthroughs
-### Rapidly iterate on a project with memoization
-Decorate the functions you want to memoize with `@op`, and compose programs out
-of them by chaining their inputs and outputs using ordinary **control flow** and
-**collections**. Every such program is **end-to-end memoized**:
-- it becomes an **imperative query interface** to its own results by
-  (quickly) re-executing the same code, or parts of it
-- it is **incrementally extensible** with new logic and parameters in-place,
-  which makes it both easy and efficient to interact with experiments
+# Basic Documentation
+This is a more comprehensive guide on how to get up to speed with the core
+features and methods, and tips on avoiding some pitfalls and limitations.
 
-### Query with `ComputationFrame`s
-TODO
-
-### Automatic per-call versioning and dependency tracking
-![deps](https://user-images.githubusercontent.com/1467702/231246159-fc8996a1-0987-4cec-9f0d-f0408609886e.gif)
-
-`mandala` comes with a very fine-grained versioning system:
-- **per-call dependency tracking**: automatically track the functions and global
-variables accessed by each memoized call, and alert you to changes in them, so
-you can (carefully) choose whether a change to a dependency requires
-recomputation of dependent calls (like bug fixes and changes to logic) or not
-(like refactoring, comments, and logging)
-- **the code determines all versions automatically**: use the current state of
-each dependency in your codebase to automatically determine the currently
-compatible versions of each memoized function to use in computation and queries.
-In particular, this means that:
-  - **you can go "back in time"** and access the storage relative to an earlier
-  state of the code (or even branch in a new direction like in `git`) by
-  just restoring this state
-  - **the code is the truth**: when in doubt about the meaning of a result, you
-  can just look at the current code.
-
-## Quickstart
-```python
-from mandala.imports import *
-
-# the storage saves calls and tracks dependencies, versions, etc.
-storage = Storage( 
-    deps_path='__main__' # track dependencies in current session
-    ) 
-
-@op # memoization (and more) decorator
-def increment(x): 
-  print('hi from increment!')
-  return x + 1
-
-increment(23) # function acts normally
-
-with storage: # work against a given storage using a `with storage` block
-  y = increment(23) # now the call is saved to `storage`
-
-print(y) # result wrapped with metadata. 
-print(storage.unwrap(y)) # `unwrap` gets the raw value
-
-with storage:
-  y = increment(23) # loads result from `storage`; doesn't execute `increment`
-
-@op # type-annotate data structures w/ custom annotations to store elts separately
-def average(nums: MList[int]): 
-  print('hi from average!')
-  return sum(nums) / len(nums)
-
-# memoized functions are designed to be composed!
-with storage: 
-    # sliding averages of `increment`'s results over 3 elts
-    nums = [increment(i) for i in range(5)]
-    for i in range(3):
-        result = average(nums[i:i+3])
-
-# TODO: comp frames
-
-# change implementation of `increment` and re-run
-# you'll be asked if the change requires recomputing dependencies (say yes)
-@op
-def increment(x):
-  print('hi from new increment!')
-  return x + 2
-
-with storage: 
-    nums = [increment(i) for i in range(5)]
-    for i in range(3):
-        # only one call to `average` is executed!
-        result = average(nums[i:i+3])
-
-# query is ran against the *new* version of `increment`
-# TODO
-```
-
-## Basic usage
-This is a quick guide on how to get up to speed with the core features and avoid
-common pitfalls.
-
-- [defining storages and memoized functions](#storage-and-the-op-decorator)
+- [create a `Storage`, save calls to `@op`s](#creating-a-storage-and-saving-calls-to-ops)
 - [memoization basics](#compute--memoize-with-storagerun)
-- [query storage directly from computational code](#implicit-declarative-queries)
-- [explicit query interface](#explicit-declarative-queries-with-storagequery)
 - [versioning and dependency tracking](#versioning-and-dependency-tracking)
 
-### `Storage` and the `@op` decorator
-A `Storage` instance holds all the data (saved calls and metadata) for a
+## Create a `Storage`, save calls to `@op`s
+A `Storage` object holds all data (saved calls, code and dependencies) for a
 collection of memoized functions. In a given project, you should have just one
 `Storage` and many memoized functions connected to it. This way, the calls to
 memoized functions create a queriable web of interlinked objects. 
@@ -172,71 +73,95 @@ memoized functions create a queriable web of interlinked objects.
 from mandala.imports import Storage, op
 
 storage = Storage(
-  db_path='my_persistent_storage.db', # omit for an in-memory storage
-  deps_path='path_to_code_folder/', # omit to disable automatic dependency tracking
+    # omit for an in-memory storage
+    db_path='my_persistent_storage.db', 
+    # omit to disable automatic dependency tracking
+    # use "__main__" to only track functions defined in the current session
+    deps_path='__main__', 
 )
 ```
-The `@op` decorator marks a function `f` as memoizable.
+`@op`-decorated functions will interact with a `storage` when called inside a 
+`with storage:` block. 
 
 ```python
 from sklearn.datasets import load_digits
 from sklearn.ensemble import RandomForestClassifier
-from typing import Tuple
 import numpy as np
 
-@op # core mandala decorator
+@op 
 def load_data(n_class):
     return load_digits(n_class=n_class, return_X_y=True)
 
+with storage:
+    X, y = load_data()
+    print(X)
+```
+The objects (`X, y`) returned by `@op`s are `Ref` instances, i.e. **references
+to values**, and they may not even be in memory, because a previously executed
+call's results are loaded only if they're needed. Regardless of that, every
+`Ref` has some hashes that identify it uniquely w.r.t. the storage. For example,
+the above prints:
+```
+AtomRef(array([[ 0.,  0.,  5., ...,  0.,  0.,  0.],
+       [ 0.,  0.,  0., ..., 10.,  0.,  0.],
+       [ 0.,  0.,  1., ...,  3.,  0.,  0.],
+       ...,
+       [ 0.,  0.,  5., ...,  8.,  1.,  0.],
+       [ 0.,  0.,  6., ...,  4.,  0.,  0.],
+       [ 0.,  0.,  6., ...,  6.,  0.,  0.]]), hid='874...', cid='908...')
+```
+where `hid` and `cid` are hashes that identify the *history* and *content* of
+the `Ref`. If we run the code again, `X` is no longer in memory:
+```python
+with storage:
+    X, y = load_data()
+    print(X)
+```
+```
+AtomRef(hid='16e...', cid='908...', in_memory=False)
+```
+To get the object wrapped by a `Ref`, call `storage.unwrap`:
+```python
+storage.unwrap(X) # loads from storage only if necessary
+```
+
+## Iterate on computations with memoization
+**`@op`-decorated functions are designed to be composed** with one another. This
+lets you use the same piece of ordinary Python code to compute, save and/or load
+results depending on what's been computed already.
+```python
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import accuracy_score
+
+### new ops to train an ML model and evaluate
 @op
 def train_model(X, y, n_estimators=5):
     return RandomForestClassifier(n_estimators=n_estimators,
                                   max_depth=2).fit(X, y)
-```
-
-**Calling an `@op`-decorated function "normally" does not memoize**. To actually
-put data in the storage, you must put calls inside a `with storage:` block.
-
-### Compute & memoize inside `with storage:` blocks
-**`@op`-decorated functions are designed to be composed** with one another
-inside `with storage:` blocks. This composability lets you use the same piece of
-ordinary Python code to compute, save, load, *and any combination of the three*:
-```python
-# generate the dataset. This saves `X, y` to storage.
-with storage:
-    X, y = load_data()
-
-# later, train a model by directly adding on top of this code. `load_data` is
-# not computed again
-with storage:
-    X, y = load_data()
-    model = train_model(X, y)
-  
-# iterate on this with more parameters & logic
-from sklearn.metrics import accuracy_score
 
 @op
 def get_acc(model, X, y):
     return round(accuracy_score(y_pred=model.predict(X), y_true=y), 2)
 
+### iterate on saved results by just dumping more computations on top
 with storage:
     for n_class in (10, 5, 2):
-        X, y = load_data(n_class)
+        X, y = load_data(n_class) 
         for n_estimators in (5, 10, 20):
             model = train_model(X, y, n_estimators=n_estimators)
             acc = get_acc(model, X, y)
             print(acc)
 ```
-```python
-AtomRef(0.66, cid='15a...')
-AtomRef(0.73, cid='79e...')
-AtomRef(0.81, cid='5a4...')
-AtomRef(0.84, cid='6c4...')
-AtomRef(0.89, cid='fb8...')
-AtomRef(0.93, cid='c3d...')
-AtomRef(1.0, cid='b67...')
-AtomRef(1.0, cid='b67...')
-AtomRef(1.0, cid='b67...')
+```
+AtomRef(0.54, hid='430...', cid='ac9...')
+AtomRef(0.7, hid='9c4...', cid='e2b...')
+AtomRef(0.74, hid='481...', cid='46b...')
+AtomRef(0.82, hid='178...', cid='238...')
+AtomRef(0.86, hid='01e...', cid='70e...')
+AtomRef(0.94, hid='7b3...', cid='c3b...')
+AtomRef(0.99, hid='146...', cid='12a...')
+AtomRef(0.99, hid='60f...', cid='12a...')
+AtomRef(0.99, hid='ede...', cid='12a...')
 ```
 
 Memoized functions return `Ref` instances (`AtomRef`, `ListRef`, ...), which
@@ -260,7 +185,7 @@ with storage:
 0.93
 ```
 
-### Versioning and dependency tracking
+## Versioning and dependency tracking
 Passing a value to the `deps_path` parameter of the `Storage` class enables
 dependency tracking and versioning. This means that any time a memoized function
 *actually executes* (instead of loading an already saved call), it keeps track of
@@ -272,14 +197,14 @@ don't want to track changes in installed libraries!). Setting `deps_path` to
 session or process. Setting it to a folder will only look for dependencies
 defined in this folder. 
 
-#### NOTE: The `@track` decorator
+### NOTE: The `@track` decorator
 The most efficient and reliable implementation of dependency tracking currently
 requires you to explicitly put `@track` on non-memoized functions and classes
 you want to track. This limitation may be lifted in the future, but at the cost
 of more magic (i.e., automatically applying the decorator to functions in the
 current local scope that originate in given paths).
 
-#### What is a version?
+### What is a version?
 A **version** for a memoized function is (to a first approximation) a set of
 source codes for functions/methods/global variables accessed by some call to
 this function. Even if you don't change anything in the code, a single function
@@ -354,7 +279,7 @@ affected:
   which had `scale=True`;
 - `eval_model` is a dependency for itself.
 
-#### Semantic vs content changes and versions
+### Semantic vs content changes and versions
 For each change to the content of some dependency (the source code of a function
 or the value of a global variable), you can choose whether this content change
 is also a **semantic** change. A semantic change will cause all calls that
@@ -363,12 +288,12 @@ state of the code**. The content versions of a single dependency are organized
 in a `git`-like DAG (currently, tree) that can be inspected using
 `storage.sources(f)` for functions. 
 
-#### Going back in time
+### Going back in time
 Since the versioning system is content-based, simply restoring an old state of
 the code makes the storage automatically recognize which "world" it's in, and
 which calls are memoized in this world.
 
-#### A warning about non-semantic changes
+### A warning about non-semantic changes
 The main motivation for allowing non-semantic changes is to maintain clarity in
 the storage when doing routine code improvements (refactoring, comments,
 logging). **However**, non-semantic changes should be applied with care. Apart from
@@ -378,7 +303,7 @@ suppose you factor a function out of some dependency and mark the change
 non-semantic. Then the newly extracted function may in reality be a dependency
 of the existing calls, but this goes unnoticed by the system.
 
-## Other gotchas
+# Other gotchas
 
 - **under development**: the biggest gotcha is that this project is under active
 development, which means things can change unpredictably.
@@ -396,7 +321,7 @@ into inefficiencies in large projects
 - **don't rename anything (yet)**: there isn't support yet for renaming
 functions or their arguments.
 
-## Tutorials 
+# Tutorials 
 - see the ["Hello world!"
   tutorial](https://github.com/amakelov/mandala/blob/master/tutorials/00_hello.ipynb)
   for a 2-minute introduction to the library's main features
@@ -404,7 +329,16 @@ functions or their arguments.
 for a more realistic example of a machine learning project managed by Mandala.
 - TODO: dependency tracking
 
-## Related work
+# Roadmap
+
+# Testimonials
+
+> "`mandala` addresses a core challenge in my notebook workflow: being able to
+> explore data with code, without having to worry about losing the results of
+> expensive calculations." - *Adam Jermyn, Member of Technical Staff, Anthropic*
+
+
+# Related work
 `mandala` combines ideas from, and shares similarities with, many technologies.
 Here are some useful points of comparison:
 - **memoization**: 
