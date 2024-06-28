@@ -40,6 +40,9 @@ class TracerState:
 
 
 class TrackedDict(dict):
+    """
+    A dictionary that tracks global variable accesses.
+    """
     def __init__(self, original: dict):
         self.__original__ = original
 
@@ -147,6 +150,9 @@ def track(obj: Union[types.FunctionType, type]) -> "obj":
 
 
 class DecTracer(TracerABC):
+    """
+    A decorator-based tracer that tracks function calls and global variable accesses.
+    """
     def __init__(
         self,
         paths: List[Path],

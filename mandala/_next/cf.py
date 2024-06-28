@@ -916,12 +916,25 @@ class ComputationFrame:
         self,
         call_groups: Dict[Tuple[str, Tuple[Tuple[str, Tuple[str, ...]]]], List[Call]],
         side_to_glue: Literal["inputs", "outputs"],
+        reuse_existing: bool,
         verbose: bool = False,
-        reuse_existing: bool = False,
     ):
         """
         Core internal function that actually expands the computation frame from
         the given call groups. 
+
+        - `reuse_existing`: if True, this will attempt to reuse existing nodes
+        in the CF (both operations and variables) instead of creating new ones.
+        Specifically, this means that if in the expansion process a function
+        node is to be added containing calls that are a subset of a superset 
+        of some other node's calls, the function node will be reused. Similarly,
+        if a variable node is to be added containing refs that are a subset of
+        a superset of some other node's refs, the variable node will be reused.
+
+        Naming conventions below:
+        - "labels" refer to edge labels in the graph
+        - "names" refer to input/output names of calls, which are projected to
+        labels
         """
         for group_id, group_calls in sorted(call_groups.items()):
             if verbose:
@@ -935,19 +948,16 @@ class ComputationFrame:
             label_to_connected_vnames = {
                 label: vnames for label, vnames in connected_vnames_tuple
             }
+            found_func_match = False
             if reuse_existing:
                 group_hids = {call.hid for call in group_calls}
-                found_match = False
+                found_func_match = False
                 for fname in self.fs:
-                    if group_hids <= self.fs[fname] or self.fs[fname] <= group_hids:
-                        found_match = True
+                    if group_hids <= self.fs[fname] or (self.fs[fname] <= group_hids and len(self.fs[fname]) != 0):
+                        found_func_match = True
                         break
-                if found_match:
-                    if verbose: print(f"Reusing function {fname} for group {group_id}")
-                else:
-                    ### create the function node for this group
-                    fname = self._add_func(fname=self.get_new_fname(op_id))
-                    if verbose: print(f"Adding function {fname} for group {group_id}")
+            if found_func_match:
+                if verbose: print(f"Reusing function {fname} for group {group_id}")
             else:
                 ### create the function node for this group
                 fname = self._add_func(fname=self.get_new_fname(op_id))
@@ -984,13 +994,28 @@ class ComputationFrame:
                 dual_side_labels = get_nullable_union(*dual_side_labels_list)
 
             ### create the variables for the dual side to the one we're gluing
-            present_labels = set(self.inp[fname].keys()) if side_to_glue == "outputs" else set(self.out[fname].keys())
+            existing_dual_side_labels = set(self.inp[fname].keys()) if side_to_glue == "outputs" else set(self.out[fname].keys())
             for label in dual_side_labels:
-                if label in present_labels:
+                if label in existing_dual_side_labels:
                     continue
-                varname = self._add_var(vname=self.get_new_vname(label))
-                src = varname if side_to_glue == "outputs" else fname
-                dst = fname if side_to_glue == "outputs" else varname
+                found_var_match = False
+                if reuse_existing:
+                    if side_to_glue == "outputs":
+                        ref_hids = {call.inputs[name].hid for call in group_calls for name in call.inputs if get_name_proj(call.op)(name) == label and name in call.inputs}
+                    else:
+                        ref_hids = {call.outputs[name].hid for call in group_calls for name in call.outputs if get_name_proj(call.op)(name) == label and name in call.outputs}
+                    found_var_match = False
+                    for vname in self.vs:
+                        if ref_hids <= self.vs[vname] or (self.vs[vname] <= ref_hids and len(self.vs[vname]) != 0):
+                            found_var_match = True
+                            print(len(ref_hids), len(self.vs[vname]))
+                            break
+                if found_var_match:
+                    if verbose: print(f"Reusing variable {vname} when adding {label} to function {fname}")
+                else:
+                    vname = self._add_var(vname=self.get_new_vname(label))
+                src = vname if side_to_glue == "outputs" else fname
+                dst = fname if side_to_glue == "outputs" else vname
                 self._add_edge(src, dst, label)
             
             ### finally, add the calls to the CF
@@ -1010,11 +1035,11 @@ class ComputationFrame:
     def _expand_unidirectional(
             self,
             direction: Literal["back", "forward"],
+            reuse_existing: bool,
             varnames: Optional[Union[str, Iterable[str]]] = None,
             skip_existing: bool = False,
             inplace: bool = False,
             verbose: bool = False,
-            reuse_existing: bool = False,
     ) -> Optional["ComputationFrame"]:
         res = self if inplace else self.copy()
         if varnames is None:
@@ -1066,7 +1091,7 @@ class ComputationFrame:
         skip_existing: bool = False, 
         inplace: bool = False,
         verbose: bool = False,
-        reuse_existing: bool = False,
+        reuse_existing: bool = True,
         
     ) -> Optional["ComputationFrame"]:
         """
@@ -1095,7 +1120,7 @@ class ComputationFrame:
         skip_existing: bool = False,
         inplace: bool = False,
         verbose: bool = False,
-        reuse_existing: bool = False,
+        reuse_existing: bool = True,
     ) -> Optional["ComputationFrame"]:
         """
         Join the calls that consume the given variables; see `expand_back` (the 
@@ -1782,7 +1807,7 @@ class ComputationFrame:
             f'SELECT call_history_id FROM calls WHERE op="{f.name}"'
         )["call_history_id"].unique().tolist()
         sess.d()
-        calls = storage.mget_call(hids=call_hids, lazy=True)
+        calls = storage.mget_call(hids=call_hids, in_memory=True)
         # calls = {
         #     call_hid: storage.get_call(call_hid, lazy=True) for call_hid in call_hids
         # }
@@ -1891,7 +1916,7 @@ class ComputationFrame:
             output_labels = copy.deepcopy(output_name_to_vars)
             for output_name in output_labels.keys():
                 output_labels[output_name] = {f'{varname}' for varname in output_labels[output_name]}
-            lhs = ", ".join([" | ".join(output_labels[k]) + f"@{k}" for k in ordered_output_names])
+            lhs = ", ".join(['(' + " | ".join(output_labels[k]) + ')' + f"@{k}" for k in ordered_output_names])
             rhs = ", ".join(
                 [
                     f"{k}={' | '.join(input_name_to_vars[k])}"
@@ -1918,6 +1943,11 @@ class ComputationFrame:
             sink_elts = self.get_sink_elts()
             source_elts = self.get_source_elts()
             num_versions = {fname: len(set(self.calls[hid].semantic_version for hid in self.fs[fname])) for fname in self.fnames}
+            edge_counts = {(src, dst, label): len(self.get_adj_elts_edge(
+                (src, dst, label),
+                hids=self.fs[dst] if dst in self.fnames else self.fs[src],
+                direction="back" if dst in self.fnames else "forward",))
+                for src, dst, label in self.edges()}
         vnodes = {}
         for vname in self.vnames:
             # a little summary of the variable
@@ -1957,6 +1987,8 @@ class ComputationFrame:
         nodes = {**vnodes, **fnodes}
         edges = []
         for src, dst, label in self.edges():
+            if verbose:
+                label = f'{label}\\n({edge_counts[(src, dst, label)]} refs)'
             edges.append(
                 Edge(source_node=nodes[src], 
                      target_node=nodes[dst],

@@ -186,22 +186,22 @@ class Storage:
         else:
             raise NotImplementedError
 
-    def load_ref(self, hid: str, lazy: bool = False) -> Ref:
+    def load_ref(self, hid: str, in_memory: bool = False) -> Ref:
         shape = self.shapes[hid]
         if isinstance(shape, AtomRef):
-            if lazy:
+            if in_memory:
                 return shape.shallow_copy()
             else:
                 return shape.attached(obj=deserialize(self.atoms[shape.cid]))
         elif isinstance(shape, ListRef):
             obj = []
             for i, elt in enumerate(shape):
-                obj.append(self.load_ref(elt.hid, lazy=lazy))
+                obj.append(self.load_ref(elt.hid, in_memory=in_memory))
             return shape.attached(obj=shape.obj)
         elif isinstance(shape, DictRef):
             obj = {}
             for k, v in shape.items():
-                obj[k] = self.load_ref(v.hid, lazy=lazy)
+                obj[k] = self.load_ref(v.hid, in_memory=in_memory)
             return shape.attached(obj=obj)
         else:
             raise NotImplementedError
@@ -263,7 +263,7 @@ class Storage:
             self.save_ref(v)
         self.calls.save(call)
     
-    def mget_call(self, hids: List[str], lazy: bool) -> List[Call]:
+    def mget_call(self, hids: List[str], in_memory: bool) -> List[Call]:
 
         def split_list(lst: List[Any], mask: List[bool]) -> Tuple[List[Any], List[Any]]:
             return [x for x, m in zip(lst, mask) if m], [x for x, m in zip(lst, mask) if not m]
@@ -289,21 +289,21 @@ class Storage:
 
         calls = []
         for call_data in call_datas:
-            calls.append(self._get_call_from_data(call_data, lazy=lazy))
+            calls.append(self._get_call_from_data(call_data, in_memory=in_memory))
         return calls
     
-    def _get_call_from_data(self, call_data: Dict[str, Any], lazy: bool) -> Call:
+    def _get_call_from_data(self, call_data: Dict[str, Any], in_memory: bool) -> Call:
         op_name = call_data["op_name"]
         call = Call(
             op=self.ops[op_name],
             cid=call_data["cid"],
             hid=call_data["hid"],
             inputs={
-                k: self.load_ref(v, lazy=lazy)
+                k: self.load_ref(v, in_memory=in_memory)
                 for k, v in call_data["input_hids"].items()
             },
             outputs={
-                k: self.load_ref(v, lazy=lazy)
+                k: self.load_ref(v, in_memory=in_memory)
                 for k, v in call_data["output_hids"].items()
             },
             semantic_version=call_data.get("semantic_version", None),
@@ -312,7 +312,7 @@ class Storage:
         return call
 
     def get_call(self, hid: str, lazy: bool) -> Call:
-        return self.mget_call([hid], lazy=lazy)[0]
+        return self.mget_call([hid], in_memory=lazy)[0]
 
     def drop_calls(self, calls_or_hids: Union[Iterable[str], Iterable[Call]], delete_dependents: bool):
         """
@@ -353,14 +353,14 @@ class Storage:
             raise NotImplementedError("Method not supported while in a context.")
         call_hids = self.call_storage.get_creator_hids(ref_hids)
         # return [self.get_call(call_hid, lazy=True) for call_hid in call_hids]
-        return self.mget_call(hids=call_hids, lazy=True)
+        return self.mget_call(hids=call_hids, in_memory=True)
 
     def get_consumers(self, ref_hids: Iterable[str]) -> List[Call]:
         if self.in_context():
             raise NotImplementedError("Method not supported while in a context.")
         call_hids = self.call_storage.get_consumer_hids(ref_hids)
         # return [self.get_call(call_hid, lazy=True) for call_hid in call_hids]
-        return self.mget_call(hids=call_hids, lazy=True)
+        return self.mget_call(hids=call_hids, in_memory=True)
 
     def get_orphans(self) -> Set[str]:
         """
@@ -391,7 +391,7 @@ class Storage:
     def _unwrap_atom(self, obj: Any) -> Any:
         assert isinstance(obj, AtomRef)
         if not obj.in_memory:
-            ref = self.load_ref(hid=obj.hid, lazy=False)
+            ref = self.load_ref(hid=obj.hid, in_memory=False)
             return ref.obj
         else:
             return obj.obj
@@ -580,7 +580,7 @@ class Storage:
         if self.calls.exists(call_history_id=call_hid):
             call_data = self.calls.get_data(call_history_id=call_hid)
             logger.debug(f"Found call to {op.name} with hid {call_hid}.")
-            return self._get_call_from_data(call_data, lazy=True)
+            return self._get_call_from_data(call_data, in_memory=True)
         ### if this fails, look up by content ID, and apply the correct history IDs
         call_cid = op.get_call_content_id(
             inputs=inputs, semantic_version=semantic_version
@@ -588,7 +588,7 @@ class Storage:
         if self.calls.exists_content(cid=call_cid):
             logger.debug(f"Found call to {op.name} with cid {call_cid}.")
             call_data = self.calls.get_data_content(cid=call_cid)
-            call_prototype = self._get_call_from_data(call_data, lazy=True)
+            call_prototype = self._get_call_from_data(call_data, in_memory=True)
             #! very important: set the hids here on both the call and the inputs
             # and outputs
             call_prototype.hid = call_hid
@@ -1036,7 +1036,7 @@ class Storage:
             return ComputationFrame.from_vars(vars=source, storage=self)
         elif all(isinstance(elt, str) for elt in source):
             # must be hids
-            refs = [self.load_ref(hid, lazy=True) for hid in source]
+            refs = [self.load_ref(hid, in_memory=True) for hid in source]
             return ComputationFrame.from_refs(refs=refs, storage=self)
         else:
             raise ValueError("Invalid input to `cf`")
