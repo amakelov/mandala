@@ -2,7 +2,7 @@
 A minimal OOP wrapper around dot/graphviz
 """
 import difflib
-from ..common_imports import *
+from .common_imports import *
 from .config import Config
 import tempfile
 import subprocess

@@ -22,7 +22,7 @@ Consider the following example:
 
 
 ```python
-from mandala._next.imports import *
+from mandala.imports import *
 storage = Storage()
 
 @op

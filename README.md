@@ -1,6 +1,6 @@
 <div align="center">
   <br>
-    <img src="../../assets/logo-no-background.png" height=128 alt="logo" align="center">
+    <img src="assets/logo-no-background.png" height=128 alt="logo" align="center">
   <br>
 <a href="#install">Install</a> |
 <a href="#quickstart">Quickstart</a> |

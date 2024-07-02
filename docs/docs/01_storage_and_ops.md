@@ -12,11 +12,16 @@ it:
 
 
 ```python
-from mandala._next.imports import Storage
+from mandala.imports import Storage
+import os
+
+DB_PATH = 'my_persistent_storage.db'
+if os.path.exists(DB_PATH):
+    os.remove(DB_PATH)
 
 storage = Storage(
     # omit for an in-memory storage
-    db_path='my_persistent_storage.db', 
+    db_path=DB_PATH,
     # omit to disable automatic dependency tracking & versioning
     # use "__main__" to only track functions defined in the current session
     deps_path='__main__', 
@@ -28,7 +33,7 @@ storage = Storage(
 
 
 ```python
-from mandala._next.imports import op
+from mandala.imports import op
 
 @op 
 def sum_args(a, *args, b=1, **kwargs):

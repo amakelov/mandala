@@ -36,7 +36,7 @@ Here's a small example of a machine learning pipeline:
 
 
 ```python
-from mandala._next.imports import *
+from mandala.imports import *
 from sklearn.datasets import load_digits
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score
@@ -69,7 +69,7 @@ with storage:
     Loading data
     Training model
     Getting accuracy
-    AtomRef(0.99, hid='d16...', cid='12a...')
+    AtomRef(1.0, hid='d16...', cid='b67...')
 
 
 ## Retracing your steps with memoization
@@ -89,8 +89,8 @@ with storage:
 ```
 
     AtomRef(hid='d0f...', cid='908...', in_memory=False) AtomRef(hid='f1a...', cid='69f...', in_memory=False)
-    AtomRef(hid='caf...', cid='f35...', in_memory=False)
-    AtomRef(hid='d16...', cid='12a...', in_memory=False)
+    AtomRef(hid='caf...', cid='c37...', in_memory=False)
+    AtomRef(hid='d16...', cid='b67...', in_memory=False)
 
 
 This puts all the `Ref`s along the way in your local variables (as if you've
@@ -105,7 +105,7 @@ storage.unwrap(acc)
 
 
 
-    0.99
+    1.0
 
 
 
@@ -127,17 +127,17 @@ with storage:
             print(acc)
 ```
 
-    AtomRef(hid='d16...', cid='12a...', in_memory=False)
+    AtomRef(hid='d16...', cid='b67...', in_memory=False)
     Training model
     Getting accuracy
-    AtomRef(0.99, hid='6fd...', cid='12a...')
+    AtomRef(1.0, hid='6fd...', cid='b67...')
     Loading data
     Training model
     Getting accuracy
-    AtomRef(0.82, hid='158...', cid='238...')
+    AtomRef(0.81, hid='158...', cid='5a4...')
     Training model
     Getting accuracy
-    AtomRef(0.9, hid='214...', cid='24c...')
+    AtomRef(0.84, hid='214...', cid='6c4...')
 
 
 Note that the first value of `acc` from the nested loop is with
@@ -165,8 +165,8 @@ with storage:
                 print(n_class, n_estimators, storage.unwrap(acc))
 ```
 
-    2 5 0.99
-    2 10 0.99
+    2 5 1.0
+    2 10 1.0
 
 
 ## Memoized code as storage interface
@@ -185,5 +185,5 @@ with storage:
             print(storage.unwrap(acc), storage.unwrap(model))
 ```
 
-    0.82 RandomForestClassifier(max_depth=2, n_estimators=5)
+    0.81 RandomForestClassifier(max_depth=2, n_estimators=5)
 

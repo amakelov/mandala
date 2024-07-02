@@ -1,4 +1,4 @@
-from mandala._next.imports import *
+from mandala.imports import *
 
 
 def test_single_func():

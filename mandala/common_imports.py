@@ -59,5 +59,22 @@ else:
     logging.basicConfig(format=FORMAT)
     logger.setLevel(logging.INFO)
 
+class Session:
+    # for debugging
 
-from mandala.common_imports import sess
+    def __init__(self):
+        self.items = []
+        self._scope = None
+
+    def d(self):
+        scope = inspect.currentframe().f_back.f_locals
+        self._scope = scope
+
+    def dump(self):
+        # put the scope into the current locals
+        assert self._scope is not None
+        scope = inspect.currentframe().f_back.f_locals
+        print(f"Dumping {self._scope.keys()} into local scope")
+        scope.update(self._scope)
+
+sess = Session()
