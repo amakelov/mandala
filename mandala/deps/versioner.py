@@ -258,7 +258,7 @@ class Versioner:
                 )
                 print(f"CHANGE DETECTED in {component[1]} from module {component[0]}")
                 print(f"Dependent components:\n{dependent_versions_presentation}")
-                print(f"===DIFF===:")
+                # print(f"===DIFF===:")
             dag.sync(content=content)
         # update the DAGs if all commits succeeded
         self.component_dags = dags

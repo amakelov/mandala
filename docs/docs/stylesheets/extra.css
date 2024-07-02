@@ -10,3 +10,7 @@
   --md-code-bg-color: #eee8d5;
   --md-code-fg-color: #657b83;
 }
+
+a {
+    text-decoration: underline;
+}

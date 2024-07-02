@@ -3,12 +3,10 @@
     <img src="assets/logo-no-background.png" height=128 alt="logo" align="center">
   <br>
 <a href="#install">Install</a> |
-<a href="#quickstart">Quickstart</a> |
+<a href="https://colab.research.google.com/github/amakelov/mandala/blob/master/tutorials/hello.ipynb">Quickstart (Colab)</a> |
+<a href="#tutorials">Tutorials</a> |
+<a href="https://amakelov.github.io/mandala/">Docs</a> |
 <a href="#testimonials">Testimonials</a> |
-<a href="#video-walkthroughs">Demos</a> |
-<a href="#basic-usage">Usage</a> |
-<a href="#other-gotchas">Gotchas</a> |
-<a href="#tutorials">Tutorials</a>
 </div>
 
 # Computations that save, query and version themselves
@@ -38,20 +36,12 @@ two tools:
 pip install git+https://github.com/amakelov/mandala
 ```
 
-# Quickstart
-
-[Run in Colab](https://colab.research.google.com/github/amakelov/mandala/blob/master/mandala/_next/tutorials/hello.ipynb)
-
-# Documentation
-TODO: link
-
 # Tutorials 
 - see the ["Hello world!"
-  tutorial](https://github.com/amakelov/mandala/blob/master/tutorials/00_hello.ipynb)
+  tutorial](https://github.com/amakelov/mandala/blob/master/tutorials/hello.ipynb)
   for a 2-minute introduction to the library's main features
-- See [this notebook](https://github.com/amakelov/mandala/blob/master/tutorials/01_random_forest.ipynb)
-for a more realistic example of a machine learning project managed by Mandala.
-- TODO: dependency tracking
+- see [this notebook](https://github.com/amakelov/mandala/blob/master/tutorials/ml.ipynb)
+for a more realistic example of managing a machine learning project.
 
 # FAQs
 

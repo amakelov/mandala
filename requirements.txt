@@ -2,8 +2,3 @@
 numpy >= 1.18
 pandas >= 1.0
 joblib >= 1.0
-pypika >= 0.48
-pyarrow >= 8.0.0
-cityhash >= 0.2.2
-rich
-scikit-learn

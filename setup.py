@@ -5,18 +5,10 @@ install_requires = [
     "numpy >= 1.18",
     "pandas >= 1.0",
     "joblib >= 1.0",
-    "pypika >= 0.48",
-    "pyarrow >= 8.0.0",
 ]
 
 extras_require = {
     "base": [],
-    "performance": [
-        "cityhash >= 0.2.2",  # for faster content hashing
-    ],
-    "integrations": [
-        "dask[complete]",
-    ],
     "ui": [
         "rich",
     ],
@@ -24,15 +16,9 @@ extras_require = {
         "pytest >= 6.0.0",
         "hypothesis >= 6.0.0",
         "ipython",
-        "mongomock",
-        "duckdb >= 0.6",
     ],
     "demos": [
-        "torch",
         "scikit-learn",
-    ],
-    "server": [
-        "pymongo",
     ],
 }
 
@@ -41,20 +27,13 @@ extras_require["complete"] = sorted({v for req in extras_require.values() for v 
 
 packages = [
     "mandala",
-    "mandala.core",
     "mandala.deps",
-    "mandala.deps.tracers",
-    "mandala.queries",
-    "mandala.storages",
-    "mandala.storages.rel_impls",
-    "mandala.storages.remote_impls",
-    "mandala.ui",
     "mandala.tests",
 ]
 
 setup(
     name="mandala",
-    version="0.1.0",
+    version="v0.2.0-alpha",
     description="",
     url="https://github.com/amakelov/mandala",
     license="Apache 2.0",

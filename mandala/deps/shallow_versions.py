@@ -235,11 +235,27 @@ class DAG(Generic[T]):
                 self.content_adapter.get_presentable_content(content),
                 self.get_presentable_content(commit=self.head),
             )
-            print(
-                _get_colorized_diff(
-                    current=presentable_diff[1], new=presentable_diff[0]
+            if Config.has_rich:
+                colorized_diff = _get_colorized_diff(
+                        current=presentable_diff[1], new=presentable_diff[0],
+                        colorize=False,
+                    )
+                panel = Panel(
+                    Syntax(
+                        colorized_diff,
+                        lexer="diff",
+                        line_numbers=True,
+                        theme="solarized-light",
+                    ),
+                    title="Diff",
                 )
-            )
+                rich.print(panel)
+            else:
+                colorized_diff = _get_colorized_diff(
+                    current=presentable_diff[1], new=presentable_diff[0],
+                    colorize=True,
+                )
+                print(colorized_diff)
             answer = ask_user(
                 question="Does this change require recomputation of dependent calls?\nWARNING: if the change created new dependencies and you choose 'no', you should add them by hand or risk missing changes in them.\nAnswer: [y]es/[n]o/[a]bort",
                 valid_options=["y", "n", "a"],

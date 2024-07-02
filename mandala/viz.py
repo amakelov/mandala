@@ -81,7 +81,8 @@ def _get_diff(current: str, new: str) -> str:
 
 
 def _get_colorized_diff(
-    current: str, new: str, style: str = "multiline", context_lines: int = 2
+    current: str, new: str, style: str = "multiline", context_lines: int = 2,
+    colorize: bool = True
 ) -> str:
     """
     Return a line-by-line colorized diff of the changes between `current` and
@@ -101,11 +102,15 @@ def _get_colorized_diff(
         if line.startswith("-"):
             if style == "inline":
                 line = line[1:]
-            lines.append(_colorize(line, "red"))
+            if colorize:
+                line = _colorize(line, "red")
+            lines.append(line)
         elif line.startswith("+"):
             if style == "inline":
                 line = line[1:]
-            lines.append(_colorize(line, "green"))
+            if colorize:
+                line = _colorize(line, "green")
+            lines.append(line)
         else:
             lines.append(line)
     if style == "multiline":
