@@ -5,8 +5,8 @@ import gc
 from typing import Literal
 
 from ..common_imports import *
-from ..core.utils import Hashing, unwrap_decorators
-from ..core.config import Config
+from ..utils import get_content_hash, unwrap_decorators
+from ..config import Config
 
 DepKey = Tuple[str, str]  # (module name, object address in module)
 
@@ -81,7 +81,7 @@ def is_callable_obj(obj: Any, strict: bool) -> bool:
 
 def extract_func_obj(obj: Any, strict: bool) -> types.FunctionType:
     if type(obj).__name__ == Config.func_interface_cls_name:
-        return obj.func_op.func
+        return obj.f
     obj = unwrap_decorators(obj, strict=strict)
     if isinstance(obj, types.BuiltinFunctionType):
         raise ValueError(f"Expected a non-built-in function, but got {obj}")
@@ -102,7 +102,7 @@ def extract_func_obj(obj: Any, strict: bool) -> types.FunctionType:
 
 def extract_code(obj: Callable) -> types.CodeType:
     if type(obj).__name__ == Config.func_interface_cls_name:
-        obj = obj.func_op.func
+        obj = obj.f
     if isinstance(obj, property):
         obj = obj.fget
     obj = unwrap_decorators(obj, strict=True)
@@ -169,7 +169,7 @@ def get_bytecode(f: Union[types.FunctionType, types.CodeType, str]) -> str:
 
 
 def hash_dict(d: dict) -> str:
-    return Hashing.get_content_hash(obj=[(k, d[k]) for k in sorted(d.keys())])
+    return get_content_hash(obj=[(k, d[k]) for k in sorted(d.keys())])
 
 
 def load_obj(module_name: str, obj_name: str) -> Tuple[Any, bool]:

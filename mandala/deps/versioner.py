@@ -3,8 +3,8 @@ from collections import OrderedDict
 import textwrap
 
 from ..common_imports import *
-from ..core.utils import is_subdict
-from ..core.config import Config
+from ..utils import is_subdict
+from ..config import Config
 from .utils import DepKey, hash_dict
 from .model import (
     Node,
@@ -15,7 +15,7 @@ from .model import (
 )
 from .crawler import crawl_static
 from .tracers import TracerABC
-from ..ui.viz import _get_colorized_diff
+from ..viz import _get_colorized_diff
 
 if Config.has_rich:
     from rich.panel import Panel
@@ -84,6 +84,10 @@ class Versioner:
         """
         Get the content and semantic IDs for the version corresponding to the
         given pre-call uid.
+
+        Inputs:
+            - `is_recompute`: this should be true only if this is a call with
+            transient outputs that we already computed once.
         """
         assert tracer_option is not None
         version = self.process_trace(
@@ -335,6 +339,17 @@ class Versioner:
         """
         Return a tuple of (content_version, semantic_version), or None if the
         call is not found.
+
+        Inputs:
+            - `pre_call_uid`: this is a hash of the content IDs of the inputs,
+            together with the function's name.
+
+        This works as follows:
+        - we figure out the semantic hashes (i.e. shallow semantic versions) of
+        the elements of the code state present in the global topology we have on
+        record
+        - we restrict to the records that match the given `pre_call_uid`
+        - we search among these 
         """
         codebase_semantic_hashes = self.get_codestate_semantic_hashes(
             code_state=code_state
@@ -408,7 +423,7 @@ class Versioner:
             )
             if all([semantic_hashes[k] == new_semantic_dep_hashes[k] for k in overlap]):
                 raise ValueError(
-                    f"Call {pre_call_uid} is not semantically distinguishable from call for semantic version {semantic_version}"
+                    f"Call to {component} with pre_call_uid={pre_call_uid} is not semantically distinguishable from call for semantic version {semantic_version}"
                 )
 
     ############################################################################

@@ -1,8 +1,8 @@
 import types
 from functools import wraps, update_wrapper
 from ...common_imports import *
-from ...core.utils import unwrap_decorators
-from ...core.config import Config
+from ...utils import unwrap_decorators
+from ...config import Config
 from ..model import (
     DependencyGraph,
     CallableNode,
@@ -40,6 +40,9 @@ class TracerState:
 
 
 class TrackedDict(dict):
+    """
+    A dictionary that tracks global variable accesses.
+    """
     def __init__(self, original: dict):
         self.__original__ = original
 
@@ -147,6 +150,9 @@ def track(obj: Union[types.FunctionType, type]) -> "obj":
 
 
 class DecTracer(TracerABC):
+    """
+    A decorator-based tracer that tracks function calls and global variable accesses.
+    """
     def __init__(
         self,
         paths: List[Path],

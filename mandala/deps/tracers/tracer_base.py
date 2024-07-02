@@ -1,5 +1,5 @@
 from ...common_imports import *
-from ...core.config import Config
+from ...config import Config
 import importlib
 from ..model import DependencyGraph, CallableNode
 from abc import ABC, abstractmethod

@@ -1,6 +1,6 @@
 import types
 from ..common_imports import *
-from ..core.utils import unwrap_decorators
+from ..utils import unwrap_decorators
 import importlib
 from .model import (
     DepKey,

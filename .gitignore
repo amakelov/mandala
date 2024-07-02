@@ -56,8 +56,6 @@
 # eggs
 mandala.egg-info/*
 
-mandala/demos/data/
-mandala/__archive__
 scratchpad/
 mandala/scipy/
 
@@ -84,3 +82,6 @@ mandala/tests/output/*
 
 # ignore docs build
 site/
+
+# Ignore previous version 
+mandala/_prev/

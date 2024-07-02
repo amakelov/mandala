@@ -28,32 +28,13 @@ from typing import (
     Set,
     Union,
     TypeVar,
+    Literal,
 )
 from pathlib import Path
 
 import pandas as pd
 import pyarrow as pa
 import numpy as np
-
-
-class Session:
-    # for debugging
-
-    def __init__(self):
-        self.items = []
-        self._scope = None
-
-    def d(self):
-        scope = inspect.currentframe().f_back.f_locals
-        self._scope = scope
-
-    def dump(self):
-        # put the scope into the current locals
-        assert self._scope is not None
-        scope = inspect.currentframe().f_back.f_locals
-        print(f"Dumping {self._scope.keys()} into local scope")
-        scope.update(self._scope)
-
 
 try:
     import rich
@@ -78,10 +59,5 @@ else:
     logging.basicConfig(format=FORMAT)
     logger.setLevel(logging.INFO)
 
-sess = Session()
 
-TableType = TypeVar("TableType", pa.Table, pd.DataFrame)
-
-
-class InternalError(Exception):
-    pass
+from mandala.common_imports import sess

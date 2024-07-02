@@ -3,8 +3,8 @@ from abc import abstractmethod, ABC
 import types
 
 from ..common_imports import *
-from ..core.utils import Hashing
-from ..ui.viz import (
+from ..utils import get_content_hash
+from ..viz import (
     write_output,
 )
 
@@ -115,7 +115,7 @@ class CallableNode(Node):
     def _set_representation(self, value: str):
         assert isinstance(value, str)
         self._representation = value
-        self._content_hash = Hashing.get_content_hash(value)
+        self._content_hash = get_content_hash(value)
 
     @representation.setter
     def representation(self, value: str):
@@ -138,8 +138,8 @@ class CallableNode(Node):
         obj: Union[types.FunctionType, types.CodeType, Callable],
         allow_fallback: bool = False,
     ) -> str:
-        if type(obj).__name__ == "FuncInterface":
-            obj = obj.func_op.func
+        if type(obj).__name__ == "Op":
+            obj = obj.f
         if not isinstance(obj, (types.FunctionType, types.MethodType, types.CodeType)):
             logger.warning(f"Found {obj} of type {type(obj)}")
         try:
@@ -201,7 +201,7 @@ class GlobalVarNode(Node):
     def represent(obj: Any, allow_fallback: bool = False) -> Tuple[str, str]:
         truncated_repr = textwrap.shorten(text=repr(obj), width=80)
         try:
-            content_hash = Hashing.get_content_hash(obj=obj)
+            content_hash = get_content_hash(obj=obj)
         except Exception as e:
             shortened_exception = textwrap.shorten(text=str(e), width=80)
             msg = f"Failed to hash global variable {truncated_repr} of type {type(obj)}, because {shortened_exception}"

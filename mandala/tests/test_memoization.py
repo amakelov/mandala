@@ -1,142 +1,133 @@
-from mandala.all import *
-from mandala.tests.utils import *
+from mandala._next.imports import *
 
 
-def test_func_creation():
+def test_storage():
     storage = Storage()
 
     @op
-    def add(x: int, y: int = 42) -> int:
-        return x + y
-
-    assert add.func_op.sig.n_outputs == 1
-    assert add.func_op.sig.input_names == {"x", "y"}
-    assert add.func_op.sig.defaults == {"y": 42}
-    check_invariants(storage)
-
-
-@pytest.mark.parametrize("storage", generate_storages())
-def test_computation(storage):
-    @op
     def inc(x: int) -> int:
         return x + 1
-
-    @op
-    def add(x: int, y: int) -> int:
-        return x + y
-
-    # chain some functions
-    with storage.run():
-        x = 23
+    
+    with storage:
+        x = 1
         y = inc(x)
-        z = add(x, y=y)
+        z = inc(2)
+        w = inc(y)
+    
+    assert w.cid == z.cid
+    assert w.hid != y.hid
+    assert w.cid != y.cid
+    assert storage.unwrap(y) == 2
+    assert storage.unwrap(z) == 3
+    assert storage.unwrap(w) == 3
+    for ref in (y, z, w):
+        assert storage.attach(ref).in_memory
+        assert storage.attach(ref).obj == storage.unwrap(ref)
 
-    check_invariants(storage)
-    # run it again
-    with storage.run():
-        x = 23
-        y = inc(x)
-        z = add(x, y)
-    check_invariants(storage)
-    # do some more things
-    with storage.run():
-        x = 42
-        y = inc(x)
-        z = add(x, y)
+
+def test_signatures():
+    storage = Storage()
+
+    @op # a function with a wild input/output signature
+    def add(x, *args, y: int = 1, **kwargs):
+        # just sum everything
+        res = x + sum(args) + y + sum(kwargs.values())
+        if kwargs:
+            return res, kwargs
+        elif args:
+            return None
+        else:
+            return res
+
+    with storage:
+        # call the func in all the ways
+        sum_1 = add(1)
+        sum_2 = add(1, 2, 3, 4, )
+        sum_3 = add(1, 2, 3, 4, y=5)
+        sum_4 = add(1, 2, 3, 4, y=5, z=6)
+        sum_5 = add(1, 2, 3, 4, z=5, w=7)
+    
+    assert storage.unwrap(sum_1) == 2
+    assert storage.unwrap(sum_2) == None
+    assert storage.unwrap(sum_3) == None
+    assert storage.unwrap(sum_4) == (21, {'z': 6})
+    assert storage.unwrap(sum_5) == (23, {'z': 5, 'w': 7})
+
+
+def test_retracing():
+    storage = Storage()
+
+    @op 
+    def inc(x):
+        return x + 1
+
+    ### iterating a function
+    with storage:
+        start = 1
         for i in range(10):
-            z = add(z, i)
-    check_invariants(storage)
+            start = inc(start)
 
+    with storage:
+        start = 1
+        for i in range(10):
+            start = inc(start)
 
-@pytest.mark.parametrize("storage", generate_storages())
-def test_retracing(storage):
+    ### composing functions
     @op
-    def inc(x: int) -> int:
-        return x + 1
-
-    @op
-    def add(x: int, y: int) -> int:
+    def add(x, y):
         return x + y
-
-    with storage.run():
-        x = 23
-        y = inc(x)
-        z = add(x, y)
-
-    with storage.run(allow_calls=False):
-        x = 23
-        y = inc(x)
-        z = add(x, y)
-
-    try:
-        with storage.run(allow_calls=False):
-            x = 24
-            y = inc(x)
-            z = add(x, y)
-        assert False
-    except Exception as e:
-        assert True
+    
+    with storage:
+        inp = [1, 2, 3, 4, 5]
+        stage_1 = [inc(x) for x in inp]
+        stage_2 = [add(x, y) for x, y in zip(stage_1, stage_1)]
+            
+    with storage:
+        inp = [1, 2, 3, 4, 5]
+        stage_1 = [inc(x) for x in inp]
+        stage_2 = [add(x, y) for x, y in zip(stage_1, stage_1)]
 
 
-def test_debugging():
+def test_lists():
     storage = Storage()
 
     @op
-    def inc(x: int) -> int:
-        return x + 1
-
+    def get_sum(elts: MList[int]) -> int:
+        return sum(elts)
+    
     @op
-    def add(x: int, y: int) -> int:
-        return x + y
-
-    with storage.run(debug_calls=True):
-        x = 23
-        y = inc(x)
-        z = add(x, y)
-
-    with storage.run(debug_calls=True):
-        x = 23
-        y = inc(x)
-        z = add(x, y)
-
-
-def _a():
+    def primes_below(n: int) -> MList[int]:
+        primes = []
+        for i in range(2, n):
+            for p in primes:
+                if i % p == 0:
+                    break
+            else:
+                primes.append(i)
+        return primes
+    
     @op
-    def generate_dataset() -> Tuple[int, int]:
-        return 1, 2
+    def chunked_square(elts: MList[int]) -> MList[int]:
+        # a model for an op that does something on chunks of a big thing
+        # to prevent OOM errors
+        return [x*x for x in elts]
+    
+    with storage:
+        n = 10
+        primes = primes_below(n)
+        sum_primes = get_sum(primes)
+    assert len(primes) == 4
+    # check indexing
+    assert storage.unwrap(primes[0]) == 2
+    assert storage.unwrap(primes[:2]) == [2, 3]
 
-    @op
-    def train_model(
-        train_dataset: int,
-        test_dataset: int,
-        learning_rate: float,
-        batch_size: int,
-        num_epochs: int,
-    ) -> Tuple[int, float]:
-        return train_dataset + test_dataset + learning_rate, batch_size + num_epochs
-
-    storage = Storage()
-
-    with storage.run():
-        X, y = generate_dataset()
-        for batch_size in (100, 200, 400):
-            for learning_rate in (1, 2, 3):
-                model, acc = train_model(
-                    X,
-                    y,
-                    learning_rate=learning_rate,
-                    batch_size=batch_size,
-                    num_epochs=10,
-                )
-
-    with storage.run():
-        X, y = generate_dataset()
-        for batch_size in (100, 200, 400):
-            for learning_rate in (1, 2, 3):
-                model, acc = train_model(
-                    X,
-                    y,
-                    learning_rate=learning_rate,
-                    batch_size=batch_size,
-                    num_epochs=10,
-                )
+    ### lists w/ overlapping elements
+    with storage:
+        n = 100
+        primes = primes_below(n)
+        for i in range(0, len(primes), 2):
+            sum_primes = get_sum(primes[:i+1])
+    
+    with storage:
+        elts = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+        squares = chunked_square(elts)

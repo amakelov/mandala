@@ -1,10 +1,10 @@
 from typing import Literal
 import textwrap
 from ..common_imports import *
-from ..core.utils import Hashing
-from ..core.config import Config
+from ..utils import get_content_hash
+from ..config import Config
 from ..utils import ask_user
-from ..ui.viz import _get_colorized_diff, _get_diff
+from ..viz import _get_colorized_diff, _get_diff
 
 if Config.has_rich:
     from rich.tree import Tree
@@ -110,7 +110,7 @@ class StringContentAdapter(ContentAdapter[str]):
         return content
 
     def get_content_hash(self, content: str) -> str:
-        return Hashing.get_content_hash(content)
+        return get_content_hash(content)
 
 
 GVContent = Tuple[str, str]  # (content hash, repr)
@@ -241,7 +241,7 @@ class DAG(Generic[T]):
                 )
             )
             answer = ask_user(
-                question="Does this change require recomputation of dependent calls? [y]es/[n]o/[a]bort",
+                question="Does this change require recomputation of dependent calls?\nWARNING: if the change created new dependencies and you choose 'no', you should add them by hand or risk missing changes in them.\nAnswer: [y]es/[n]o/[a]bort",
                 valid_options=["y", "n", "a"],
             )
             print(f'You answered: "{answer}"')

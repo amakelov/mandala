@@ -1,6 +1,6 @@
 import textwrap
 from ..common_imports import *
-from ..ui.viz import (
+from ..viz import (
     Node as DotNode,
     Edge as DotEdge,
     Group as DotGroup,
