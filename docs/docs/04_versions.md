@@ -362,6 +362,8 @@ storage.versions(eval_model)
 
 
 
+## Additional notes
+
 ### So what really is a version of an `@op`?
 A **version** for an `@op` is a collection of
 

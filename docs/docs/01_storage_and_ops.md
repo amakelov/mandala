@@ -47,11 +47,11 @@ when** called inside a `with storage:` block:
 
 ```python
 with storage: # all `@op` calls inside this block use `storage`
-    s = sum_args(1, 2, 3, 4, c=6,)
+    s = sum_args(6, 7, 8, 9, c=11,)
     print(s)
 ```
 
-    AtomRef(17, hid='43b...', cid='89c...')
+    AtomRef(42, hid='168...', cid='d92...')
 
 
 This code runs the call to `sum_args`, and saves the inputs and outputs in the
@@ -84,7 +84,7 @@ with storage:
     print(s)
 ```
 
-    AtomRef(hid='43b...', cid='89c...', in_memory=False)
+    AtomRef(17, hid='43b...', cid='89c...')
 
 
 To get the object wrapped by a `Ref`, call `storage.unwrap`:

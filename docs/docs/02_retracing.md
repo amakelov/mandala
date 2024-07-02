@@ -89,7 +89,7 @@ with storage:
 ```
 
     AtomRef(hid='d0f...', cid='908...', in_memory=False) AtomRef(hid='f1a...', cid='69f...', in_memory=False)
-    AtomRef(hid='caf...', cid='c37...', in_memory=False)
+    AtomRef(hid='caf...', cid='87a...', in_memory=False)
     AtomRef(hid='d16...', cid='b67...', in_memory=False)
 
 
@@ -130,14 +130,14 @@ with storage:
     AtomRef(hid='d16...', cid='b67...', in_memory=False)
     Training model
     Getting accuracy
-    AtomRef(1.0, hid='6fd...', cid='b67...')
+    AtomRef(0.99, hid='6fd...', cid='12a...')
     Loading data
     Training model
     Getting accuracy
-    AtomRef(0.81, hid='158...', cid='5a4...')
+    AtomRef(0.8, hid='158...', cid='f0a...')
     Training model
     Getting accuracy
-    AtomRef(0.84, hid='214...', cid='6c4...')
+    AtomRef(0.87, hid='214...', cid='fce...')
 
 
 Note that the first value of `acc` from the nested loop is with
@@ -166,7 +166,7 @@ with storage:
 ```
 
     2 5 1.0
-    2 10 1.0
+    2 10 0.99
 
 
 ## Memoized code as storage interface
@@ -185,5 +185,5 @@ with storage:
             print(storage.unwrap(acc), storage.unwrap(model))
 ```
 
-    0.81 RandomForestClassifier(max_depth=2, n_estimators=5)
+    0.8 RandomForestClassifier(max_depth=2, n_estimators=5)
 
