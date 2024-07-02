@@ -28,6 +28,7 @@ extras_require["complete"] = sorted({v for req in extras_require.values() for v 
 packages = [
     "mandala",
     "mandala.deps",
+    "mandala.deps.tracers",
     "mandala.tests",
 ]
 
