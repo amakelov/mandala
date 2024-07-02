@@ -81,3 +81,6 @@ mandala/tests/output/*
 
 ## PyCharm stuff
 .idea/**
+
+# ignore docs build
+site/

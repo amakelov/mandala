@@ -153,6 +153,12 @@ class ComputationFrame:
     @property
     def nodes(self) -> Set[str]:
         return self.vnames | self.fnames
+    
+    def refs_by_var(self) -> Dict[str, Set[Ref]]:
+        return {vname: {self.refs[hid] for hid in hids} for vname, hids in self.vs.items()}
+    
+    def calls_by_func(self) -> Dict[str, Set[Call]]:
+        return {fname: {self.calls[hid] for hid in hids} for fname, hids in self.fs.items()}
 
     ############################################################################
     ### modifying the CF
@@ -1008,7 +1014,6 @@ class ComputationFrame:
                     for vname in self.vs:
                         if ref_hids <= self.vs[vname] or (self.vs[vname] <= ref_hids and len(self.vs[vname]) != 0):
                             found_var_match = True
-                            print(len(ref_hids), len(self.vs[vname]))
                             break
                 if found_var_match:
                     if verbose: print(f"Reusing variable {vname} when adding {label} to function {fname}")
@@ -1036,6 +1041,7 @@ class ComputationFrame:
             self,
             direction: Literal["back", "forward"],
             reuse_existing: bool,
+            recursive: bool,
             varnames: Optional[Union[str, Iterable[str]]] = None,
             skip_existing: bool = False,
             inplace: bool = False,
@@ -1052,15 +1058,21 @@ class ComputationFrame:
                     skip_existing=skip_existing,
                     inplace=True,
                     verbose=verbose,
+                    recursive=recursive,
                     reuse_existing=reuse_existing,
                 )
                 new_size = len(res.nodes)
                 if new_size == current_size:
                     break
+                if not recursive:
+                    break
             return res if not inplace else None
         if isinstance(varnames, str):
             varnames = {varnames}
         
+        # TODO: when expanding forward, we don't really want to start from the 
+        # sink elements, because there may be non-sink elements that don't have
+        # all their consumer calls in the CF!
         expandable_elts = res.get_source_elts() if direction == "back" else res.get_sink_elts()
         expandable_elts = {k: v for k, v in expandable_elts.items() if k in varnames}
         if verbose:
@@ -1086,6 +1098,7 @@ class ComputationFrame:
     def expand_back(
         self,
         varnames: Optional[Union[str, Iterable[str]]] = None,
+        recursive: bool = False,
         # whether to skip calls that already exist in the CF (even if they're
         # not connected to the given variables)
         skip_existing: bool = False, 
@@ -1104,9 +1117,16 @@ class ComputationFrame:
 
         The number of these nodes and how they connect to the CF will depend on
         the structure of the calls that created the refs. 
+
+        Arguments:
+        - `varnames`: the names of the variables to expand; if None, expand all
+        the `Ref`s that don't have a creator call in any function node of the CF
+        that is connected to the `Ref`'s variable node as an output.
+        - `recursive`: if True, keep expanding until a fixed point is reached
         """
         return self._expand_unidirectional(
             direction="back",
+            recursive=recursive,
             varnames=varnames,
             skip_existing=skip_existing,
             inplace=inplace,
@@ -1117,6 +1137,7 @@ class ComputationFrame:
     def expand_forward(
         self,
         varnames: Optional[Union[str, Set[str]]] = None,
+        recursive: bool = False,
         skip_existing: bool = False,
         inplace: bool = False,
         verbose: bool = False,
@@ -1128,6 +1149,7 @@ class ComputationFrame:
         """
         return self._expand_unidirectional(
             direction="forward",
+            recursive=recursive,
             varnames=varnames,
             skip_existing=skip_existing,
             inplace=inplace,
@@ -1135,7 +1157,7 @@ class ComputationFrame:
             reuse_existing=reuse_existing,
         )
 
-    def expand(
+    def expand_all(
         self,
         inplace: bool = False,
         skip_existing: bool = False,
@@ -1144,16 +1166,13 @@ class ComputationFrame:
     ) -> Optional["ComputationFrame"]:
         """
         Expand the computation frame by repeatedly applying `expand_back` and
-        `expand_forward` on all variables until a fixed point is reached.
-
-        This is guaranteed to terminate, because we always expand only the 
-        source/sink elements of the graph.
+        `expand_forward` until a fixed point is reached.
         """
         res = self if inplace else self.copy()
         cur_size = len(res.refs) + len(res.calls)
         while True:
-            res.expand_back(inplace=True, skip_existing=skip_existing, verbose=verbose, reuse_existing=reuse_existing)
-            res.expand_forward(inplace=True, skip_existing=skip_existing, verbose=verbose, reuse_existing=reuse_existing)
+            res.expand_back(inplace=True, skip_existing=skip_existing, verbose=verbose, reuse_existing=reuse_existing, recursive=True)
+            res.expand_forward(inplace=True, skip_existing=skip_existing, verbose=verbose, reuse_existing=reuse_existing, recursive=True)
             new_size = len(res.refs) + len(res.calls)
             if new_size == cur_size:
                 break
@@ -1283,7 +1302,7 @@ class ComputationFrame:
             if x in restricted_cf.vnames and len(sink_elts) > 0
         }
         df = restricted_cf.get_joint_history_df(
-            vnames=vnames, how="outer", include_calls=include_calls
+            varnames=vnames, how="outer", include_calls=include_calls
         )
         # depending on `include_calls`, we may have dropped some columns in `nodes`
         df = df[[x for x in list(nodes) if x in df.columns]]
@@ -1493,19 +1512,35 @@ class ComputationFrame:
 
     def get_joint_history_df(
         self,
-        vnames: Iterable[str],
+        varnames: Iterable[str],
         how: Literal["inner", "outer"] = "outer",
         include_calls: bool = True,
     ) -> pd.DataFrame:
+        """
+        Get the joint computational history of the given variables. This means:
+        - for each variable, find the dependencies of all the refs in it
+        - this results in a table where each row is a view of the full history
+        of the refs in the variable
+        - then, join these tables across `varnames` on the common columns
+
+        The join is outer by default, because the histories of the variables may
+        be heterogeneous.
+        """
+
         def extract_hids(
             x: Union[None, Ref, Call, Set[Ref], Set[Call]]
         ) -> Union[None, str, Set[str]]:
+            """
+            Convert a Ref or Call object to its hid, or a set of Refs/Calls to
+            a canonical hashable representation.
+            """
             if pd.isnull(x):
                 return None
             elif isinstance(x, (Ref, Call)):
                 return x.hid
             else:
-                return {elt.hid for elt in x}
+                # necessary to make it canonically hashable 
+                return tuple(sorted({elt.hid for elt in x}))
 
         def eval_hids(
             hids: Union[None, str, Set[str]]
@@ -1529,7 +1564,7 @@ class ComputationFrame:
             self.get_history_df(vname, include_calls=include_calls).applymap(
                 extract_hids
             )
-            for vname in vnames
+            for vname in varnames
         ]
         result = history_dfs[0]
         for df in history_dfs[1:]:
@@ -1864,7 +1899,7 @@ class ComputationFrame:
         Delete the calls referenced by this CF from the storage
         """
         hids = set(self.calls.keys())
-        self.storage.drop_calls(hids=hids, delete_dependents=True)
+        self.storage.drop_calls(calls_or_hids=hids, delete_dependents=True)
 
     def delete_calls_from_df(self, df: pd.DataFrame):
         """
@@ -1893,6 +1928,9 @@ class ComputationFrame:
         while f"{name_hint}_{i}" in self.fs:
             i += 1
         return f"{name_hint}_{i}"
+    
+    def print_graph(self):
+        print(self.get_graph_desc())
 
     def get_graph_desc(self) -> str:
         lines = []
@@ -1916,7 +1954,10 @@ class ComputationFrame:
             output_labels = copy.deepcopy(output_name_to_vars)
             for output_name in output_labels.keys():
                 output_labels[output_name] = {f'{varname}' for varname in output_labels[output_name]}
-            lhs = ", ".join(['(' + " | ".join(output_labels[k]) + ')' + f"@{k}" for k in ordered_output_names])
+            lhs = ", ".join([('(' if len(output_labels[k]) > 1 else '') +\
+                              " | ".join(output_labels[k]) +\
+                              (')' if len(output_labels[k]) > 1 else '') + f"@{k}" 
+                             for k in ordered_output_names])
             rhs = ", ".join(
                 [
                     f"{k}={' | '.join(input_name_to_vars[k])}"
@@ -1961,7 +2002,8 @@ class ComputationFrame:
                     parts.append(f"{num_source} sources")
                 if num_sink > 0:
                     parts.append(f"{num_sink} sinks")
-                additional_lines[0] += f" ({'/'.join(parts)})"
+                if num_source > 0 or num_sink > 0:
+                    additional_lines[0] += f" ({'/'.join(parts)})"
             vnodes[vname] = Node(
                 color=SOLARIZED_LIGHT["blue"],
                 label=vname,
@@ -1988,7 +2030,7 @@ class ComputationFrame:
         edges = []
         for src, dst, label in self.edges():
             if verbose:
-                label = f'{label}\\n({edge_counts[(src, dst, label)]} refs)'
+                label = f'{label}\\n({edge_counts[(src, dst, label)]} values)'
             edges.append(
                 Edge(source_node=nodes[src], 
                      target_node=nodes[dst],
@@ -2004,13 +2046,10 @@ class ComputationFrame:
         write_output(dot_string, output_ext='svg', output_path=path, show_how=show_how,)
 
 
-    def print_graph(self):
-        print(self.get_graph_desc())
-
     def __repr__(self) -> str:
         graph_desc = self.get_graph_desc()
         graph_desc = textwrap.indent(graph_desc, "    ")
-        summary_line = f"{self.__class__.__name__} with {len(self.vs)} variable(s) ({len(self.refs)} unique refs), {len(self.fs)} operation(s) ({len(self.calls)} unique calls)"
+        summary_line = f"{self.__class__.__name__} with:\n    {len(self.vs)} variable(s) ({len(self.refs)} unique refs)\n    {len(self.fs)} operation(s) ({len(self.calls)} unique calls)"
         graph_title_line = "Computational graph:"
         # info_line = "Use `.info()` to get more information about the CF, or `.info(*variable_name)` and `.info(*operation_name)` to get information about specific variable(s)/operation(s)"
         # info_lines = textwrap.wrap(info_line, width=80)

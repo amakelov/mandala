@@ -348,6 +348,15 @@ class Storage:
     ############################################################################
     ### provenance queries
     ############################################################################
+    def get_ref_creator(self, ref: Ref) -> Optional[Call]:
+        creator_calls = self.get_creators([ref.hid])
+        if len(creator_calls) == 0:
+            return None
+        elif len(creator_calls) == 1:
+            return creator_calls[0]
+        else:
+            raise RuntimeError(f"Ref {ref.hid} has multiple creators, this should not happen.")
+
     def get_creators(self, ref_hids: Iterable[str]) -> List[Call]:
         if self.in_context():
             raise NotImplementedError("Method not supported while in a context.")
@@ -708,6 +717,7 @@ class Storage:
         storage_inputs: Dict[str, Any],
         storage_tps: Dict[str, Type],
         bound_arguments: Optional[inspect.BoundArguments] = None,
+        kwarg_keys: Optional[List[str]] = None,
     ) -> Tuple[Dict[str, Ref], Call, List[Call]]:
         """
         Main function to call an op, operating on the representations used
@@ -760,12 +770,27 @@ class Storage:
         if op.__structural__:
             returns = f(**wrapped_inputs)
         else:
-            #! guard against side effects
-            cids_before = {k: v.cid for k, v in wrapped_inputs.items()}
-            raw_values = {k: self.unwrap(v) for k, v in wrapped_inputs.items()}
+            # #! guard against side effects
+            # cids_before = {k: v.cid for k, v in wrapped_inputs.items()}
+            # raw_values = {k: self.unwrap(v) for k, v in wrapped_inputs.items()}
             #! call the function
-            args, kwargs = bound_arguments.args, bound_arguments.kwargs
+            kwargs = {}
+            if kwarg_keys is not None:
+                for k in kwarg_keys:
+                    if k in bound_arguments.arguments:
+                        kwargs[k] = bound_arguments.arguments[k]
+                        del bound_arguments.arguments[k]
+                    else: # must be a var keyword
+                        # figure out the name of the var keyword
+                        var_keyword = [p for p in sig.parameters.values() if p.kind == p.VAR_KEYWORD]
+                        var_keyword = var_keyword[0] if len(var_keyword) > 0 else None
+                        assert var_keyword is not None
+                        varkwargs = bound_arguments.arguments[var_keyword.name]
+                        kwargs[k] = varkwargs[k]
+                        del varkwargs[k]
+            args, leftover_kwargs = bound_arguments.args, bound_arguments.kwargs
             args = self.unwrap(args)
+            kwargs.update(leftover_kwargs)
             kwargs = self.unwrap(kwargs)
 
             if tracer_option is not None:
@@ -779,19 +804,18 @@ class Storage:
             else:
                 returns = f(*args, **kwargs)
 
-            if not op.__allow_side_effects__:
-                # capture changes in the inputs; TODO: this is hacky; ideally, we would
-                # avoid calling `construct` and instead recurse on the values, looking for differences.
-                cids_after = {
-                    k: self.construct(tp=storage_tps[k], val=v)[0].cid
-                    for k, v in raw_values.items()
-                }
-                changed_inputs = {k for k in cids_before if cids_before[k] != cids_after[k]}
-                if len(changed_inputs) > 0:
-                    raise ValueError(
-                        f"Function {f.__name__} has side effects on inputs {changed_inputs}; aborting call."
-                    )
-
+            # if not op.__allow_side_effects__:
+            #     # capture changes in the inputs; TODO: this is hacky; ideally, we would
+            #     # avoid calling `construct` and instead recurse on the values, looking for differences.
+            #     cids_after = {
+            #         k: self.construct(tp=storage_tps[k], val=v)[0].cid
+            #         for k, v in raw_values.items()
+            #     }
+            #     changed_inputs = {k for k in cids_before if cids_before[k] != cids_after[k]}
+            #     if len(changed_inputs) > 0:
+            #         raise ValueError(
+            #             f"Function {f.__name__} has side effects on inputs {changed_inputs}; aborting call."
+            #         )
 
         if tracer_option is not None:
             # check the trace against the code state hypothesis
@@ -1045,6 +1069,7 @@ class Storage:
         self, __op__: Op, args, kwargs, __config__: Optional[dict] = None
     ) -> Union[Tuple[Ref, ...], Ref]:
         __config__ = {} if __config__ is None else __config__
+        kwarg_keys = set(kwargs.keys())
         bound_arguments, storage_inputs, storage_annotations = self.parse_args(
             sig=inspect.signature(__op__.f),
             args=args,
@@ -1060,6 +1085,7 @@ class Storage:
             storage_inputs = storage_inputs,
             bound_arguments = bound_arguments,
             storage_tps=storage_tps,
+            kwarg_keys=kwarg_keys,
         )
         if __config__.get("save_calls", False):
             self.save_call(main_call)
