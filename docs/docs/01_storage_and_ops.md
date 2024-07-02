@@ -17,7 +17,7 @@ from mandala._next.imports import Storage
 storage = Storage(
     # omit for an in-memory storage
     db_path='my_persistent_storage.db', 
-    # omit to disable automatic dependency tracking
+    # omit to disable automatic dependency tracking & versioning
     # use "__main__" to only track functions defined in the current session
     deps_path='__main__', 
 )
@@ -63,8 +63,10 @@ The objects (e.g. `s`) returned by `@op`s are always instances of a subclass of
 composition of `@op`s that created this ref.  
 
 Two `Ref`s with the same `cid` may have different `hid`s, and `hid` is the
-unique identifier of `Ref`s in the storage. 
+unique identifier of `Ref`s in the storage. However, only 1 copy per unique
+`cid` is stored to avoid duplication in the storage.
 
+### `Ref`s can be in memory or not
 Additionally, `Ref`s have the `in_memory` property, which indicates if the
 underlying object is present in the `Ref` or if this is a "lazy" `Ref` which
 only contains metadata. **`Ref`s are only loaded in memory when needed for a new
@@ -94,7 +96,7 @@ storage.unwrap(s) # loads from storage only if necessary
 
 
 
-Other useful methods of the `Storage` include:
+### Other useful `Storage` methods
 
 - `Storage.attach(inplace: bool)`: like `unwrap`, but puts the objects in the
 `Ref`s if they are not in-memory.
@@ -121,8 +123,9 @@ version at the time of the call, and the `cid`s of the inputs
 - `Call.hid`: a history ID for the call, the same as `Call.cid`, but using the 
 `hid`s of the inputs.
 
-**Every `Ref` history ID has at most one `Call` that it is an output of**, and
-if it exists, this call can be found by calling `storage.get_ref_creator`: 
+**For every `Ref` history ID, there's at most one `Call` that has an output with
+this history ID**, and if it exists, this call can be found by calling
+`storage.get_ref_creator()`: 
 
 
 ```python

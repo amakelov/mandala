@@ -89,7 +89,7 @@ with storage:
 ```
 
     AtomRef(hid='d0f...', cid='908...', in_memory=False) AtomRef(hid='f1a...', cid='69f...', in_memory=False)
-    AtomRef(hid='caf...', cid='d80...', in_memory=False)
+    AtomRef(hid='caf...', cid='f35...', in_memory=False)
     AtomRef(hid='d16...', cid='12a...', in_memory=False)
 
 
@@ -134,7 +134,7 @@ with storage:
     Loading data
     Training model
     Getting accuracy
-    AtomRef(0.84, hid='158...', cid='6c4...')
+    AtomRef(0.82, hid='158...', cid='238...')
     Training model
     Getting accuracy
     AtomRef(0.9, hid='214...', cid='24c...')
@@ -185,5 +185,5 @@ with storage:
             print(storage.unwrap(acc), storage.unwrap(model))
 ```
 
-    0.84 RandomForestClassifier(max_depth=2, n_estimators=5)
+    0.82 RandomForestClassifier(max_depth=2, n_estimators=5)
 
