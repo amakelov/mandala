@@ -20,15 +20,15 @@
 two tools:
 
 1. The `@op` decorator:
-    - Automatically captures inputs, outputs and code (+dependencies) of Python function calls
-    - Automatically reuses past results & never computes the same call twice
-    - Designed to be composed into end-to-end persisted programs, enabling
+    - **Automatically captures inputs, outputs and code (+dependencies)** of Python function calls
+    - Automatically reuses past results & **never computes the same call twice**
+    - **Designed to be composed** into end-to-end persisted programs, enabling
     efficient iterative development in plain-Python, without thinking about the
     storage backend.
 
-2. The `ComputationFrame` data structure:
-    - Generalized dataframes: "columns" are a computation graph, "rows" are
-    (partial) executions of the graph
+2. The `ComputationFrame` data structure (which [generalizes](https://amakelov.github.io/mandala/03_cf/#computationframes-as-generalized-dataframes) `pandas.DataFrame`):
+    - **Automatically organizes the "web" of `@op` calls** into a computation
+    graph over variables and `@op`s
     - Automates exploration, querying and high-level operations over
     heterogeneous "webs" of `@op` calls
     - Can be converted to a `DataFrame` of execution traces for downstream

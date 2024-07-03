@@ -2,7 +2,8 @@
 A `Storage` object holds all data (saved calls, code and dependencies) for a
 collection of memoized functions. In a given project, you should have just one
 `Storage` and many `@op`s connected to it. This way, the calls to memoized
-functions create a queriable web of interlinked objects. 
+functions create a queriable web of interlinked objects.  
+
 
 ## Creating a `Storage`
 
@@ -57,6 +58,15 @@ with storage: # all `@op` calls inside this block use `storage`
 This code runs the call to `sum_args`, and saves the inputs and outputs in the
 `storage` object, so that doing the same call later will directly load the saved
 outputs.
+
+### When should something be an `@op`?
+As a general guide, you should make something an `@op` if you want to save its
+outputs, e.g. if they take a long time to compute but you need them for later
+analysis. Since `@op` [encourages
+composition](https://amakelov.github.io/mandala/02_retracing/#how-op-encourages-composition),
+you should aim to have `@op`s work on the outputs of other `@op`s, or on the
+[collections and/or items](https://amakelov.github.io/mandala/05_collections/)
+of outputs of other `@op`s.
 
 ## Working with `@op` outputs (`Ref`s)
 The objects (e.g. `s`) returned by `@op`s are always instances of a subclass of

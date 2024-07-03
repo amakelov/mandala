@@ -14,7 +14,7 @@ from .utils import (
     invert_dict,
     get_nullable_intersection,
 )
-from .model import Call, Ref, Op, __make_list__
+from .model import Call, Ref, Op, __make_list__, RefCollection, CallCollection
 
 from .viz import Node, Edge, SOLARIZED_LIGHT, to_dot_string, write_output
 
@@ -31,6 +31,7 @@ def get_reverse_proj(call: Call) -> Callable[[str], Set[str]]:
         return lambda x: {k for k in call.inputs} if x == "elts" else {x}
     else:
         return lambda x: {x}
+
 
 
 class ComputationFrame:
@@ -1330,13 +1331,14 @@ class ComputationFrame:
         if len(df) == 0:
             return df 
         # figure out which columns contain what kinds of objects
-        def classify_obj(obj: Union[Ref, Call, Any]) -> str:
-            if isinstance(obj, Ref):
+        def classify_obj(obj: Union[Ref, Call, Any, RefCollection, CallCollection]) -> str:
+            if isinstance(obj, (Ref, RefCollection)):
                 return "ref"
-            elif isinstance(obj, Call):
+            elif isinstance(obj, (Call, CallCollection)):
                 return "call"
             else:
                 return "value"
+
         col_types = {col: classify_obj(df[col].iloc[0]) for col in df.columns}
         if skip_calls:
             df = df[[col for col, t in col_types.items() if t != "call"]]
@@ -1544,13 +1546,13 @@ class ComputationFrame:
 
         def eval_hids(
             hids: Union[None, str, Set[str]]
-        ) -> Union[None, Ref, Call, Tuple[Union[Ref, Call]]]:
+        ) -> Union[None, Ref, Call, RefCollection, CallCollection]:
             if pd.isnull(hids):
                 return None
             elif isinstance(hids, str):
                 return self.refs[hids] if hids in self.refs else self.calls[hids]
             else:
-                return tuple(
+                sorted_objs = tuple(
                     sorted(
                         {
                             self.refs[hid] if hid in self.refs else self.calls[hid]
@@ -1559,6 +1561,15 @@ class ComputationFrame:
                         key=lambda x: x.hid,
                     )
                 )
+                if next(iter(hids)) in self.refs:
+                    return RefCollection(sorted_objs)
+                elif next(iter(hids)) in self.calls:
+                    return CallCollection(sorted_objs)
+                else:
+                    raise ValueError(
+                        f"Got unexpected value for hids: {next(iter(hids))}"
+                    )
+
 
         history_dfs = [
             self.get_history_df(vname, include_calls=include_calls).applymap(
@@ -1841,7 +1852,6 @@ class ComputationFrame:
         call_hids = storage.call_storage.execute_df(
             f'SELECT call_history_id FROM calls WHERE op="{f.name}"'
         )["call_history_id"].unique().tolist()
-        sess.d()
         calls = storage.mget_call(hids=call_hids, in_memory=True)
         # calls = {
         #     call_hid: storage.get_call(call_hid, lazy=True) for call_hid in call_hids

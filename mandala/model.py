@@ -58,7 +58,6 @@ class Ref:
             cid=self.cid, hid=self.hid, in_memory=self.in_memory, obj=self.obj
         )
 
-
 class AtomRef(Ref):
     def __repr__(self) -> str:
         return "Atom" + super().__repr__()
@@ -324,6 +323,8 @@ def recurse_on_ref_collections(f: Callable, obj: Any, **kwargs: Any) -> Any:
         return tuple(recurse_on_ref_collections(f, elt, **kwargs) for elt in obj)
     elif isinstance(obj, set):
         return {recurse_on_ref_collections(f, elt, **kwargs) for elt in obj}
+    elif isinstance(obj, RefCollection):
+        return ValueCollection(values=[recurse_on_ref_collections(f, ref, **kwargs) for ref in obj.refs])
     else:
         return obj
 
@@ -437,4 +438,28 @@ class Context:
 
     def __exit__(self, exc_type, exc_value, traceback) -> None:
         Context.current_context = None
+
+
+class RefCollection:
+    def __init__(self, refs: Iterable[Ref]):
+        self.refs = sorted(refs, key=lambda ref: ref.hid)
+    
+    def __repr__(self):
+        return f"RefCollection({self.refs})"
+
+
+class ValueCollection:
+    def __init__(self, values: List[None]):
+        self.values = values
+    
+    def __repr__(self):
+        return f"ValueCollection({self.values})"
+
+
+class CallCollection:
+    def __init__(self, calls: Iterable[Call]):
+        self.calls = sorted(calls, key=lambda call: call.hid)
+    
+    def __repr__(self):
+        return f"CallCollection({self.calls})"
 

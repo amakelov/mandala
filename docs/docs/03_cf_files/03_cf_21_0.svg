@@ -9,8 +9,15 @@
 <g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 232)">
 <title>G</title>
 <polygon fill="white" stroke="transparent" points="-4,4 -4,-232 144,-232 144,4 -4,4"/>
-<!-- model -->
+<!-- test_acc -->
 <g id="node1" class="node">
+<title>test_acc</title>
+<path fill="none" stroke="#268bd2" d="M104.5,-36C104.5,-36 35.5,-36 35.5,-36 29.5,-36 23.5,-30 23.5,-24 23.5,-24 23.5,-12 23.5,-12 23.5,-6 29.5,0 35.5,0 35.5,0 104.5,0 104.5,0 110.5,0 116.5,-6 116.5,-12 116.5,-12 116.5,-24 116.5,-24 116.5,-30 110.5,-36 104.5,-36"/>
+<text text-anchor="start" x="45.5" y="-20.4" font-family="RobotoMono" font-weight="bold" font-size="12.00" fill="#002b36">test_acc</text>
+<text text-anchor="start" x="31.5" y="-10" font-family="RobotoMono" font-size="10.00" fill="#268bd2">2 values (2 sinks)</text>
+</g>
+<!-- model -->
+<g id="node2" class="node">
 <title>model</title>
 <path fill="none" stroke="#268bd2" d="M128,-228C128,-228 12,-228 12,-228 6,-228 0,-222 0,-216 0,-216 0,-204 0,-204 0,-198 6,-192 12,-192 12,-192 128,-192 128,-192 134,-192 140,-198 140,-204 140,-204 140,-216 140,-216 140,-222 134,-228 128,-228"/>
 <text text-anchor="start" x="51" y="-212.4" font-family="RobotoMono" font-weight="bold" font-size="12.00" fill="#002b36">model</text>
@@ -31,13 +38,6 @@
 <polygon fill="#002b36" stroke="#002b36" points="73.5,-144.07 70,-134.07 66.5,-144.07 73.5,-144.07"/>
 <text text-anchor="middle" x="92" y="-166" font-family="RobotoMono" font-size="10.00" fill="#002b36">model</text>
 <text text-anchor="middle" x="92" y="-155" font-family="RobotoMono" font-size="10.00" fill="#002b36">(2 values)</text>
-</g>
-<!-- test_acc -->
-<g id="node2" class="node">
-<title>test_acc</title>
-<path fill="none" stroke="#268bd2" d="M104.5,-36C104.5,-36 35.5,-36 35.5,-36 29.5,-36 23.5,-30 23.5,-24 23.5,-24 23.5,-12 23.5,-12 23.5,-6 29.5,0 35.5,0 35.5,0 104.5,0 104.5,0 110.5,0 116.5,-6 116.5,-12 116.5,-12 116.5,-24 116.5,-24 116.5,-30 110.5,-36 104.5,-36"/>
-<text text-anchor="start" x="45.5" y="-20.4" font-family="RobotoMono" font-weight="bold" font-size="12.00" fill="#002b36">test_acc</text>
-<text text-anchor="start" x="31.5" y="-10" font-family="RobotoMono" font-size="10.00" fill="#268bd2">2 values (2 sinks)</text>
 </g>
 <!-- eval_model&#45;&gt;test_acc -->
 <g id="edge2" class="edge">

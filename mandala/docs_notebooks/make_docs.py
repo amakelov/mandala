@@ -31,7 +31,9 @@ if __name__ == '__main__':
         files_folder = f.replace('.ipynb', '_files')
         if os.path.isdir(files_folder):
             # first, remove the directory if it already exists
-            os.system(f"rm -r {DOCS_REL_PATH}" + files_folder)
+            target_files_path = DOCS_REL_PATH + files_folder
+            if os.path.isdir(target_files_path):
+                os.system(f"rm -r {DOCS_REL_PATH}" + files_folder)
             # then, move the directory
             os.system("mv " + f.replace('.ipynb', '_files') + " " + DOCS_REL_PATH)
 
