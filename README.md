@@ -8,10 +8,11 @@
 </a> | 
 <a href="#tutorials">Tutorials</a> |
 <a href="https://amakelov.github.io/mandala/">Docs</a> |
+<a href="#blogs">Blogs</a> |
 <a href="#testimonials">Testimonials</a> |
 </div>
 
-# Computations that save, query and version themselves
+# Programs that save, query & version themselves
 
 <br>
 
@@ -43,6 +44,11 @@ pip install git+https://github.com/amakelov/mandala
   <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/> </a>
 - Toy ML project: <a href="https://colab.research.google.com/github/amakelov/mandala/blob/master/tutorials/ml.ipynb"> 
   <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/> </a>
+
+# Blogs
+- [Practical dependency tracking for Python function
+calls](https://amakelov.github.io/blog/deps/): describes the motivations and designs behind `mandala`'s dependency tracking system
+- [Mandala: Python programs that save, query and version themselves](https://amakelov.github.io/blog/pl/): Overall summary of previous version. It holds for the current version except for the section titled "Pattern-matching queries"
 
 # FAQs
 
