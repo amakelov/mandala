@@ -9,8 +9,31 @@
 <g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 46)">
 <title>G</title>
 <polygon fill="white" stroke="transparent" points="-4,4 -4,-46 756,-46 756,4 -4,4"/>
-<!-- nums -->
+<!-- elts -->
 <g id="node1" class="node">
+<title>elts</title>
+<path fill="none" stroke="#268bd2" d="M94,-38C94,-38 12,-38 12,-38 6,-38 0,-32 0,-26 0,-26 0,-14 0,-14 0,-8 6,-2 12,-2 12,-2 94,-2 94,-2 100,-2 106,-8 106,-14 106,-14 106,-26 106,-26 106,-32 100,-38 94,-38"/>
+<text text-anchor="start" x="42" y="-22.4" font-family="RobotoMono" font-weight="bold" font-size="12.00" fill="#002b36">elts</text>
+<text text-anchor="start" x="8" y="-12" font-family="RobotoMono" font-size="10.00" fill="#268bd2">5 values (5 sources)</text>
+</g>
+<!-- __make_list__ -->
+<g id="node4" class="node">
+<title>__make_list__</title>
+<path fill="none" stroke="#dc322f" d="M275,-40C275,-40 198,-40 198,-40 192,-40 186,-34 186,-28 186,-28 186,-12 186,-12 186,-6 192,0 198,0 198,0 275,0 275,0 281,0 287,-6 287,-12 287,-12 287,-28 287,-28 287,-34 281,-40 275,-40"/>
+<text text-anchor="start" x="197" y="-27.4" font-family="RobotoMono" font-weight="bold" font-size="12.00" fill="#002b36">__make_list__</text>
+<text text-anchor="start" x="194" y="-17" font-family="RobotoMono" font-size="10.00" fill="#002b36">@op:__make_list__</text>
+<text text-anchor="start" x="222.5" y="-7" font-family="RobotoMono" font-size="10.00" fill="#dc322f">1 calls</text>
+</g>
+<!-- elts&#45;&gt;__make_list__ -->
+<g id="edge4" class="edge">
+<title>elts&#45;&gt;__make_list__</title>
+<path fill="none" stroke="#002b36" d="M106.01,-20C127.81,-20 153.29,-20 175.84,-20"/>
+<polygon fill="#002b36" stroke="#002b36" points="175.98,-23.5 185.98,-20 175.98,-16.5 175.98,-23.5"/>
+<text text-anchor="middle" x="146" y="-34" font-family="RobotoMono" font-size="10.00" fill="#002b36">elts</text>
+<text text-anchor="middle" x="146" y="-23" font-family="RobotoMono" font-size="10.00" fill="#002b36">(5 values)</text>
+</g>
+<!-- nums -->
+<g id="node2" class="node">
 <title>nums</title>
 <path fill="none" stroke="#268bd2" d="M409,-38C409,-38 379,-38 379,-38 373,-38 367,-32 367,-26 367,-26 367,-14 367,-14 367,-8 373,-2 379,-2 379,-2 409,-2 409,-2 415,-2 421,-8 421,-14 421,-14 421,-26 421,-26 421,-32 415,-38 409,-38"/>
 <text text-anchor="start" x="376.5" y="-22.4" font-family="RobotoMono" font-weight="bold" font-size="12.00" fill="#002b36">nums</text>
@@ -33,34 +56,11 @@
 <text text-anchor="middle" x="461" y="-23" font-family="RobotoMono" font-size="10.00" fill="#002b36">(1 values)</text>
 </g>
 <!-- output_0 -->
-<g id="node2" class="node">
+<g id="node3" class="node">
 <title>output_0</title>
 <path fill="none" stroke="#268bd2" d="M740,-38C740,-38 671,-38 671,-38 665,-38 659,-32 659,-26 659,-26 659,-14 659,-14 659,-8 665,-2 671,-2 671,-2 740,-2 740,-2 746,-2 752,-8 752,-14 752,-14 752,-26 752,-26 752,-32 746,-38 740,-38"/>
 <text text-anchor="start" x="678" y="-22.4" font-family="RobotoMono" font-weight="bold" font-size="12.00" fill="#002b36">output_0</text>
 <text text-anchor="start" x="667" y="-12" font-family="RobotoMono" font-size="10.00" fill="#268bd2">1 values (1 sinks)</text>
-</g>
-<!-- elts -->
-<g id="node3" class="node">
-<title>elts</title>
-<path fill="none" stroke="#268bd2" d="M94,-38C94,-38 12,-38 12,-38 6,-38 0,-32 0,-26 0,-26 0,-14 0,-14 0,-8 6,-2 12,-2 12,-2 94,-2 94,-2 100,-2 106,-8 106,-14 106,-14 106,-26 106,-26 106,-32 100,-38 94,-38"/>
-<text text-anchor="start" x="42" y="-22.4" font-family="RobotoMono" font-weight="bold" font-size="12.00" fill="#002b36">elts</text>
-<text text-anchor="start" x="8" y="-12" font-family="RobotoMono" font-size="10.00" fill="#268bd2">5 values (5 sources)</text>
-</g>
-<!-- __make_list__ -->
-<g id="node4" class="node">
-<title>__make_list__</title>
-<path fill="none" stroke="#dc322f" d="M275,-40C275,-40 198,-40 198,-40 192,-40 186,-34 186,-28 186,-28 186,-12 186,-12 186,-6 192,0 198,0 198,0 275,0 275,0 281,0 287,-6 287,-12 287,-12 287,-28 287,-28 287,-34 281,-40 275,-40"/>
-<text text-anchor="start" x="197" y="-27.4" font-family="RobotoMono" font-weight="bold" font-size="12.00" fill="#002b36">__make_list__</text>
-<text text-anchor="start" x="194" y="-17" font-family="RobotoMono" font-size="10.00" fill="#002b36">@op:__make_list__</text>
-<text text-anchor="start" x="222.5" y="-7" font-family="RobotoMono" font-size="10.00" fill="#dc322f">1 calls</text>
-</g>
-<!-- elts&#45;&gt;__make_list__ -->
-<g id="edge4" class="edge">
-<title>elts&#45;&gt;__make_list__</title>
-<path fill="none" stroke="#002b36" d="M106.01,-20C127.81,-20 153.29,-20 175.84,-20"/>
-<polygon fill="#002b36" stroke="#002b36" points="175.98,-23.5 185.98,-20 175.98,-16.5 175.98,-23.5"/>
-<text text-anchor="middle" x="146" y="-34" font-family="RobotoMono" font-size="10.00" fill="#002b36">elts</text>
-<text text-anchor="middle" x="146" y="-23" font-family="RobotoMono" font-size="10.00" fill="#002b36">(5 values)</text>
 </g>
 <!-- __make_list__&#45;&gt;nums -->
 <g id="edge3" class="edge">

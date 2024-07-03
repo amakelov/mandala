@@ -1,4 +1,7 @@
 # Advanced `ComputationFrame` tools
+<a href="https://colab.research.google.com/github/amakelov/mandala/blob/master/mandala/docs_notebooks/06_advanced_cf.ipynb"> 
+  <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/> </a>
+
 This section of the documentation contains some more advanced `ComputationFrame`
 topics.
 
@@ -19,6 +22,16 @@ downstream of the `Ref`s in chosen variables
 - **`.upstream(varnames)`**: dual to `downstream`
 
 Consider the following example:
+
+
+```python
+# for Google Colab
+try:
+    import google.colab
+    !pip install git+https://github.com/amakelov/mandala
+except:
+    pass
+```
 
 
 ```python
@@ -55,7 +68,7 @@ cf.draw(verbose=True)
 
 
     
-![svg](06_advanced_cf_files/06_advanced_cf_4_0.svg)
+![svg](06_advanced_cf_files/06_advanced_cf_5_0.svg)
     
 
 

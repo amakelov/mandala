@@ -29,9 +29,9 @@ two tools:
 2. The `ComputationFrame` data structure (which [generalizes](https://amakelov.github.io/mandala/03_cf/#computationframes-as-generalized-dataframes) `pandas.DataFrame`):
     - **Automatically organizes the "web" of `@op` calls** into a computation
     graph over variables and `@op`s
-    - Automates exploration, querying and high-level operations over
+    - **Automates exploration, querying and high-level operations** over
     heterogeneous "webs" of `@op` calls
-    - Can be converted to a `DataFrame` of execution traces for downstream
+    - **Can be converted to a `DataFrame` of execution traces** for downstream
     analysis of relationships between variables in a project
 
 # Install

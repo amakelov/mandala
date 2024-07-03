@@ -1,9 +1,21 @@
 # `Storage` & the `@op` Decorator
+<a href="https://colab.research.google.com/github/amakelov/mandala/blob/master/mandala/docs_notebooks/01_storage_and_ops.ipynb"> 
+  <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/> </a>
+
 A `Storage` object holds all data (saved calls, code and dependencies) for a
 collection of memoized functions. In a given project, you should have just one
 `Storage` and many `@op`s connected to it. This way, the calls to memoized
 functions create a queriable web of interlinked objects.  
 
+
+```python
+# for Google Colab
+try:
+    import google.colab
+    !pip install git+https://github.com/amakelov/mandala
+except:
+    pass
+```
 
 ## Creating a `Storage`
 
@@ -89,12 +101,12 @@ call to an `@op`**. For example, re-running the last code block:
 
 
 ```python
-with storage:
-    s = sum_args(1, 2, 3, 4, c=6,)
+with storage: 
+    s = sum_args(6, 7, 8, 9, c=11,)
     print(s)
 ```
 
-    AtomRef(17, hid='43b...', cid='89c...')
+    AtomRef(hid='168...', cid='d92...', in_memory=False)
 
 
 To get the object wrapped by a `Ref`, call `storage.unwrap`:
@@ -107,7 +119,7 @@ storage.unwrap(s) # loads from storage only if necessary
 
 
 
-    17
+    42
 
 
 
@@ -124,8 +136,8 @@ print(storage.attach(obj=s, inplace=False))
 print(storage.load_ref(s.hid))
 ```
 
-    AtomRef(17, hid='43b...', cid='89c...')
-    AtomRef(17, hid='43b...', cid='89c...')
+    AtomRef(42, hid='168...', cid='d92...')
+    AtomRef(42, hid='168...', cid='d92...')
 
 
 ## Working with `Call` objects
@@ -150,18 +162,18 @@ display(call.inputs)
 display(call.outputs)
 ```
 
-    Call(sum_args, cid='25b...', hid='290...')
+    Call(sum_args, cid='e91...', hid='f99...')
 
 
 
-    {'a': AtomRef(hid='610...', cid='366...', in_memory=False),
-     'args_0': AtomRef(hid='245...', cid='76f...', in_memory=False),
-     'args_1': AtomRef(hid='878...', cid='566...', in_memory=False),
-     'args_2': AtomRef(hid='309...', cid='a82...', in_memory=False),
+    {'a': AtomRef(hid='c6a...', cid='489...', in_memory=False),
+     'args_0': AtomRef(hid='e0f...', cid='2da...', in_memory=False),
+     'args_1': AtomRef(hid='479...', cid='f2c...', in_memory=False),
+     'args_2': AtomRef(hid='c37...', cid='81a...', in_memory=False),
      'b': AtomRef(hid='610...', cid='366...', in_memory=False),
-     'c': AtomRef(hid='c6a...', cid='489...', in_memory=False)}
+     'c': AtomRef(hid='a33...', cid='c84...', in_memory=False)}
 
 
 
-    {'output_0': AtomRef(hid='43b...', cid='89c...', in_memory=False)}
+    {'output_0': AtomRef(hid='168...', cid='d92...', in_memory=False)}
 

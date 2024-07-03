@@ -1,4 +1,7 @@
 # Changing `@op`s and managing versions
+<a href="https://colab.research.google.com/github/amakelov/mandala/blob/master/mandala/docs_notebooks/04_versions.ipynb"> 
+  <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/> </a>
+
 It should be easy to change your code and have the storage respond in a correct
 way (e.g., recompute a call **only** when the logic behind it has changed).
 `mandala` provides the following mechanisms to do that:
@@ -29,6 +32,16 @@ typically don't want to track changes in installed libraries!):
 defined in the current interactive session or process (as determined by
 `f.__module__`).
 - Setting it to a folder will only look for dependencies defined in this folder.
+
+
+```python
+# for Google Colab
+try:
+    import google.colab
+    !pip install git+https://github.com/amakelov/mandala
+except:
+    pass
+```
 
 
 ```python
@@ -271,7 +284,7 @@ cf.draw(verbose=True)
 
 
     
-![svg](04_versions_files/04_versions_12_0.svg)
+![svg](04_versions_files/04_versions_13_0.svg)
     
 
 

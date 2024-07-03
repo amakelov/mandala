@@ -1,4 +1,7 @@
 # Patterns for Incremental Computation & Development
+<a href="https://colab.research.google.com/github/amakelov/mandala/blob/master/mandala/docs_notebooks/02_retracing.ipynb"> 
+  <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/> </a>
+
 **`@op`-decorated functions are designed to be composed** with one another. This
 enables the same piece of imperative code to adapt to multiple goals depending
 on the situation: 
@@ -36,6 +39,16 @@ Here's a small example of a machine learning pipeline:
 
 
 ```python
+# for Google Colab
+try:
+    import google.colab
+    !pip install git+https://github.com/amakelov/mandala
+except:
+    pass
+```
+
+
+```python
 from mandala.imports import *
 from sklearn.datasets import load_digits
 from sklearn.ensemble import RandomForestClassifier
@@ -69,7 +82,7 @@ with storage:
     Loading data
     Training model
     Getting accuracy
-    AtomRef(1.0, hid='d16...', cid='b67...')
+    AtomRef(0.99, hid='d16...', cid='12a...')
 
 
 ## Retracing your steps with memoization
@@ -89,8 +102,8 @@ with storage:
 ```
 
     AtomRef(hid='d0f...', cid='908...', in_memory=False) AtomRef(hid='f1a...', cid='69f...', in_memory=False)
-    AtomRef(hid='caf...', cid='011...', in_memory=False)
-    AtomRef(hid='d16...', cid='b67...', in_memory=False)
+    AtomRef(hid='caf...', cid='cb1...', in_memory=False)
+    AtomRef(hid='d16...', cid='12a...', in_memory=False)
 
 
 This puts all the `Ref`s along the way in your local variables (as if you've
@@ -105,7 +118,7 @@ storage.unwrap(acc)
 
 
 
-    1.0
+    0.99
 
 
 
@@ -127,17 +140,17 @@ with storage:
             print(acc)
 ```
 
-    AtomRef(hid='d16...', cid='b67...', in_memory=False)
+    AtomRef(hid='d16...', cid='12a...', in_memory=False)
     Training model
     Getting accuracy
     AtomRef(1.0, hid='6fd...', cid='b67...')
     Loading data
     Training model
     Getting accuracy
-    AtomRef(0.81, hid='158...', cid='5a4...')
+    AtomRef(0.78, hid='158...', cid='f1d...')
     Training model
     Getting accuracy
-    AtomRef(0.93, hid='214...', cid='c3d...')
+    AtomRef(0.92, hid='214...', cid='145...')
 
 
 Note that the first value of `acc` from the nested loop is with
@@ -165,9 +178,9 @@ with storage:
                 print(n_class, n_estimators, storage.unwrap(acc))
 ```
 
-    2 5 1.0
+    2 5 0.99
     2 10 1.0
-    5 10 0.93
+    5 10 0.92
 
 
 ## Memoized code as storage interface
@@ -186,5 +199,5 @@ with storage:
             print(storage.unwrap(acc), storage.unwrap(model))
 ```
 
-    0.81 RandomForestClassifier(max_depth=2, n_estimators=5)
+    0.78 RandomForestClassifier(max_depth=2, n_estimators=5)
 

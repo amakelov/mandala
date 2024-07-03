@@ -1,4 +1,7 @@
 # Natively handling Python collections
+<a href="https://colab.research.google.com/github/amakelov/mandala/blob/master/mandala/docs_notebooks/05_collections.ipynb"> 
+  <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/> </a>
+
 A key benefit of `mandala` over straightforward memoization is that it can make
 Python collections (lists, dicts, ...) a native & transparent part of the
 memoization process:
@@ -20,6 +23,16 @@ single `Ref` with no structure; the object is **opaque** to the `Storage`
 instance. To make the collection **transparent** to the `Storage`, you must
 override this behavior explicitly by using a custom type annotation, such as
 `MList` for lists, `MDict` for dicts, ...:
+
+
+```python
+# for Google Colab
+try:
+    import google.colab
+    !pip install git+https://github.com/amakelov/mandala
+except:
+    pass
+```
 
 
 ```python
@@ -45,7 +58,7 @@ cf = storage.cf(average).expand_all(); cf.draw(verbose=True, orientation='LR')
 
 
     
-![svg](05_collections_files/05_collections_4_0.svg)
+![svg](05_collections_files/05_collections_5_0.svg)
     
 
 
