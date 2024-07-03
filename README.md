@@ -3,7 +3,9 @@
     <img src="assets/logo-no-background.png" height=128 alt="logo" align="center">
   <br>
 <a href="#install">Install</a> |
-<a href="https://colab.research.google.com/github/amakelov/mandala/blob/master/tutorials/hello.ipynb">Quickstart (Colab)</a> |
+<a href="https://colab.research.google.com/github/amakelov/mandala/blob/master/tutorials/hello.ipynb"> Quickstart 
+  <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/>
+</a> | 
 <a href="#tutorials">Tutorials</a> |
 <a href="https://amakelov.github.io/mandala/">Docs</a> |
 <a href="#testimonials">Testimonials</a> |
@@ -37,11 +39,8 @@ pip install git+https://github.com/amakelov/mandala
 ```
 
 # Tutorials 
-- see the ["Hello world!"
-  tutorial](https://github.com/amakelov/mandala/blob/master/tutorials/hello.ipynb)
-  for a 2-minute introduction to the library's main features
-- see [this notebook](https://github.com/amakelov/mandala/blob/master/tutorials/ml.ipynb)
-for a more realistic example of managing a machine learning project.
+- ["Hello world!"](https://github.com/amakelov/mandala/blob/master/tutorials/hello.ipynb)
+- [Random forest miniproject](https://github.com/amakelov/mandala/blob/master/tutorials/ml.ipynb)
 
 # FAQs
 
