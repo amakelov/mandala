@@ -39,8 +39,10 @@ pip install git+https://github.com/amakelov/mandala
 ```
 
 # Tutorials 
-- ["Hello world!"](https://github.com/amakelov/mandala/blob/master/tutorials/hello.ipynb)
-- [Random forest miniproject](https://github.com/amakelov/mandala/blob/master/tutorials/ml.ipynb)
+- Quickstart: <a href="https://colab.research.google.com/github/amakelov/mandala/blob/master/tutorials/hello.ipynb"> 
+  <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/> </a>
+- Toy ML project: <a href="https://colab.research.google.com/github/amakelov/mandala/blob/master/tutorials/ml.ipynb"> 
+  <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/> </a>
 
 # FAQs
 
