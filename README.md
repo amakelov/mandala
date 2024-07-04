@@ -28,7 +28,7 @@ two tools:
 
 2. The `ComputationFrame` data structure (which [generalizes](https://amakelov.github.io/mandala/03_cf/#computationframes-as-generalized-dataframes) `pandas.DataFrame`):
     - **Automatically organizes the "web" of `@op` calls** into a computation
-    graph over variables and `@op`s
+    graph over variables and `@op`s. It reflects user intent, similarly to a database view.
     - **Automates exploration, querying and high-level operations** over
     heterogeneous "webs" of `@op` calls
     - **Can be converted to a `DataFrame` of execution traces** for downstream
@@ -146,8 +146,27 @@ Here are some useful points of comparison:
     types (files or services). It also uses an analogous notion of hashing to
     keep track of computations. 
 - **computation frames**:
-  - computation frames are related to the idea of using certain functions   category theory, see e.g.
-    [here](https://blog.algebraicjulia.org/post/2020/12/cset-conjunctive-queries/). 
+  - computation frames are special cases of [relational
+  databases](https://en.wikipedia.org/wiki/Relational_database): each function
+  node in the computation graph has a table of calls, where columns are all the
+  input/output edge labels connected to the function. Similarly, each variable
+  node is a single-column table of all the `Ref`s in the variable. Foreign key
+  constraints relate the functions' columns to the variables, and various joins 
+  over the tables express various notions of joint computational history of
+  variables. 
+  - computation frames are also related to [graph
+  databases](https://en.wikipedia.org/wiki/Graph_database), in the sense that
+  some of the relevant queries over computation frames, e.g. ones having to do
+  with reachability along `@op`s, are special cases of queries over graph
+  databases. The internal representation of the `Storage` is also closer to 
+  a graph database than a relational one.
+  - computation frames are also related to some ideas from applied [category
+  theory](https://en.wikipedia.org/wiki/Category_theory), such as using functors
+  from a finite category to the category of sets (*copresheaves*) as a blueprint
+  for a "universal" in-memory data structure that is (again) equivalent to a
+  relational database; see e.g.  [this
+  paper](https://compositionality-journal.org/papers/compositionality-4-5/),
+  which describes this categorical construction.
 - **versioning**:
   - the revision history of each function in the codebase is organized in a "mini-[`git`](https://git-scm.com/) repository" that shares only the most basic
     features with `git`: it is a

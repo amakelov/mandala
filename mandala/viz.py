@@ -310,6 +310,7 @@ GRAPH_CONFIG = {
     "fontname": FONT,
     "fontsize": FONT_SIZE,
     "fontcolor": SOLARIZED_LIGHT["base03"],
+    # "dpi": 300,
     # "splines": "curved",
 }
 
@@ -411,7 +412,7 @@ def write_output(
         path = f.name
         with open(path, "w") as f:
             f.write(dot_string)
-        cmd = f"dot -T {output_ext} -o {output_path} {path} -Gsize=20,16"
+        cmd = f"dot -T {output_ext} -o {output_path} {path}"
         subprocess.call(cmd, shell=True)
     if show_how == "browser":
         assert output_ext in [
