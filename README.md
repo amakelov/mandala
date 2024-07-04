@@ -95,8 +95,26 @@ and `joblib`.
 on the system level, and/or the Python `graphviz` library installed.
 
 # Limitations
+See the "gotchas" notebook: <a href="https://colab.research.google.com/github/amakelov/mandala/blob/master/tutorials/gotchas.ipynb"> 
+  <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/> </a>
 
-# Roadmap
+# Roadmap for future features
+**Memoization**
+- [ ] add custom serialization for chosen objects
+- [ ] figure out a solution that ignores small numerical error in content hashing
+- [ ] improve the documentation on collections
+- [ ] support parallelization of `@op` execution via e.g. `dask` or `ray`
+
+**Computation frames**
+- [ ] add tools for restricting a CF to specific subsets of variable values via predicates
+- [ ] add support for cycles in the computation graph
+- [ ] improve support & examples for using collections
+- [ ] add support for merging or splitting nodes in the CF and similar simplifications
+
+**Versioning**
+- [ ] support restricting CFs by function versions
+- [ ] support ways to manually add dependencies to versions 
+
 
 # Testimonials
 
