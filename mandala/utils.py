@@ -247,3 +247,11 @@ def ask_user(question: str, valid_options: List[str]) -> str:
             return response
         else:
             print(f"Invalid response: {response}")
+
+
+def mock_input(prompts):
+    ### simulate user input non-interactively
+    it = iter(prompts)
+    def mock_input_func(*args):
+        return next(it)
+    return mock_input_func

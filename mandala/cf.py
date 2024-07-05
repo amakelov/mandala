@@ -943,7 +943,7 @@ class ComputationFrame:
         - "names" refer to input/output names of calls, which are projected to
         labels
         """
-        for group_id, group_calls in sorted(call_groups.items()):
+        for group_id, group_calls in sorted(call_groups.items()): # sort to ensure deterministic behavior
             if verbose:
                 # make a readable description of the call group
                 op_name, connections = group_id
@@ -959,7 +959,7 @@ class ComputationFrame:
             if reuse_existing:
                 group_hids = {call.hid for call in group_calls}
                 found_func_match = False
-                for fname in self.fs:
+                for fname in sorted(self.fs):
                     if group_hids <= self.fs[fname] or (self.fs[fname] <= group_hids and len(self.fs[fname]) != 0):
                         found_func_match = True
                         break
@@ -971,10 +971,10 @@ class ComputationFrame:
                 if verbose: print(f"Adding function {fname} for group {group_id}")
             
             ### create edges on the side to glue
-            for label, connected_vnames in label_to_connected_vnames.items():
+            for label, connected_vnames in sorted(label_to_connected_vnames.items()): # sort to ensure deterministic behavior
                 if not connected_vnames:
                     continue
-                for connected_vname in connected_vnames:
+                for connected_vname in sorted(connected_vnames): # sort to ensure deterministic behavior
                     src = fname if side_to_glue == "outputs" else connected_vname
                     dst = connected_vname if side_to_glue == "outputs" else fname
                     self._add_edge(src, dst, label, allow_existing=reuse_existing)
@@ -989,7 +989,7 @@ class ComputationFrame:
                     dual_side_labels_list.append(
                         set([name_projector(name) for name in call.inputs])
                     )
-                dual_side_labels = get_nullable_union(*dual_side_labels_list)
+                dual_side_labels = sorted(get_nullable_union(*dual_side_labels_list))
             elif side_to_glue == "inputs":
                 # dual_side_labels = get_nullable_union(*[set(call.outputs.keys()) for call in group_calls])
                 dual_side_labels_list = []
@@ -998,7 +998,7 @@ class ComputationFrame:
                     dual_side_labels_list.append(
                         set([name_projector(name) for name in call.outputs])
                     )
-                dual_side_labels = get_nullable_union(*dual_side_labels_list)
+                dual_side_labels = sorted(get_nullable_union(*dual_side_labels_list))
 
             ### create the variables for the dual side to the one we're gluing
             existing_dual_side_labels = set(self.inp[fname].keys()) if side_to_glue == "outputs" else set(self.out[fname].keys())
@@ -1012,7 +1012,7 @@ class ComputationFrame:
                     else:
                         ref_hids = {call.outputs[name].hid for call in group_calls for name in call.outputs if get_name_proj(call.op)(name) == label and name in call.outputs}
                     found_var_match = False
-                    for vname in self.vs:
+                    for vname in sorted(self.vs.keys()):
                         if ref_hids <= self.vs[vname] or (self.vs[vname] <= ref_hids and len(self.vs[vname]) != 0):
                             found_var_match = True
                             break
@@ -1274,6 +1274,7 @@ class ComputationFrame:
         lazy_vars: Optional[Iterable[str]] = None,
         verbose: bool = True,
         include_calls: bool = True,
+        join_how: Literal["inner", "outer"] = "outer",
     ) -> pd.DataFrame:
         """
         A general method for extracting data from the computation frame.
@@ -1303,7 +1304,7 @@ class ComputationFrame:
             if x in restricted_cf.vnames and len(sink_elts) > 0
         }
         df = restricted_cf.get_joint_history_df(
-            varnames=vnames, how="outer", include_calls=include_calls
+            varnames=vnames, how=join_how, include_calls=include_calls
         )
         # depending on `include_calls`, we may have dropped some columns in `nodes`
         df = df[[x for x in list(nodes) if x in df.columns]]
@@ -1527,7 +1528,32 @@ class ComputationFrame:
 
         The join is outer by default, because the histories of the variables may
         be heterogeneous.
+
+        NOTE: the order in which the joins are made matters. For example,
+        consider this graph:
+        ```python
+        with storage:
+            for i in range(5):
+                model, train_acc = train_model(i)
+                if i % 2 == 0:
+                    eval_acc = eval_model(model)
+        
+        cf = storage.cf(train_model).expand_all()
+        cf.df(
+            ['eval_acc', 'train_acc', 'model'] # suppose this is the order of the joins
+            )
+        In the first join, the `model` column exists only for the `eval_acc`
+        variable, so the join will create some nulls in this column. 
+
+        This is why all outputs of a function node should be joined before
+        processing their dependencies. 
+
+        TODO: check if using topological sort is enough to guarantee the
+        correct order of joins.
+        ```
         """
+
+        sorted_varnames = self.sort_nodes(nodes=varnames)
 
         def extract_hids(
             x: Union[None, Ref, Call, Set[Ref], Set[Call]]
@@ -1575,11 +1601,13 @@ class ComputationFrame:
             self.get_history_df(vname, include_calls=include_calls).applymap(
                 extract_hids
             )
-            for vname in varnames
+            for vname in sorted_varnames
         ]
+        sess.d()
         result = history_dfs[0]
         for df in history_dfs[1:]:
             shared_cols = set(result.columns) & set(df.columns)
+            print(f'Joining on columns: {shared_cols}')
             result = pd.merge(
                 result, df, how=how, on=list(shared_cols), suffixes=("", "")
             )
@@ -1853,11 +1881,9 @@ class ComputationFrame:
             f'SELECT call_history_id FROM calls WHERE op="{f.name}"'
         )["call_history_id"].unique().tolist()
         calls = storage.mget_call(hids=call_hids, in_memory=True)
-        # calls = {
-        #     call_hid: storage.get_call(call_hid, lazy=True) for call_hid in call_hids
-        # }
-        input_names = set([k for call in calls for k in call.inputs.keys()])
-        output_names = set([k for call in calls for k in call.outputs.keys()])
+        # ensure deterministic order of inputs and outputs
+        input_names = sorted(set([k for call in calls for k in call.inputs.keys()]))
+        output_names = sorted(set([k for call in calls for k in call.outputs.keys()]))
         res = ComputationFrame(
             refs={},
             calls={},
@@ -1924,7 +1950,19 @@ class ComputationFrame:
     ### helpers for pretty printing
     ############################################################################
     def get_new_vname(self, name_hint: str) -> str:
-        if name_hint not in self.vs:
+        if '_' in name_hint and name_hint.split('_')[-1].isdigit():
+            # this is of the form "v_i" for some integer i
+            # we don't want to make it "v_i_0" but rather find the smallest 
+            # integer i' such that "v_i'" is not in the graph
+            v = name_hint.split('_')[0]
+            if v == "output":
+                # this is a special case
+                return self.get_new_vname('var_0')
+            i = int(name_hint.split('_')[-1])
+            while f"{v}_{i}" in self.vs:
+                i += 1
+            return f"{v}_{i}"
+        elif name_hint not in self.vs:
             return name_hint
         i = 0
         while f"{name_hint}_{i}" in self.vs:
@@ -1943,6 +1981,9 @@ class ComputationFrame:
         print(self.get_graph_desc())
 
     def get_graph_desc(self) -> str:
+        """
+        Return a string representation of the computation graph of this CF
+        """
         lines = []
         ### if there are any isolated variables, add them first
         isolated_vars = {
@@ -1983,6 +2024,7 @@ class ComputationFrame:
              show_how: Optional[str] = "inline", 
              path: Optional[str] = None,
              verbose: bool = False,
+             print_dot: bool = False,
              orientation: Literal["LR", "TB"] = "TB",
              ):
         """
@@ -2052,6 +2094,8 @@ class ComputationFrame:
                                    edges=edges, 
                                    groups=[],
                                    rankdir=orientation)
+        if print_dot:
+            print(dot_string)
         output_ext = 'svg' if path is None else path.split('.')[-1]
         write_output(dot_string, output_ext='svg', output_path=path, show_how=show_how,)
 

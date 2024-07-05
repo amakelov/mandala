@@ -298,9 +298,8 @@ class Group:
         self.border_color = border_color
         self.parent = parent
 
-
-# FONT = "Helvetica"
-FONT = "RobotoMono"
+# widely available fonts to avoid rendering issues for .svg
+FONT = "Liberation Sans,Helvetica,Arial,sans-serif" 
 FONT_SIZE = 10
 
 GRAPH_CONFIG = {

@@ -115,7 +115,6 @@ See the "gotchas" notebook: <a href="https://colab.research.google.com/github/am
 - [ ] support restricting CFs by function versions
 - [ ] support ways to manually add dependencies to versions 
 
-
 # Testimonials
 
 > "`mandala` addresses a core challenge in my notebook workflow: being able to
