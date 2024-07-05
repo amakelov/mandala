@@ -1,5 +1,5 @@
 # Quickstart
-<a href="https://colab.research.google.com/github/amakelov/mandala/blob/master/docs_notebooks/tutorials/01_hello.ipynb"> 
+<a href="https://colab.research.google.com/github/amakelov/mandala/blob/master/docs_source/tutorials/01_hello.ipynb"> 
   <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/> </a>
 
 `mandala` eliminates the developer effort typically required to persist, iterate
@@ -133,14 +133,14 @@ print(cf.df().to_markdown())
     Extracting tuples from the computation graph:
         var_0@output_0 = inc(x=x)
         var_1@output_0 = add(y=var_0, x=x)
-    Joining on columns: {'inc', 'x', 'var_0'}
+    Joining on columns: {'x', 'var_0', 'inc'}
     |    |   x | inc                                   |   var_0 | add                                   |   var_1 |
     |---:|----:|:--------------------------------------|--------:|:--------------------------------------|--------:|
-    |  0 |   0 | Call(inc, cid='355...', hid='52f...') |       1 | Call(add, cid='16b...', hid='38e...') |       1 |
-    |  1 |   3 | Call(inc, cid='56b...', hid='f62...') |       4 |                                       |     nan |
-    |  2 |   1 | Call(inc, cid='9d3...', hid='66c...') |       2 |                                       |     nan |
+    |  0 |   1 | Call(inc, cid='9d3...', hid='66c...') |       2 |                                       |     nan |
+    |  1 |   4 | Call(inc, cid='16b...', hid='f05...') |       5 | Call(add, cid='2ee...', hid='5f0...') |       9 |
+    |  2 |   3 | Call(inc, cid='56b...', hid='f62...') |       4 |                                       |     nan |
     |  3 |   2 | Call(inc, cid='c38...', hid='ec7...') |       3 | Call(add, cid='bbb...', hid='d3f...') |       5 |
-    |  4 |   4 | Call(inc, cid='16b...', hid='f05...') |       5 | Call(add, cid='2ee...', hid='5f0...') |       9 |
+    |  4 |   0 | Call(inc, cid='355...', hid='52f...') |       1 | Call(add, cid='16b...', hid='38e...') |       1 |
 
 
 ## Automatic per-call versioning w/ dependency tracking

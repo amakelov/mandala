@@ -1,5 +1,5 @@
 # Advanced `ComputationFrame` tools
-<a href="https://colab.research.google.com/github/amakelov/mandala/blob/master/docs_notebooks/topics/06_advanced_cf.ipynb"> 
+<a href="https://colab.research.google.com/github/amakelov/mandala/blob/master/docs_source/topics/06_advanced_cf.ipynb"> 
   <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/> </a>
 
 This section of the documentation contains some more advanced `ComputationFrame`

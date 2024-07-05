@@ -1,5 +1,5 @@
 # Natively handling Python collections
-<a href="https://colab.research.google.com/github/amakelov/mandala/blob/master/docs_notebooks/topics/05_collections.ipynb"> 
+<a href="https://colab.research.google.com/github/amakelov/mandala/blob/master/docs_source/topics/05_collections.ipynb"> 
   <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/> </a>
 
 A key benefit of `mandala` over straightforward memoization is that it can make

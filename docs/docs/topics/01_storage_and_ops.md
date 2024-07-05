@@ -1,5 +1,5 @@
 # `Storage` & the `@op` Decorator
-<a href="https://colab.research.google.com/github/amakelov/mandala/blob/master/docs_notebooks/topics/01_storage_and_ops.ipynb"> 
+<a href="https://colab.research.google.com/github/amakelov/mandala/blob/master/docs_source/topics/01_storage_and_ops.ipynb"> 
   <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/> </a>
 
 A `Storage` object holds all data (saved calls, code and dependencies) for a

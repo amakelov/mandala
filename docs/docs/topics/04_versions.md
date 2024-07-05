@@ -1,5 +1,5 @@
 # Changing `@op`s and managing versions
-<a href="https://colab.research.google.com/github/amakelov/mandala/blob/master/docs_notebooks/topic/04_versions.ipynb"> 
+<a href="https://colab.research.google.com/github/amakelov/mandala/blob/master/docs_source/topic/04_versions.ipynb"> 
   <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/> </a>
 
 It should be easy to change your code and have the storage respond in a correct
