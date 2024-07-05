@@ -82,7 +82,7 @@ with storage:
     Loading data
     Training model
     Getting accuracy
-    AtomRef(1.0, hid='d16...', cid='b67...')
+    AtomRef(0.99, hid='d16...', cid='12a...')
 
 
 ## Retracing your steps with memoization
@@ -102,8 +102,8 @@ with storage:
 ```
 
     AtomRef(hid='d0f...', cid='908...', in_memory=False) AtomRef(hid='f1a...', cid='69f...', in_memory=False)
-    AtomRef(hid='caf...', cid='5b8...', in_memory=False)
-    AtomRef(hid='d16...', cid='b67...', in_memory=False)
+    AtomRef(hid='caf...', cid='bf2...', in_memory=False)
+    AtomRef(hid='d16...', cid='12a...', in_memory=False)
 
 
 This puts all the `Ref`s along the way in your local variables (as if you've
@@ -118,7 +118,7 @@ storage.unwrap(acc)
 
 
 
-    1.0
+    0.99
 
 
 
@@ -140,14 +140,14 @@ with storage:
             print(acc)
 ```
 
-    AtomRef(hid='d16...', cid='b67...', in_memory=False)
+    AtomRef(hid='d16...', cid='12a...', in_memory=False)
     Training model
     Getting accuracy
-    AtomRef(1.0, hid='6fd...', cid='b67...')
+    AtomRef(0.99, hid='6fd...', cid='12a...')
     Loading data
     Training model
     Getting accuracy
-    AtomRef(0.84, hid='158...', cid='6c4...')
+    AtomRef(0.86, hid='158...', cid='70e...')
     Training model
     Getting accuracy
     AtomRef(0.91, hid='214...', cid='97b...')
@@ -178,8 +178,8 @@ with storage:
                 print(n_class, n_estimators, storage.unwrap(acc))
 ```
 
-    2 5 1.0
-    2 10 1.0
+    2 5 0.99
+    2 10 0.99
     5 10 0.91
 
 
@@ -199,5 +199,5 @@ with storage:
             print(storage.unwrap(acc), storage.unwrap(model))
 ```
 
-    0.84 RandomForestClassifier(max_depth=2, n_estimators=5)
+    0.86 RandomForestClassifier(max_depth=2, n_estimators=5)
 

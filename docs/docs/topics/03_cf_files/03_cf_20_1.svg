@@ -9,19 +9,19 @@
 <g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 40)">
 <title>G</title>
 <polygon fill="white" stroke="transparent" points="-4,4 -4,-40 302,-40 302,4 -4,4"/>
-<!-- model -->
-<g id="node1" class="node">
-<title>model</title>
-<path fill="none" stroke="#268bd2" d="M128,-36C128,-36 12,-36 12,-36 6,-36 0,-30 0,-24 0,-24 0,-12 0,-12 0,-6 6,0 12,0 12,0 128,0 128,0 134,0 140,-6 140,-12 140,-12 140,-24 140,-24 140,-30 134,-36 128,-36"/>
-<text text-anchor="start" x="52" y="-20.4" font-family="Liberation Sans,Helvetica,Arial,sans-serif" font-weight="bold" font-size="12.00" fill="#002b36">model</text>
-<text text-anchor="start" x="8" y="-10" font-family="Liberation Sans,Helvetica,Arial,sans-serif" font-size="10.00" fill="#268bd2">4 values (4 sources/4 sinks)</text>
-</g>
 <!-- test_acc -->
-<g id="node2" class="node">
+<g id="node1" class="node">
 <title>test_acc</title>
-<path fill="none" stroke="#268bd2" d="M286,-36C286,-36 170,-36 170,-36 164,-36 158,-30 158,-24 158,-24 158,-12 158,-12 158,-6 164,0 170,0 170,0 286,0 286,0 292,0 298,-6 298,-12 298,-12 298,-24 298,-24 298,-30 292,-36 286,-36"/>
-<text text-anchor="start" x="203.5" y="-20.4" font-family="Liberation Sans,Helvetica,Arial,sans-serif" font-weight="bold" font-size="12.00" fill="#002b36">test_acc</text>
-<text text-anchor="start" x="166" y="-10" font-family="Liberation Sans,Helvetica,Arial,sans-serif" font-size="10.00" fill="#268bd2">2 values (2 sources/2 sinks)</text>
+<path fill="none" stroke="#268bd2" stroke-width="2" d="M128,-36C128,-36 12,-36 12,-36 6,-36 0,-30 0,-24 0,-24 0,-12 0,-12 0,-6 6,0 12,0 12,0 128,0 128,0 134,0 140,-6 140,-12 140,-12 140,-24 140,-24 140,-30 134,-36 128,-36"/>
+<text text-anchor="start" x="45.5" y="-20.4" font-family="Liberation Sans,Helvetica,Arial,sans-serif" font-weight="bold" font-size="12.00" fill="#002b36">test_acc</text>
+<text text-anchor="start" x="8" y="-10" font-family="Liberation Sans,Helvetica,Arial,sans-serif" font-size="10.00" fill="#268bd2">2 values (2 sources/2 sinks)</text>
+</g>
+<!-- model -->
+<g id="node2" class="node">
+<title>model</title>
+<path fill="none" stroke="#268bd2" stroke-width="2" d="M286,-36C286,-36 170,-36 170,-36 164,-36 158,-30 158,-24 158,-24 158,-12 158,-12 158,-6 164,0 170,0 170,0 286,0 286,0 292,0 298,-6 298,-12 298,-12 298,-24 298,-24 298,-30 292,-36 286,-36"/>
+<text text-anchor="start" x="210" y="-20.4" font-family="Liberation Sans,Helvetica,Arial,sans-serif" font-weight="bold" font-size="12.00" fill="#002b36">model</text>
+<text text-anchor="start" x="166" y="-10" font-family="Liberation Sans,Helvetica,Arial,sans-serif" font-size="10.00" fill="#268bd2">4 values (4 sources/4 sinks)</text>
 </g>
 </g>
 </svg>

@@ -15,4 +15,4 @@ def test_single_func():
     cf = storage.cf(inc)
     df = cf.df()
     assert df.shape == (10, 3)
-    assert (df['output_0'] == df['x'] + 1).all()
+    assert (df['var_0'] == df['x'] + 1).all()

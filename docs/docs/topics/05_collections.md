@@ -81,6 +81,8 @@ print(cf.df(values='objs').to_markdown())
     Extracting tuples from the computation graph:
         nums@output_0 = __make_list__(elts=elts)
         var_0@output_0 = average(nums=nums)
+    Found variables {'var_0'} containing final elements
+        For variable var_0, found dependencies in nodes Index(['nums', 'elts', 'var_0', '__make_list__', 'average'], dtype='object')
     |    | elts                             | __make_list__                                   | nums            | average                                   |   var_0 |
     |---:|:---------------------------------|:------------------------------------------------|:----------------|:------------------------------------------|--------:|
     |  0 | ValueCollection([2, 4, 1, 3, 5]) | Call(__make_list__, cid='3f6...', hid='172...') | [1, 2, 3, 4, 5] | Call(average, cid='445...', hid='f5b...') |       3 |

@@ -6,6 +6,7 @@ import prettytable
 import sqlite3
 from .config import *
 from abc import ABC, abstractmethod
+from typing import Hashable, TypeVar
 
 def dataframe_to_prettytable(df: pd.DataFrame) -> str:
     # Initialize a PrettyTable object
@@ -235,6 +236,168 @@ def invert_dict(d: Dict[_KT, _VT]) -> Dict[_VT, List[_KT]]:
         out[v].append(k)
     return out
 
+
+################################################################################
+### CFs
+################################################################################
+def find_strongly_connected_components(graph: Dict[str, Set[str]]) -> Tuple[Tuple[str,...],...]:
+    """
+    Find the strongly connected components of a directed graph using Tarjan's
+    algorithm. The graph is represented as a dictionary mapping nodes to lists
+    of their neighbors.
+
+    Inputs:
+    - graph: a dictionary mapping node IDs to sets of their neighbors. Even if
+        a node has no neighbors, it should be included in the dictionary with an
+        empty set as the value.
+    """
+    def dfs(node):
+        nonlocal index
+        indexes[node] = index
+        lowlinks[node] = index
+        index += 1
+        stack.append(node)
+        on_stack[node] = True
+
+        for neighbor in graph[node]:
+            if neighbor not in indexes:
+                dfs(neighbor)
+                lowlinks[node] = min(lowlinks[node], lowlinks[neighbor])
+            elif on_stack[neighbor]:
+                lowlinks[node] = min(lowlinks[node], indexes[neighbor])
+
+        if lowlinks[node] == indexes[node]:
+            # this is the "root" of a strongly connected component
+            scc = []
+            while True:
+                w = stack.pop()
+                on_stack[w] = False
+                scc.append(w)
+                if w == node:
+                    break
+            sccs.append(scc)
+
+    # each vertex will be assigned an index, in the order they are visited
+    # initial index is 0 (will be assigned to the first vertex visited)
+    index = 0 
+    # vertex ID -> index, immutable once assigned
+    indexes = {} 
+    # vertex ID -> index, maintains the lowest index of a vertex on the stack
+    # reachable from the given vertex (so can be updated during the DFS)
+    lowlinks = {} 
+    # vertex ID -> bool, indicator of vertices currently on the stack
+    on_stack = {}
+    # stack of vertices
+    stack = []
+    # list of strongly connected components discovered
+    sccs = []
+
+    for node in graph:
+        if node not in indexes:
+            dfs(node)
+
+    # ensure that the output is deterministic
+    return tuple(sorted(tuple(sorted(scc)) for scc in sccs))
+
+def create_super_graph(graph: Dict[str, Set[str]], 
+                       sccs: Tuple[Tuple[str,...],...]
+                       ) -> Dict[str, Set[int]]:
+    """
+    Given the original graph and the strongly connected components, create a
+    supergraph where each node is an SCC and there is an edge from SCC A to SCC
+    B if there is an edge from a node in A to a node in B in the original graph.
+    """
+    # map from node ID to SCC ID (an integer)
+    node_to_scc = {}
+    for i, scc in enumerate(sccs):
+        for node in scc:
+            node_to_scc[node] = i
+
+    super_graph = {}
+    for node in graph:
+        scc_id = node_to_scc[node]
+        if scc_id not in super_graph:
+            super_graph[scc_id] = set()
+        for neighbor in graph[node]:
+            neighbor_scc_id = node_to_scc[neighbor]
+            if scc_id != neighbor_scc_id:
+                super_graph[scc_id].add(neighbor_scc_id)
+
+    return super_graph
+
+T = TypeVar("T", bound=Hashable)
+def topological_sort(graph: Dict[T, Set[T]]) -> List[T]:
+    """
+    Topological sort of a directed acyclic graph using depth-first search.
+    """
+    def dfs(node):
+        visited.add(node)
+        for neighbor in graph.get(node, []):
+            if neighbor not in visited:
+                dfs(neighbor)
+        result.append(node)
+
+    visited = set()
+    result = []
+
+    for node in sorted(graph.keys()):
+        if node not in visited:
+            dfs(node)
+
+    return result[::-1]
+
+def almost_topological_sort(graph: Dict[str, Set[str]]) -> List[str]:
+    """
+    An almost-topological sort of a directed graph:
+    - between SCCs, the order is topological
+    - within an SCC, the order is arbitrary
+    """
+    sccs = find_strongly_connected_components(graph)
+    super_graph = create_super_graph(graph, sccs)
+    sorted_super_nodes = topological_sort(super_graph)
+    
+    result = []
+    for super_node in sorted_super_nodes:
+        result.extend(sccs[super_node])
+    
+    return result
+
+def get_edges_in_paths(
+        graph: Dict[str, Set[str]],
+        start: str,
+        end: str) -> Set[Tuple[str, str]]:
+    """
+    Find all edges belonging to some *simple* path from A to B in a directed
+    graph that may contain cycles. 
+    """
+    def dfs(node, path):
+        if node == end:
+            # We've found a path to B, mark all edges on this path
+            for edge in path:
+                valid_edges.add(edge)
+            return
+
+        visited.add(node)
+        for neighbor in graph[node]:
+            if neighbor not in visited:
+                dfs(neighbor, path + [(node, neighbor)])
+            elif (node, neighbor) not in valid_edges and (node, neighbor) not in path:
+                # If we've visited this neighbor before but this edge isn't marked yet,
+                # it might be part of a cycle that leads to B
+                dfs(neighbor, path + [(node, neighbor)])
+        if node in visited:
+            # we may have removed `node` already if it was part of a cycle
+            visited.remove(node)
+
+    visited = set()
+    valid_edges = set()
+    dfs(start, [])
+    return valid_edges
+
+
+################################################################################
+### user interaction
+################################################################################
 def ask_user(question: str, valid_options: List[str]) -> str:
     """
     Ask the user a question and return their response.

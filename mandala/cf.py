@@ -13,6 +13,8 @@ from .utils import (
     get_adj_from_edges,
     invert_dict,
     get_nullable_intersection,
+    almost_topological_sort,
+    get_edges_in_paths
 )
 from .model import Call, Ref, Op, __make_list__, RefCollection, CallCollection
 
@@ -724,12 +726,12 @@ class ComputationFrame:
         controlled by the `how` parameter) from **the source elements in this
         subgraph that belong to a node in `nodes`**. 
         """
-        paths = set()
+        edges = set()
         for start_node in nodes:
             for end_node in nodes:
                 if start_node != end_node:
-                    paths |= self.get_all_vertex_paths(start_node, end_node)
-        midstream_nodes = get_nullable_union(*[set(path) for path in paths])
+                    edges |= self.get_all_edges_on_paths_between(start_node, end_node)
+        midstream_nodes = get_nullable_union(*[set(edge) for edge in edges])
         logging.debug(f'Selected {midstream_nodes} from {self.nodes}')
         # first, restrict to the subgraph induced by the midstream nodes
         pre_res = self.select_nodes(midstream_nodes)
@@ -1220,7 +1222,11 @@ class ComputationFrame:
                     if in_degrees[dst] == 0:
                         sources.append(dst)
         if not len(result) == len(self.nodes):
-            raise NotImplementedError("Support for cycles not implemented yet")
+            # logging.warning("The computation graph contains cycles; falling back to an almost-topological sort (arbitrary order within each strongly connected component)")
+            graph = {node: set() for node in self.nodes}
+            for src, dst, _ in self.edges():
+                graph[src].add(dst)
+            result = almost_topological_sort(graph) 
         return result
 
     def sort_nodes(self, nodes: Iterable[str]) -> List[str]:
@@ -1238,20 +1244,28 @@ class ComputationFrame:
         sorted_columns = self.sort_nodes(df.columns)
         return df[sorted_columns]
 
-    def get_all_vertex_paths(self, start: str, end: str) -> Set[Tuple[str, ...]]:
+    def get_all_edges_on_paths_between(self, start: str, end: str) -> Set[Tuple[str, str]]:
         """
-        Get all vertex paths from start to end
-
-        !!! NOTE: must modify if we want to support cycles
+        Get the *edges* belonging to any paths from start to end
         """
-        if end in self.out_neighbors(node=start):
-            return {(start, end)}
-        else:
-            paths = set()
-            for neighbor in self.out_neighbors(node=start):
-                for path in self.get_all_vertex_paths(neighbor, end):
-                    paths.add((start,) + path)
-            return paths
+        graph = {src: set() for src in self.nodes}
+        for src, dst, _ in self.edges():
+            graph[src].add(dst)
+        edges_on_paths = get_edges_in_paths(
+            graph=graph,
+            start=start,
+            end=end,
+        )
+        return edges_on_paths
+        # old implementation (when there are no cycles)
+        # if end in self.out_neighbors(node=start):
+        #     return {(start, end)}
+        # else:
+        #     paths = set()
+        #     for neighbor in self.out_neighbors(node=start):
+        #         for path in self.get_all_vertex_paths(neighbor, end):
+        #             paths.add((start,) + path)
+        #     return paths
 
     def eval(
         self,
@@ -1303,8 +1317,12 @@ class ComputationFrame:
             for x, sink_elts in restricted_cf.get_sink_elts().items()
             if x in restricted_cf.vnames and len(sink_elts) > 0
         }
+        if verbose:
+            print(f'Found variables {vnames} containing final elements')
+        sess.d()
         df = restricted_cf.get_joint_history_df(
-            varnames=vnames, how=join_how, include_calls=include_calls
+            varnames=vnames, how=join_how, include_calls=include_calls,
+            verbose=verbose,
         )
         # depending on `include_calls`, we may have dropped some columns in `nodes`
         df = df[[x for x in list(nodes) if x in df.columns]]
@@ -1388,6 +1406,7 @@ class ComputationFrame:
         self, vname: str, hids: Set[str], include_calls: bool
     ) -> Dict[str, Set[str]]:
         """
+        Core internal function for getting the direct history of a set of refs.
         Return a view of the refs (and optionally calls) that immediately
         precede the given refs in the computation graph.
 
@@ -1478,7 +1497,10 @@ class ComputationFrame:
                 )
             return total_res
 
-    def get_history_df(self, vname: str, include_calls: bool = False) -> pd.DataFrame:
+    def get_history_df(
+            self, vname: str, include_calls: bool = True,
+            verbose: bool = False
+            ) -> pd.DataFrame:
         """
         Returns a dataframe where the rows represent the views of the full
         history of all the refs in the variable `vname`.
@@ -1511,6 +1533,8 @@ class ComputationFrame:
             }
             rows.append(total_history_objs)
         df = pd.DataFrame(rows)
+        if verbose:
+            print(f'    For variable {vname}, found dependencies in nodes {df.columns}')
         return self._sort_df(df)
 
     def get_joint_history_df(
@@ -1518,6 +1542,7 @@ class ComputationFrame:
         varnames: Iterable[str],
         how: Literal["inner", "outer"] = "outer",
         include_calls: bool = True,
+        verbose: bool = False,
     ) -> pd.DataFrame:
         """
         Get the joint computational history of the given variables. This means:
@@ -1598,16 +1623,16 @@ class ComputationFrame:
 
 
         history_dfs = [
-            self.get_history_df(vname, include_calls=include_calls).applymap(
+            self.get_history_df(vname, include_calls=include_calls, verbose=verbose).applymap(
                 extract_hids
             )
             for vname in sorted_varnames
         ]
-        sess.d()
         result = history_dfs[0]
-        for df in history_dfs[1:]:
+        for df, varname in zip(history_dfs[1:], sorted_varnames[1:]):
             shared_cols = set(result.columns) & set(df.columns)
-            print(f'Joining on columns: {shared_cols}')
+            if verbose:
+                print(f'   Merging history for the variable {varname} on columns: {shared_cols}')
             result = pd.merge(
                 result, df, how=how, on=list(shared_cols), suffixes=("", "")
             )
@@ -1672,8 +1697,81 @@ class ComputationFrame:
             raise NotImplementedError()
         elif all([isinstance(k, str) for k in indexer]):
             return self.select_nodes(list(sorted(indexer)))
-
+    
     def get_reachable_elts(
+            self,
+            initial_state: Dict[str, Set[str]],
+            direction: Literal["forward", "back"],
+            how: Literal["strong", "weak"],
+            pad: bool = True,):
+        """
+        """
+        result = {k: v.copy() for k, v in initial_state.items()}
+
+        def get_adj_elts(node, adj_edges):
+            adj_elts = []  # will be a list of neighbor elts along the `adj_edges`.
+            for edge in adj_edges:
+                other_endpoint = edge[0] if direction == "forward" else edge[1]
+                hids = result.get(other_endpoint, set())
+                adj_elts.append(
+                    self.get_adj_elts_edge(edge=edge, hids=hids, direction=direction)
+                )
+            return adj_elts
+
+        def is_strongly_reachable_call(
+                call_hid: str,
+                adj_edges: Set[Tuple[str, str, str]],
+                direction: Literal["forward", "back"],
+                ):
+            # check if the call is reachable from `result`
+            call = self.calls[call_hid]
+            io_refs = call.inputs if direction == "forward" else call.outputs
+            io_name_projections = {name: self.get_io_proj(call_hid=call_hid, name=name) for name in io_refs.keys()}
+            io_label_to_names = invert_dict(io_name_projections)
+            # now, we must check that for each label there's something at the other end
+            is_reachable = True
+            for edge in adj_edges:
+                src, dst, label = edge
+                if label in io_label_to_names.keys():
+                    other_end = src if direction == "forward" else dst
+                    other_end_hids = result.get(other_end, set())
+                    io_ref_hids = {io_refs[name].hid for name in io_label_to_names[label]}
+                    if not io_ref_hids <= other_end_hids:
+                        is_reachable = False
+                        break
+            return is_reachable
+
+        # we apply each function until a fixed point is reached
+        current_size = sum([len(v) for v in result.values()])
+        # TODO: to optimize this, we record the nodes which have changed
+        # vertices_updated_last_iter = set(initial_state.keys())
+        while True:
+            for node in self.nodes:
+                adj_edges = self.in_edges(node=node) if direction == "forward" else self.out_edges(node=node)
+                if node in self.vnames:
+                    adj_elts = get_adj_elts(node, adj_edges)
+                    to_add = get_nullable_union(*adj_elts)
+                else: # node in self.fnames
+                    if how == "weak":
+                        adj_elts = get_adj_elts(node, adj_edges)
+                        to_add = get_nullable_union(*adj_elts)
+                    else:
+                        to_add = set()
+                        for call_hid in self.fs[node] - result.get(node, set()):
+                            if is_strongly_reachable_call(call_hid, adj_edges, direction):
+                                to_add.add(call_hid)
+                result[node] = to_add | result.get(node, set())
+            new_size = sum([len(v) for v in result.values()])
+            if new_size == current_size:
+                break
+            else:
+                current_size = new_size
+        if pad:
+            for node in self.nodes - set(result.keys()):
+                result[node] = set()
+        return result
+
+    def get_reachable_elts_acyclic(
         self,
         initial_state: Dict[str, Set[str]],
         how: Literal["strong", "weak"],
@@ -1682,7 +1780,7 @@ class ComputationFrame:
     ) -> Dict[str, Set[str]]:
         """
         Find all reachable elements from the given view along the given
-        direction, under either computational (strong) or relational (weak)
+        direction, under either computational (strong) or graph (weak)
         reachability.
 
         Computational reachability:
@@ -1695,11 +1793,15 @@ class ComputationFrame:
             When going forward, reachability means that a call is reachable iff
             any of its inputs are reachable. When going backward, reachability
             means that a call is reachable iff any of its outputs are reachable.
+        
+        NOTE: when there are cycles in the graph, this becomes a bit more
+        complicated, because we may need to traverse some cycles multiple times
+        to get the full reachability information.
         """
         result = {k: v.copy() for k, v in initial_state.items()}
         node_order = self.topsort() if direction == "forward" else self.topsort()[::-1]
 
-        def get_input_elts(node, adj_edges):
+        def get_adj_elts(node, adj_edges):
             adj_elts = []  # will be a list of neighbor elts along the `adj_edges`.
             for edge in adj_edges:
                 other_endpoint = edge[0] if direction == "forward" else edge[1]
@@ -1718,12 +1820,12 @@ class ComputationFrame:
                 # the flavor of reachability doesn't matter here, because every
                 # ref is created by at most 1 call. We simply take the union
                 # over all elements connected as inputs.
-                adj_elts = get_input_elts(node, adj_edges)
+                adj_elts = get_adj_elts(node, adj_edges)
                 to_add = get_nullable_union(*adj_elts)
             else: # node in self.fnames
                 if how != "strong":
                     # we have to do the same thing
-                    adj_elts = get_input_elts(node, adj_edges)
+                    adj_elts = get_adj_elts(node, adj_edges)
                     to_add = get_nullable_union(*adj_elts)
                 else:
                     # interesting case

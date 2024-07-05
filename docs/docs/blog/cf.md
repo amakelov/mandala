@@ -1,9 +1,9 @@
 # Tidy computations
 In data-driven fields like machine learning, a lot of effort is spent organizing
-computational data so that it can be analyzed and manipulated. This blog
-post introduces the `ComputationFrame` (CF) data structure, which provides a
-natural and simple grammar of operations to automate this. It is implemented as
-[part of](https://amakelov.github.io/mandala/03_cf/)
+*computational data* &mdash; results of running programs &mdash; so that it can be analyzed
+and manipulated. This blog post introduces the `ComputationFrame` (CF) data
+structure, which provides a natural and simple grammar of operations to automate
+this. It is implemented as [part of](https://amakelov.github.io/mandala/03_cf/)
 [mandala](https://github.com/amakelov/mandala), a Python library for experiment
 tracking and incremental computation.
 

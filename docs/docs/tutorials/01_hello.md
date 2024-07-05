@@ -132,15 +132,18 @@ print(cf.df().to_markdown())
 
     Extracting tuples from the computation graph:
         var_0@output_0 = inc(x=x)
-        var_1@output_0 = add(y=var_0, x=x)
-    Joining on columns: {'x', 'var_0', 'inc'}
+        var_1@output_0 = add(x=x, y=var_0)
+    Found variables {'var_1', 'var_0'} containing final elements
+        For variable var_0, found dependencies in nodes Index(['x', 'var_0', 'inc'], dtype='object')
+        For variable var_1, found dependencies in nodes Index(['var_1', 'var_0', 'x', 'add', 'inc'], dtype='object')
+       Merging history for the variable var_1 on columns: {'x', 'inc', 'var_0'}
     |    |   x | inc                                   |   var_0 | add                                   |   var_1 |
     |---:|----:|:--------------------------------------|--------:|:--------------------------------------|--------:|
-    |  0 |   1 | Call(inc, cid='9d3...', hid='66c...') |       2 |                                       |     nan |
-    |  1 |   4 | Call(inc, cid='16b...', hid='f05...') |       5 | Call(add, cid='2ee...', hid='5f0...') |       9 |
-    |  2 |   3 | Call(inc, cid='56b...', hid='f62...') |       4 |                                       |     nan |
-    |  3 |   2 | Call(inc, cid='c38...', hid='ec7...') |       3 | Call(add, cid='bbb...', hid='d3f...') |       5 |
-    |  4 |   0 | Call(inc, cid='355...', hid='52f...') |       1 | Call(add, cid='16b...', hid='38e...') |       1 |
+    |  0 |   2 | Call(inc, cid='c38...', hid='ec7...') |       3 | Call(add, cid='bbb...', hid='d3f...') |       5 |
+    |  1 |   0 | Call(inc, cid='355...', hid='52f...') |       1 | Call(add, cid='16b...', hid='38e...') |       1 |
+    |  2 |   4 | Call(inc, cid='16b...', hid='f05...') |       5 | Call(add, cid='2ee...', hid='5f0...') |       9 |
+    |  3 |   1 | Call(inc, cid='9d3...', hid='66c...') |       2 |                                       |     nan |
+    |  4 |   3 | Call(inc, cid='56b...', hid='f62...') |       4 |                                       |     nan |
 
 
 ## Automatic per-call versioning w/ dependency tracking
