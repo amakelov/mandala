@@ -9,24 +9,17 @@
 <g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 232)">
 <title>G</title>
 <polygon fill="white" stroke="transparent" points="-4,4 -4,-232 144,-232 144,4 -4,4"/>
-<!-- test_acc -->
-<g id="node1" class="node">
-<title>test_acc</title>
-<path fill="none" stroke="#268bd2" stroke-width="2" d="M105,-36C105,-36 35,-36 35,-36 29,-36 23,-30 23,-24 23,-24 23,-12 23,-12 23,-6 29,0 35,0 35,0 105,0 105,0 111,0 117,-6 117,-12 117,-12 117,-24 117,-24 117,-30 111,-36 105,-36"/>
-<text text-anchor="start" x="45.5" y="-20.4" font-family="Liberation Sans,Helvetica,Arial,sans-serif" font-weight="bold" font-size="12.00" fill="#002b36">test_acc</text>
-<text text-anchor="start" x="31" y="-10" font-family="Liberation Sans,Helvetica,Arial,sans-serif" font-size="10.00" fill="#268bd2">2 values (2 sinks)</text>
-</g>
 <!-- model -->
-<g id="node2" class="node">
+<g id="node1" class="node">
 <title>model</title>
-<path fill="none" stroke="#268bd2" stroke-width="2" d="M128,-228C128,-228 12,-228 12,-228 6,-228 0,-222 0,-216 0,-216 0,-204 0,-204 0,-198 6,-192 12,-192 12,-192 128,-192 128,-192 134,-192 140,-198 140,-204 140,-204 140,-216 140,-216 140,-222 134,-228 128,-228"/>
+<path fill="none" stroke="#268bd2" stroke-width="1.5" d="M128,-228C128,-228 12,-228 12,-228 6,-228 0,-222 0,-216 0,-216 0,-204 0,-204 0,-198 6,-192 12,-192 12,-192 128,-192 128,-192 134,-192 140,-198 140,-204 140,-204 140,-216 140,-216 140,-222 134,-228 128,-228"/>
 <text text-anchor="start" x="52" y="-212.4" font-family="Liberation Sans,Helvetica,Arial,sans-serif" font-weight="bold" font-size="12.00" fill="#002b36">model</text>
 <text text-anchor="start" x="8" y="-202" font-family="Liberation Sans,Helvetica,Arial,sans-serif" font-size="10.00" fill="#268bd2">4 values (4 sources/2 sinks)</text>
 </g>
 <!-- eval_model -->
 <g id="node3" class="node">
 <title>eval_model</title>
-<path fill="none" stroke="#dc322f" stroke-width="2" d="M103,-134C103,-134 37,-134 37,-134 31,-134 25,-128 25,-122 25,-122 25,-106 25,-106 25,-100 31,-94 37,-94 37,-94 103,-94 103,-94 109,-94 115,-100 115,-106 115,-106 115,-122 115,-122 115,-128 109,-134 103,-134"/>
+<path fill="none" stroke="#dc322f" stroke-width="1.5" d="M103,-134C103,-134 37,-134 37,-134 31,-134 25,-128 25,-122 25,-122 25,-106 25,-106 25,-100 31,-94 37,-94 37,-94 103,-94 103,-94 109,-94 115,-100 115,-106 115,-106 115,-122 115,-122 115,-128 109,-134 103,-134"/>
 <text text-anchor="start" x="37" y="-121.4" font-family="Liberation Sans,Helvetica,Arial,sans-serif" font-weight="bold" font-size="12.00" fill="#002b36">eval_model</text>
 <text text-anchor="start" x="33" y="-111" font-family="Liberation Sans,Helvetica,Arial,sans-serif" font-size="10.00" fill="#002b36">@op:eval_model</text>
 <text text-anchor="start" x="55.5" y="-101" font-family="Liberation Sans,Helvetica,Arial,sans-serif" font-size="10.00" fill="#dc322f">2 calls</text>
@@ -38,6 +31,13 @@
 <polygon fill="#002b36" stroke="#002b36" points="73.5,-144.07 70,-134.07 66.5,-144.07 73.5,-144.07"/>
 <text text-anchor="middle" x="91.5" y="-166" font-family="Liberation Sans,Helvetica,Arial,sans-serif" font-size="10.00" fill="#002b36">model</text>
 <text text-anchor="middle" x="91.5" y="-155" font-family="Liberation Sans,Helvetica,Arial,sans-serif" font-size="10.00" fill="#002b36">(2 values)</text>
+</g>
+<!-- test_acc -->
+<g id="node2" class="node">
+<title>test_acc</title>
+<path fill="none" stroke="#268bd2" stroke-width="1.5" d="M105,-36C105,-36 35,-36 35,-36 29,-36 23,-30 23,-24 23,-24 23,-12 23,-12 23,-6 29,0 35,0 35,0 105,0 105,0 111,0 117,-6 117,-12 117,-12 117,-24 117,-24 117,-30 111,-36 105,-36"/>
+<text text-anchor="start" x="45.5" y="-20.4" font-family="Liberation Sans,Helvetica,Arial,sans-serif" font-weight="bold" font-size="12.00" fill="#002b36">test_acc</text>
+<text text-anchor="start" x="31" y="-10" font-family="Liberation Sans,Helvetica,Arial,sans-serif" font-size="10.00" fill="#268bd2">2 values (2 sinks)</text>
 </g>
 <!-- eval_model&#45;&gt;test_acc -->
 <g id="edge2" class="edge">

@@ -145,7 +145,7 @@ class Storage:
             "ops": len(self.ops.cache),
             "calls": len(self.calls.cache),
         }
-        return f"Storage(db_path={self.db_path}), cache contents:\n" + "\n".join(
+        return f"Storage(db_path={self.db.db_path}), cache contents:\n" + "\n".join(
             [f"  {k}: {v}" for k, v in cache_sizes.items()]
         )
 
@@ -527,7 +527,7 @@ class Storage:
                     storage_inputs={"list": ref, "i": i},
                     storage_tps={"list": tp, "i": AtomType()},
                 )
-                new_elt = getitem_dict["output_0"]
+                new_elt = getitem_dict["list_item"]
                 destr_calls.append(item_call)
                 new_elt, elt_subcalls = self.destruct(new_elt, tp=tp.elt)
                 new_elts.append(new_elt)
@@ -544,7 +544,7 @@ class Storage:
                     storage_inputs={"dict": ref, "key": k},
                     storage_tps={"dict": tp, "key": tp.key},
                 )
-                new_v = getvalue_dict["output_0"]
+                new_v = getvalue_dict["dict_value"]
                 destr_calls.append(value_call)
                 new_v, v_subcalls = self.destruct(new_v, tp=tp.val)
                 new_items[k] = new_v

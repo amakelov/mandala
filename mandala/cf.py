@@ -152,6 +152,15 @@ class ComputationFrame:
     @property
     def fnames(self) -> Set[str]:
         return set(self.fs.keys())
+    
+    def ops(self) -> Dict[str, Op]:
+        """
+        Return a dict of {fname -> Op for the `Call`s in the function node}
+        """
+        res = {}
+        for fname, call_hids in self.fs.items():
+            res[fname] = self.calls[next(iter(call_hids))].op
+        return res
 
     @property
     def nodes(self) -> Set[str]:
@@ -401,9 +410,15 @@ class ComputationFrame:
             self.callinv[hid].remove(fname)
 
     def in_neighbors(self, node: str) -> Set[str]:
+        """
+        Get the nodes that are connected to the given node as inputs
+        """
         return get_nullable_union(*[self.inp[node][k] for k in self.inp[node]])
 
     def out_neighbors(self, node: str) -> Set[str]:
+        """
+        Get the nodes that are connected to the given node as outputs
+        """
         return get_nullable_union(*[self.out[node][k] for k in self.out[node]])
 
     def in_neighbor_elts(self, node: str, hids: Set[str]) -> Dict[str, Set[str]]:
@@ -663,6 +678,22 @@ class ComputationFrame:
             refs=refs,
             calls=calls,
         )
+    
+    def get_reachable_nodes(self, nodes: Set[str], direction: Literal["back", "forward"]) -> Set[str]:
+        """
+        Get the nodes that can be reached going forward/back from the given
+        nodes. 
+        """
+        visited = set()
+        def dfs(node):
+            visited.add(node)
+            for neighbor in self.in_neighbors(node) if direction == "back" else self.out_neighbors(node):
+                if neighbor not in visited:
+                    dfs(neighbor)
+        for node in nodes:
+            dfs(node)
+        
+        return visited
 
     def downstream(self, *nodes: str, how: Literal["strong", "weak"] = "strong") -> "ComputationFrame":
         """
@@ -678,13 +709,7 @@ class ComputationFrame:
         were computed by calls that are not downstream of `nodes`, but were
         originally part of the computation frame.
         """
-        downstream_nodes = set()
-        sources = set(nodes)
-        while len(sources) > 0:
-            source = sources.pop()
-            downstream_nodes.add(source)
-            for label, dsts in self.out[source].items():
-                sources |= dsts
+        downstream_nodes = self.get_reachable_nodes(set(nodes), direction="forward")
         res = self.select_nodes(downstream_nodes)
         downstream_view = res.get_reachable_elts(
             initial_state={node: res.sets[node] for node in nodes},
@@ -700,13 +725,7 @@ class ComputationFrame:
 
         Like `downstream`, but in reverse.
         """
-        upstream_nodes = set()
-        sinks = set(nodes)
-        while len(sinks) > 0:
-            sink = sinks.pop()
-            upstream_nodes.add(sink)
-            for label, srcs in self.inp[sink].items():
-                sinks |= srcs
+        upstream_nodes = self.get_reachable_nodes(set(nodes), direction="back")
         res = self.select_nodes(upstream_nodes)
         upstream_view = res.get_reachable_elts(
             initial_state={node: res.sets[node] for node in nodes},
@@ -965,6 +984,9 @@ class ComputationFrame:
                     if group_hids <= self.fs[fname] or (self.fs[fname] <= group_hids and len(self.fs[fname]) != 0):
                         found_func_match = True
                         break
+                    elif self.ops()[fname].name == op_id:
+                        found_func_match = True
+                        break
             if found_func_match:
                 if verbose: print(f"Reusing function {fname} for group {group_id}")
             else:
@@ -1200,12 +1222,15 @@ class ComputationFrame:
     ############################################################################
     ### traversal
     ############################################################################
-    def topsort(self) -> List[str]:
+    def topsort_modulo_sccs(self) -> List[str]:
         """
-        Return a topological sort of the nodes in the graph. If this is not 
-        possible (i.e., the graph contains cycles), raise an error.
+        Return an "almost topological" sort of the nodes in the graph:
+        - if the graph is acyclic, this is a topological sort
+        - if not, this returns an ordering which is 
+            - an arbitrary order *within* each strongly connected component,
+            - but a topological order *between* the SCCs
         """
-        # Kahn's algorithm
+        # first, try Kahn's algorithm
         in_degrees = {node: 0 for node in self.vs.keys() | self.fs.keys()}
         for src, dsts_dict in self.out.items():
             for label, dsts in dsts_dict.items():
@@ -1222,7 +1247,9 @@ class ComputationFrame:
                     if in_degrees[dst] == 0:
                         sources.append(dst)
         if not len(result) == len(self.nodes):
-            # logging.warning("The computation graph contains cycles; falling back to an almost-topological sort (arbitrary order within each strongly connected component)")
+            # use Tarjan's algorithm to find strongly connected components
+            # and return an almost-topological sort
+            logging.debug("The computation graph contains cycles; falling back to an almost-topological sort (arbitrary order within each strongly connected component)")
             graph = {node: set() for node in self.nodes}
             for src, dst, _ in self.edges():
                 graph[src].add(dst)
@@ -1233,7 +1260,7 @@ class ComputationFrame:
         """
         Return a topological sort of the given nodes
         """
-        return [node for node in self.topsort() if node in nodes]
+        return [node for node in self.topsort_modulo_sccs() if node in nodes]
 
     def _sort_df(self, df: pd.DataFrame) -> pd.DataFrame:
         """
@@ -1286,7 +1313,7 @@ class ComputationFrame:
         *nodes: str,
         values: Literal["refs", "objs"] = "objs",
         lazy_vars: Optional[Iterable[str]] = None,
-        verbose: bool = True,
+        verbose: bool = False,
         include_calls: bool = True,
         join_how: Literal["inner", "outer"] = "outer",
     ) -> pd.DataFrame:
@@ -1319,7 +1346,6 @@ class ComputationFrame:
         }
         if verbose:
             print(f'Found variables {vnames} containing final elements')
-        sess.d()
         df = restricted_cf.get_joint_history_df(
             varnames=vnames, how=join_how, include_calls=include_calls,
             verbose=verbose,
@@ -1705,80 +1731,6 @@ class ComputationFrame:
             how: Literal["strong", "weak"],
             pad: bool = True,):
         """
-        """
-        result = {k: v.copy() for k, v in initial_state.items()}
-
-        def get_adj_elts(node, adj_edges):
-            adj_elts = []  # will be a list of neighbor elts along the `adj_edges`.
-            for edge in adj_edges:
-                other_endpoint = edge[0] if direction == "forward" else edge[1]
-                hids = result.get(other_endpoint, set())
-                adj_elts.append(
-                    self.get_adj_elts_edge(edge=edge, hids=hids, direction=direction)
-                )
-            return adj_elts
-
-        def is_strongly_reachable_call(
-                call_hid: str,
-                adj_edges: Set[Tuple[str, str, str]],
-                direction: Literal["forward", "back"],
-                ):
-            # check if the call is reachable from `result`
-            call = self.calls[call_hid]
-            io_refs = call.inputs if direction == "forward" else call.outputs
-            io_name_projections = {name: self.get_io_proj(call_hid=call_hid, name=name) for name in io_refs.keys()}
-            io_label_to_names = invert_dict(io_name_projections)
-            # now, we must check that for each label there's something at the other end
-            is_reachable = True
-            for edge in adj_edges:
-                src, dst, label = edge
-                if label in io_label_to_names.keys():
-                    other_end = src if direction == "forward" else dst
-                    other_end_hids = result.get(other_end, set())
-                    io_ref_hids = {io_refs[name].hid for name in io_label_to_names[label]}
-                    if not io_ref_hids <= other_end_hids:
-                        is_reachable = False
-                        break
-            return is_reachable
-
-        # we apply each function until a fixed point is reached
-        current_size = sum([len(v) for v in result.values()])
-        # TODO: to optimize this, we record the nodes which have changed
-        # vertices_updated_last_iter = set(initial_state.keys())
-        while True:
-            for node in self.nodes:
-                adj_edges = self.in_edges(node=node) if direction == "forward" else self.out_edges(node=node)
-                if node in self.vnames:
-                    adj_elts = get_adj_elts(node, adj_edges)
-                    to_add = get_nullable_union(*adj_elts)
-                else: # node in self.fnames
-                    if how == "weak":
-                        adj_elts = get_adj_elts(node, adj_edges)
-                        to_add = get_nullable_union(*adj_elts)
-                    else:
-                        to_add = set()
-                        for call_hid in self.fs[node] - result.get(node, set()):
-                            if is_strongly_reachable_call(call_hid, adj_edges, direction):
-                                to_add.add(call_hid)
-                result[node] = to_add | result.get(node, set())
-            new_size = sum([len(v) for v in result.values()])
-            if new_size == current_size:
-                break
-            else:
-                current_size = new_size
-        if pad:
-            for node in self.nodes - set(result.keys()):
-                result[node] = set()
-        return result
-
-    def get_reachable_elts_acyclic(
-        self,
-        initial_state: Dict[str, Set[str]],
-        how: Literal["strong", "weak"],
-        direction: Literal["forward", "back"],
-        pad: bool = True,
-    ) -> Dict[str, Set[str]]:
-        """
         Find all reachable elements from the given view along the given
         direction, under either computational (strong) or graph (weak)
         reachability.
@@ -1799,7 +1751,98 @@ class ComputationFrame:
         to get the full reachability information.
         """
         result = {k: v.copy() for k, v in initial_state.items()}
-        node_order = self.topsort() if direction == "forward" else self.topsort()[::-1]
+
+        def get_adj_elts(adj_edges):
+            """
+            Given edges adjacent to some node, return the elements of this node
+            reachable from *any* of the other ends of these edges. 
+            """
+            adj_elts = set()
+            for edge in adj_edges:
+                other_endpoint = edge[0] if direction == "forward" else edge[1]
+                hids = result.get(other_endpoint, set())
+                adj_elts |= (
+                    self.get_adj_elts_edge(edge=edge, hids=hids, direction=direction)
+                )
+            return adj_elts
+
+        def is_strongly_reachable_call(
+                fname: str,
+                call_hid: str,
+                adj_edges: Set[Tuple[str, str, str]],
+                direction: Literal["forward", "back"],
+                ):
+            """
+            Core function to determine "strong" reachability of a call from the
+            current state.
+
+            A call is strongly reachable in the forward direction if, for each
+            input label connected to the call's function node, the corresponding
+            input(s) of the call exist(s) in some variable connected by an edge
+            with this label.
+            """
+            call = self.calls[call_hid]
+            io_refs = call.inputs if direction == "forward" else call.outputs
+            io_name_projections = {name: self.get_io_proj(call_hid=call_hid, name=name) for name in io_refs.keys()}
+            # edge label -> inputs/outputs of the call covered by this label
+            io_label_to_names = invert_dict(io_name_projections)
+            labels_present = set(label for _, _, label in adj_edges)
+            io_label_to_names = {k: v for k, v in io_label_to_names.items() if k in labels_present}
+            # now, we must check that for each input/output there's something at
+            # the other end(s)
+            io_names_found = set()
+            total_names_to_find = sum([len(v) for v in io_label_to_names.values()])
+            if total_names_to_find == 0 and call_hid not in result.get(fname, set()):
+                return False # no inputs/outputs to find, and the call is not in the result
+            for edge in adj_edges:
+                src, dst, label = edge
+                if label in io_label_to_names.keys():
+                    other_end = src if direction == "forward" else dst
+                    other_end_hids = result.get(other_end, set())
+                    io_ref_hids = {name: io_refs[name].hid for name in io_label_to_names[label]}
+                    io_names_found |= {name for name, hid in io_ref_hids.items() if hid in other_end_hids}
+            res = len(io_names_found) == total_names_to_find
+            return res
+
+        # we apply each function until a fixed point is reached
+        current_size = sum([len(v) for v in result.values()])
+        # TODO: to optimize this, we record the nodes which have changed
+        # vertices_updated_last_iter = set(initial_state.keys())
+        while True:
+            for node in self.nodes:
+                adj_edges = self.in_edges(node=node) if direction == "forward" else self.out_edges(node=node)
+                if node in self.vnames:
+                    to_add = get_adj_elts(adj_edges)
+                else: # node in self.fnames
+                    if how == "weak":
+                        to_add = get_adj_elts(adj_edges)
+                    else:
+                        to_add = set()
+                        for call_hid in self.fs[node] - result.get(node, set()):
+                            if is_strongly_reachable_call(node, call_hid, adj_edges, direction):
+                                to_add.add(call_hid)
+                result[node] = to_add | result.get(node, set())
+            new_size = sum([len(v) for v in result.values()])
+            if new_size == current_size:
+                break
+            else:
+                current_size = new_size
+        if pad:
+            for node in self.nodes - set(result.keys()):
+                result[node] = set()
+        return result
+
+    def get_reachable_elts_acyclic(
+        self,
+        initial_state: Dict[str, Set[str]],
+        how: Literal["strong", "weak"],
+        direction: Literal["forward", "back"],
+        pad: bool = True,
+    ) -> Dict[str, Set[str]]:
+        """
+        """
+        result = {k: v.copy() for k, v in initial_state.items()}
+        node_order = self.topsort_modulo_sccs() if direction == "forward" else self.topsort_modulo_sccs()[::-1]
 
         def get_adj_elts(node, adj_edges):
             adj_elts = []  # will be a list of neighbor elts along the `adj_edges`.
@@ -2096,12 +2139,17 @@ class ComputationFrame:
         if isolated_vars:
             lines.append(", ".join(sorted(isolated_vars)))
         for fname in self.sort_nodes(self.fnames):
+            op = self.ops()[fname]
             input_name_to_vars = self.inp[fname] # input name -> {variables connected}
             output_name_to_vars = self.out[fname] # output name -> {variables connected}
             
             output_names = output_name_to_vars.keys()
+            if op.output_names is not None:
+                output_to_idx = {name: idx for idx, name in enumerate(op.output_names)}
+            else:
+                output_to_idx = {name: int(name.split('_')[1]) for name in output_names}
             # sort the output names according to their order as returns
-            ordered_output_names = sorted(output_names, key=lambda x: int(x.split('_')[1]))
+            ordered_output_names = sorted(output_names, key=lambda x: output_to_idx[x])
             # add the output names to the output variables in order to avoid
             # confusion when outputs are present only partially in the graph
             output_labels = copy.deepcopy(output_name_to_vars)
@@ -2183,14 +2231,18 @@ class ComputationFrame:
         nodes = {**vnodes, **fnodes}
         edges = []
         for src, dst, label in self.edges():
+            display_label = label
+            ops = self.ops()
+            if dst in ops and ops[dst].name == "__make_list__" and label == "elts":
+                display_label = "*elts"
             if verbose:
-                label = f'{label}\\n({edge_counts[(src, dst, label)]} values)'
+                display_label = f'{display_label}\\n({edge_counts[(src, dst, label)]} values)'
             edges.append(
                 Edge(source_node=nodes[src], 
                      target_node=nodes[dst],
                      source_port=None, 
                      target_port=None,
-                     label=label)
+                     label=display_label)
             )
         dot_string = to_dot_string(nodes=list(nodes.values()),
                                    edges=edges, 

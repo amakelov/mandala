@@ -62,6 +62,7 @@ def get_content_hash(obj: Any) -> str:
 
 
 def dump_output_name(index: int, output_names: Optional[List[str]] = None) -> str:
+    sess.d()
     if output_names is not None and index < len(output_names):
         return output_names[index]
     else:

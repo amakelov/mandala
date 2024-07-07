@@ -99,8 +99,6 @@ class Op:
         f: Callable,
         nout: Union[Literal["var", "auto"], int] = "auto",
         output_names: Optional[List[str]] = None,
-        skip_inputs: Optional[List[str]] = None,
-        skip_outputs: Optional[List[str]] = None,
         version: Optional[int] = 0,
         __structural__: bool = False,
         __allow_side_effects__: bool = False,
@@ -112,6 +110,19 @@ class Op:
         self.__structural__ = __structural__
         self.__allow_side_effects__ = __allow_side_effects__
         self.f = f
+        #! make sure there's no overlap between the input and output names
+        if f is not None:
+            input_names = list(inspect.signature(f).parameters.keys())
+            if output_names is not None:
+                assert not any(name in output_names for name in input_names), (
+                    f"Output names clash with input names for op {name}."
+                )
+            else:
+                # to be on the safe side, check if any input name starts with "output_"
+                assert not any(name.startswith("output_") for name in input_names), (
+                    f"Output names must be specified for op {name} because the input names "
+                    "contain 'output_'. Alternatively, rename the input arguments to not start with 'output_'."
+                )
 
     def __repr__(self) -> str:
         return f"Op({self.name}, nout={self.nout}, output_names={self.output_names}, version={self.version})"
@@ -370,12 +381,12 @@ def __dict_getitem__(dict: MDict[Any, Any], key: Any) -> Any:
     return dict[key]
 
 
-__make_list__ = Op(name=__make_list__.__name__, f=__make_list__, __structural__=True)
-__make_dict__ = Op(name=__make_dict__.__name__, f=__make_dict__, __structural__=True)
-__make_set__ = Op(name=__make_set__.__name__, f=__make_set__, __structural__=True)
-__make_tuple__ = Op(name=__make_tuple__.__name__, f=__make_tuple__, __structural__=True)
-__list_getitem__ = Op(name=__list_getitem__.__name__, f=__list_getitem__, __structural__=True)
-__dict_getitem__ = Op(name=__dict_getitem__.__name__, f=__dict_getitem__, __structural__=True)
+__make_list__ = Op(name=__make_list__.__name__, f=__make_list__, __structural__=True, output_names=["list"])
+__make_dict__ = Op(name=__make_dict__.__name__, f=__make_dict__, __structural__=True, output_names=["dict"])
+__make_set__ = Op(name=__make_set__.__name__, f=__make_set__, __structural__=True, output_names=["set"])
+__make_tuple__ = Op(name=__make_tuple__.__name__, f=__make_tuple__, __structural__=True, output_names=["tuple"])
+__list_getitem__ = Op(name=__list_getitem__.__name__, f=__list_getitem__, __structural__=True, output_names=["list_item"])
+__dict_getitem__ = Op(name=__dict_getitem__.__name__, f=__dict_getitem__, __structural__=True, output_names=["dict_value"])
 
 
 def make_ref_set(resf: Iterable[Ref]) -> SetRef:
@@ -388,28 +399,24 @@ def make_ref_set(resf: Iterable[Ref]) -> SetRef:
 def op(
     output_names: Union[Optional[List[str]], Callable] = None,
     nout: Union[Literal["var", "auto"], int] = "auto",
-    skip_inputs: Optional[List[str]] = None,
-    skip_outputs: Optional[List[str]] = None,
     __structural__: bool = False,
     __allow_side_effects__: bool = False,
 ):
-    def decorator(f: Callable) -> 'f': # some IDE magic to make it recognize that @op(f) has the same type as f
+    def decorator(f: Callable, output_names = None) -> 'f': # some IDE magic to make it recognize that @op(f) has the same type as f
         res = Op(
             f.__name__,
             f,
-            output_names=None,
+            output_names=output_names,
             nout=nout,
-            skip_inputs=skip_inputs,
-            skip_outputs=skip_outputs,
             __structural__=__structural__,
             __allow_side_effects__=__allow_side_effects__,
         )
         return functools.wraps(f)(res) # more magic 
 
     if callable(output_names):
-        return decorator(output_names)
+        return decorator(output_names, None)
     else:
-        return decorator
+        return lambda f: decorator(f, output_names)
 
 
 class Context:

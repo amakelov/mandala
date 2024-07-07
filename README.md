@@ -99,11 +99,16 @@ See the "gotchas" notebook: <a href="https://colab.research.google.com/github/am
   <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/> </a>
 
 # Roadmap for future features
+**Overall**
+- [x] support for named outputs in `@op`s
+- [ ] support for renaming `@op`s and their inputs/outputs
+
 **Memoization**
 - [ ] add custom serialization for chosen objects
 - [ ] figure out a solution that ignores small numerical error in content hashing
 - [ ] improve the documentation on collections
 - [ ] support parallelization of `@op` execution via e.g. `dask` or `ray`
+- [ ] support for inputs/outputs to exclude from the storage
 
 **Computation frames**
 - [ ] add tools for restricting a CF to specific subsets of variable values via predicates
@@ -114,6 +119,10 @@ See the "gotchas" notebook: <a href="https://colab.research.google.com/github/am
 **Versioning**
 - [ ] support restricting CFs by function versions
 - [ ] support ways to manually add dependencies to versions 
+
+**Performance**
+- [ ] improve performance of the in-memory cache
+- [ ] improve performance of `ComputationFrame` operations
 
 # Testimonials
 

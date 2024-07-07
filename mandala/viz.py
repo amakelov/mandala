@@ -319,7 +319,7 @@ NODE_CONFIG = {
     "fontname": FONT,
     "fontsize": FONT_SIZE,
     "fontcolor": SOLARIZED_LIGHT["base03"],
-    "penwidth": 2,
+    "penwidth": 1.5,
 }
 
 EDGE_CONFIG = {
