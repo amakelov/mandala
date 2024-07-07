@@ -9,8 +9,15 @@
 <g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 46)">
 <title>G</title>
 <polygon fill="white" stroke="transparent" points="-4,4 -4,-46 415,-46 415,4 -4,4"/>
-<!-- x -->
+<!-- var_0 -->
 <g id="node1" class="node">
+<title>var_0</title>
+<path fill="none" stroke="#268bd2" stroke-width="1.5" d="M399,-38C399,-38 329,-38 329,-38 323,-38 317,-32 317,-26 317,-26 317,-14 317,-14 317,-8 323,-2 329,-2 329,-2 399,-2 399,-2 405,-2 411,-8 411,-14 411,-14 411,-26 411,-26 411,-32 405,-38 399,-38"/>
+<text text-anchor="start" x="348" y="-22.4" font-family="Liberation Sans,Helvetica,Arial,sans-serif" font-weight="bold" font-size="12.00" fill="#002b36">var_0</text>
+<text text-anchor="start" x="325" y="-12" font-family="Liberation Sans,Helvetica,Arial,sans-serif" font-size="10.00" fill="#268bd2">5 values (5 sinks)</text>
+</g>
+<!-- x -->
+<g id="node2" class="node">
 <title>x</title>
 <path fill="none" stroke="#268bd2" stroke-width="1.5" d="M93,-38C93,-38 12,-38 12,-38 6,-38 0,-32 0,-26 0,-26 0,-14 0,-14 0,-8 6,-2 12,-2 12,-2 93,-2 93,-2 99,-2 105,-8 105,-14 105,-14 105,-26 105,-26 105,-32 99,-38 93,-38"/>
 <text text-anchor="start" x="49" y="-22.4" font-family="Liberation Sans,Helvetica,Arial,sans-serif" font-weight="bold" font-size="12.00" fill="#002b36">x</text>
@@ -31,13 +38,6 @@
 <polygon fill="#002b36" stroke="#002b36" points="173.84,-23.5 183.84,-20 173.84,-16.5 173.84,-23.5"/>
 <text text-anchor="middle" x="144.5" y="-34" font-family="Liberation Sans,Helvetica,Arial,sans-serif" font-size="10.00" fill="#002b36">x</text>
 <text text-anchor="middle" x="144.5" y="-23" font-family="Liberation Sans,Helvetica,Arial,sans-serif" font-size="10.00" fill="#002b36">(5 values)</text>
-</g>
-<!-- var_0 -->
-<g id="node2" class="node">
-<title>var_0</title>
-<path fill="none" stroke="#268bd2" stroke-width="1.5" d="M399,-38C399,-38 329,-38 329,-38 323,-38 317,-32 317,-26 317,-26 317,-14 317,-14 317,-8 323,-2 329,-2 329,-2 399,-2 399,-2 405,-2 411,-8 411,-14 411,-14 411,-26 411,-26 411,-32 405,-38 399,-38"/>
-<text text-anchor="start" x="348" y="-22.4" font-family="Liberation Sans,Helvetica,Arial,sans-serif" font-weight="bold" font-size="12.00" fill="#002b36">var_0</text>
-<text text-anchor="start" x="325" y="-12" font-family="Liberation Sans,Helvetica,Arial,sans-serif" font-size="10.00" fill="#268bd2">5 values (5 sinks)</text>
 </g>
 <!-- inc&#45;&gt;var_0 -->
 <g id="edge1" class="edge">
