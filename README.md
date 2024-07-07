@@ -3,9 +3,8 @@
     <img src="assets/logo-no-background.png" height=128 alt="logo" align="center">
   <br>
 <a href="#install">Install</a> |
-<a href="https://colab.research.google.com/github/amakelov/mandala/blob/master/tutorials/hello.ipynb"> Quickstart 
-  <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/>
-</a> | 
+<a href="https://colab.research.google.com/github/amakelov/mandala/blob/master/docs_source/tutorials/01_hello.ipynb"> Quickstart 
+  <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/> </a> | 
 <a href="#tutorials">Tutorials</a> |
 <a href="https://amakelov.github.io/mandala/">Docs</a> |
 <a href="#blogs">Blogs</a> |
@@ -40,15 +39,20 @@ pip install git+https://github.com/amakelov/mandala
 ```
 
 # Tutorials 
-- Quickstart: <a href="https://colab.research.google.com/github/amakelov/mandala/blob/master/tutorials/hello.ipynb"> 
+- Quickstart: <a href="https://colab.research.google.com/github/amakelov/mandala/blob/master/docs_source/tutorials/01_hello.ipynb"> 
   <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/> </a>
-- Toy ML project: <a href="https://colab.research.google.com/github/amakelov/mandala/blob/master/tutorials/ml.ipynb"> 
+- Toy ML project: <a href="https://colab.research.google.com/github/amakelov/mandala/blob/master/docs_source/tutorials/02_ml.ipynb"> 
   <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/> </a>
 
 # Blogs
-- [Practical dependency tracking for Python function
-calls](https://amakelov.github.io/blog/deps/): describes the motivations and designs behind `mandala`'s dependency tracking system
-- [Mandala: Python programs that save, query and version themselves](https://amakelov.github.io/blog/pl/): Overall summary of previous version. It holds for the current version except for the section titled "Pattern-matching queries"
+- [Tidy Computations](https://amakelov.github.io/mandala/blog/01_cf/): introduces
+the `ComputationFrame` data structure and its applications
+- [Practical Dependency Tracking for Python Function
+Calls](https://amakelov.github.io/blog/deps/): describes the motivations and designs behind `mandala`'s dependency tracking system
+- [Mandala: Python Programs That Save, Query and Version Themselves](https://amakelov.github.io/blog/pl/): Overall summary of previous version. It holds for the current version except for the section titled "Pattern-matching queries"
+
+Also see the [paper](https://amakelov.github.io/scipy-mandala.pdf) which is to
+appear in the SciPy 2024 proceedings.
 
 # FAQs
 
@@ -95,7 +99,7 @@ and `joblib`.
 on the system level, and/or the Python `graphviz` library installed.
 
 # Limitations
-See the "gotchas" notebook: <a href="https://colab.research.google.com/github/amakelov/mandala/blob/master/tutorials/gotchas.ipynb"> 
+See the "gotchas" notebook: <a href="https://colab.research.google.com/github/amakelov/mandala/blob/master/docs_source/tutorials/gotchas.ipynb"> 
   <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/> </a>
 
 # Roadmap for future features
