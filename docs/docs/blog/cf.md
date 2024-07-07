@@ -7,10 +7,13 @@ that it can be analyzed and manipulated. This blog post introduces the
 and relational databases &mdash; which provides a natural and simple grammar of
 operations to eliminate this effort.
 
-CFs provide a single, unified interface for working with and querying
-heterogeneous computations that go beyond a fixed schema by allowing conditional
-execution, feedback loops, branching/merging pipelines, and aggregation/indexing
-using collections. 
+The main benefit of CFs is that they give a single view of heterogeneous
+computations that go beyond a fixed schema. They automatically represent in a
+familiar and intuitive way constructs like conditional execution, feedback
+loops, branching/merging pipelines, and aggregation/indexing using collections.
+This view can be declaratively queried for relationships between any variables
+in (literally) a single line of code, without leaving Python or writing in a
+domain-specific language like SQL.
 
 `ComputationFrame` is implemented as [part
 of](https://amakelov.github.io/mandala/topics/03_cf/)
@@ -20,11 +23,11 @@ the library.
 
 
 ## So what's a `ComputationFrame`?
-
-### Minimal interesting example
 A `ComputationFrame` is a "generalized dataframe", where the set of columns is
 replaced by a computation graph of variables and operations, and rows are
-(possibly partial) executions of the graph. In a nutshell:
+(possibly partial) executions of the graph.
+
+### Minimal interesting example
 
 
 ```python
@@ -62,10 +65,10 @@ print(cf.df().to_markdown())
     |    |   x | increment                                   |   y | add                                   |   w |
     |---:|----:|:--------------------------------------------|----:|:--------------------------------------|----:|
     |  0 |   0 | Call(increment, cid='d47...', hid='230...') |   1 | Call(add, cid='89c...', hid='247...') |   1 |
-    |  1 |   2 | Call(increment, cid='bfb...', hid='5dd...') |   3 | Call(add, cid='a81...', hid='626...') |   5 |
-    |  2 |   4 | Call(increment, cid='928...', hid='adf...') |   5 | Call(add, cid='a54...', hid='deb...') |   9 |
+    |  1 |   4 | Call(increment, cid='928...', hid='adf...') |   5 | Call(add, cid='a54...', hid='deb...') |   9 |
+    |  2 |   1 | Call(increment, cid='948...', hid='6e2...') |   2 |                                       | nan |
     |  3 |   3 | Call(increment, cid='9b4...', hid='df2...') |   4 |                                       | nan |
-    |  4 |   1 | Call(increment, cid='948...', hid='6e2...') |   2 |                                       | nan |
+    |  4 |   2 | Call(increment, cid='bfb...', hid='5dd...') |   3 | Call(add, cid='a81...', hid='626...') |   5 |
 
 
 This small example illustrates the main components of the CF workflow:
@@ -244,9 +247,9 @@ print(cf.df()[['accuracy', 'scale_data', 'train_svc', 'train_random_forest']].so
 
     |    |   accuracy | scale_data                                   | train_svc                                   | train_random_forest                                   |
     |---:|-----------:|:---------------------------------------------|:--------------------------------------------|:------------------------------------------------------|
-    |  1 |      0.915 | Call(scale_data, cid='09f...', hid='d6b...') |                                             | Call(train_random_forest, cid='e26...', hid='c42...') |
-    |  3 |      0.885 |                                              |                                             | Call(train_random_forest, cid='519...', hid='997...') |
-    |  0 |      0.82  |                                              | Call(train_svc, cid='ddf...', hid='6a0...') |                                                       |
+    |  3 |      0.915 | Call(scale_data, cid='09f...', hid='d6b...') |                                             | Call(train_random_forest, cid='e26...', hid='c42...') |
+    |  0 |      0.885 |                                              |                                             | Call(train_random_forest, cid='519...', hid='997...') |
+    |  1 |      0.82  |                                              | Call(train_svc, cid='ddf...', hid='6a0...') |                                                       |
     |  2 |      0.82  | Call(scale_data, cid='09f...', hid='d6b...') | Call(train_svc, cid='6f4...', hid='7d9...') |                                                       |
 
 
@@ -358,20 +361,20 @@ print(cf.df()[['n_estimators', 'kernel', 'accuracy', ]].sort_values('accuracy', 
 
     |    | n_estimators                 | kernel                                     |   accuracy |
     |---:|:-----------------------------|:-------------------------------------------|-----------:|
-    |  0 | 5                            |                                            |      0.915 |
-    | 12 |                              | rbf                                        |      0.915 |
-    | 13 |                              | rbf                                        |      0.91  |
-    |  8 | 20                           |                                            |      0.9   |
-    |  9 | 10                           |                                            |      0.9   |
+    |  5 | 5                            |                                            |      0.915 |
+    |  7 |                              | rbf                                        |      0.915 |
+    |  8 |                              | rbf                                        |      0.91  |
+    |  1 | 10                           |                                            |      0.9   |
+    |  4 | 20                           |                                            |      0.9   |
     | 10 | 10                           |                                            |      0.9   |
-    | 11 | 20                           |                                            |      0.9   |
-    |  4 | ValueCollection([20, 10, 5]) | ValueCollection(['linear', 'rbf', 'poly']) |      0.895 |
-    |  6 | ValueCollection([20, 10, 5]) | ValueCollection(['linear', 'rbf', 'poly']) |      0.895 |
-    |  5 | 5                            |                                            |      0.885 |
-    |  3 |                              | poly                                       |      0.835 |
-    |  1 |                              | linear                                     |      0.82  |
-    |  2 |                              | poly                                       |      0.82  |
-    |  7 |                              | linear                                     |      0.82  |
+    | 13 | 20                           |                                            |      0.9   |
+    |  3 | ValueCollection([20, 10, 5]) | ValueCollection(['linear', 'rbf', 'poly']) |      0.895 |
+    | 11 | ValueCollection([20, 10, 5]) | ValueCollection(['linear', 'rbf', 'poly']) |      0.895 |
+    |  6 | 5                            |                                            |      0.885 |
+    | 12 |                              | poly                                       |      0.835 |
+    |  0 |                              | linear                                     |      0.82  |
+    |  2 |                              | linear                                     |      0.82  |
+    |  9 |                              | poly                                       |      0.82  |
 
 
 Columns where `n_estimators` is `None` correspond to the SVC models, and columns
