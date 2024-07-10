@@ -1945,6 +1945,21 @@ class ComputationFrame:
     ############################################################################
     ### ummmm... more stuff
     ############################################################################
+    def move_ref(self, source_vname: str, target_vname: str, 
+                 hid: str, inplace: bool = True) -> Optional["ComputationFrame"]:
+        """
+        Move a ref from one variable to another.
+        """
+        res = self if inplace else self.copy()
+        if hid not in res.vs[source_vname]:
+            raise ValueError(f"Ref {hid} not in variable {source_vname}")
+        res.vs[source_vname].remove(hid)
+        res.vs[target_vname].add(hid)
+        #! update self.refinv
+        self.refinv[hid].remove(source_vname)
+        self.refinv[hid].add(target_vname)
+        return res if not inplace else None
+
     def merge_into(
         self, node_to_merge: str, merge_into: str, inplace: bool = False
     ) -> Optional["ComputationFrame"]:
@@ -1954,17 +1969,22 @@ class ComputationFrame:
         (redirecting all its edges to the superset node).
         """
         res = self if inplace else self.copy()
+        ### first, update the elements
         if not res.sets[node_to_merge] <= res.sets[merge_into]:
-            raise ValueError(
-                f"Node {node_to_merge} is not a subset of node {merge_into}"
-            )
+            for hid in res.sets[node_to_merge] - res.sets[merge_into]:
+                self.move_ref(node_to_merge, merge_into, hid, inplace=True)
+        for hid in res.sets[node_to_merge]:
+            # remove from the refinv
+            if node_to_merge in res.refinv[hid]:
+                res.refinv[hid].remove(node_to_merge)
+        ### then, update the graph
         for src, dst, label in res.in_edges(node_to_merge):
             res._drop_edge(src, dst, label)
-            res._add_edge(src, merge_into, label)
+            res._add_edge(src, merge_into, label, allow_existing=True)
         for src, dst, label in res.out_edges(node_to_merge):
             res._drop_edge(src, dst, label)
-            res._add_edge(merge_into, dst, label)
-        res.drop_node(node_to_merge)
+            res._add_edge(merge_into, dst, label, allow_existing=True)
+        res.drop_node(node_to_merge, inplace=True)
         return res if not inplace else None
 
     def merge(self, vars: Set[str], new_name: Optional[str] = None) -> str:
