@@ -24,7 +24,6 @@ beyond) with two versatile tools:
 
 <table>
   <tr>
-    <td><img src="output.svg" alt="Description" width="400"/></td>
     <td>
       <ol start="2">
     <li>
@@ -43,6 +42,7 @@ beyond) with two versatile tools:
     </li>
     </ol>
     </td>
+    <td><img src="output.svg" alt="Description" width="800"/></td>
   </tr>
 </table>
 
