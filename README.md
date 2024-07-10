@@ -49,6 +49,7 @@ beyond) with two versatile tools:
 ## Video demo
 A quick demo of how `ComputationFrame`s make code self-organize into high-level
 graphs that can automatically be turned into dataframes:
+
 https://github.com/amakelov/mandala/assets/1467702/85185599-10fb-479e-bf02-442873732906
 
 # Install
