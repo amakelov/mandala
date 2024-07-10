@@ -42,7 +42,7 @@ beyond) with two versatile tools:
     </li>
     </ol>
     </td>
-    <td><img src="output.svg" alt="Description" width="800"/></td>
+    <td><img src="output.svg" alt="Description" width="1200"/></td>
   </tr>
 </table>
 
