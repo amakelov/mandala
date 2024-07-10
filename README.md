@@ -22,9 +22,9 @@ beyond) with two versatile tools:
     efficient iterative development in plain-Python, without thinking about the
     storage backend.
 
-<table>
+<table style="border-collapse: collapse; border: none;">
   <tr>
-    <td>
+    <td style="border: none;">
       <ol start="2">
     <li>
         The <a href="https://amakelov.github.io/mandala/blog/01_cf/">ComputationFrame</a> data structure:
@@ -41,8 +41,8 @@ beyond) with two versatile tools:
         </ul>
     </li>
     </ol>
-    </td>
-    <td><img src="output.svg" alt="Description" width="2000"/></td>
+    </td style="border: none;">
+    <td><img src="output.svg" alt="Description" width="2700"/></td>
   </tr>
 </table>
 
