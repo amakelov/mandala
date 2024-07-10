@@ -46,6 +46,8 @@ beyond) with two versatile tools:
   </tr>
 </table>
 
+## Video demo
+https://github.com/amakelov/mandala/assets/1467702/85185599-10fb-479e-bf02-442873732906
 
 # Install
 ```
