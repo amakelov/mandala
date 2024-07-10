@@ -11,12 +11,9 @@
 <a href="#testimonials">Testimonials</a> |
 </div>
 
-# Programs that save, query & version themselves
-
-<br>
-
-`mandala` eliminates the effort and code overhead of ML experiment tracking with
-two tools:
+# Automatically save, query & version Python computations
+`mandala` eliminates the effort and code overhead of ML experiment tracking (and
+beyond) with two versatile tools:
 
 1. The `@op` decorator:
     - **Automatically captures inputs, outputs and code (+dependencies)** of Python function calls
@@ -25,13 +22,30 @@ two tools:
     efficient iterative development in plain-Python, without thinking about the
     storage backend.
 
-2. The `ComputationFrame` data structure (which [generalizes](https://amakelov.github.io/mandala/03_cf/#computationframes-as-generalized-dataframes) `pandas.DataFrame`):
-    - **Automatically organizes the "web" of `@op` calls** into a computation
-    graph over variables and `@op`s. It reflects user intent, similarly to a database view.
-    - **Automates exploration, querying and high-level operations** over
-    heterogeneous "webs" of `@op` calls
-    - **Can be converted to a `DataFrame` of execution traces** for downstream
-    analysis of relationships between variables in a project
+<table>
+  <tr>
+    <td><img src="output.svg" alt="Description" width="400"/></td>
+    <td>
+      <ol start="2">
+    <li>
+        The <a href="https://amakelov.github.io/mandala/blog/01_cf/">ComputationFrame</a> data structure:
+        <ul>
+        <li>
+            <strong>Automatically organizes executions of imperative code into a high-level computation graph of variables and operations</strong> by detecting patterns like feedback loops, branching/merging and aggregation/indexing
+        </li>
+        <li>
+            <strong>Automatically queries data</strong> by extracting a dataframe where columns are variables and operations in the graph, and each row contains values/calls of a (possibly partial) execution of the graph
+        </li>
+        <li>
+            <strong>Automates exploration, and high-level operations</strong> over heterogeneous "webs" of <code>@op</code> calls
+        </li>
+        </ul>
+    </li>
+    </ol>
+    </td>
+  </tr>
+</table>
+
 
 # Install
 ```
