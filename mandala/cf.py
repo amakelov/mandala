@@ -1347,9 +1347,14 @@ class ComputationFrame:
         if verbose:
             print(f'Found variables {vnames} containing final elements')
         df = restricted_cf.get_joint_history_df(
-            varnames=vnames, how=join_how, include_calls=include_calls,
+            varnames=vnames, how=join_how,
+            # excluding calls is best done at the end, because we may miss
+            # some useful join conditions if we exclude them here
+            include_calls=True, 
             verbose=verbose,
         )
+        if not include_calls:
+            df = df[[col for col in df.columns if col not in restricted_cf.fnames]]
         # depending on `include_calls`, we may have dropped some columns in `nodes`
         df = df[[x for x in list(nodes) if x in df.columns]]
         if values == "refs":

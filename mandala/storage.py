@@ -84,6 +84,10 @@ class Storage:
         self.code_state = None
         self.suspended_trace_obj = None
 
+        # a list of functions to call when the storage is exited
+        # each function should have a single argument, the storage object
+        self._exit_hooks = []
+
     
     def conn(self) -> sqlite3.Connection:
         return self.db.conn()
@@ -561,13 +565,14 @@ class Storage:
         pre_call_uid: Optional[str] = None,
         code_state: Optional[CodeState] = None,
         versioner: Optional[Versioner] = None,
+        must_version: bool = False,
     ) -> Optional[Call]:
         """
         Look up the call to the given op. If the storage is versioned, the
         current code state is used to resolve the right version of the function
         to use.
         """
-        if not self.versioned:
+        if not must_version:
             semantic_version = None
         else:
             assert code_state is not None and versioner is not None and pre_call_uid is not None
@@ -726,6 +731,8 @@ class Storage:
         ### wrap the inputs
         if not op.__structural__: logger.debug(f"Calling {op.name} with args {bound_arguments}.")
 
+        must_version_call = self.versioned and not op.__structural__
+
         wrapped_inputs = {}
         input_calls = []
         for k, v in storage_inputs.items():
@@ -734,7 +741,7 @@ class Storage:
         if len(input_calls) > 0:
             if not op.__structural__: logger.debug(f"Collected {len(input_calls)} calls for inputs.")
 
-        if self.versioned:
+        if must_version_call:
             suspended_trace_obj = self.cached_versioner.TracerCls.get_active_trace_obj()
             self.cached_versioner.TracerCls.set_active_trace_obj(trace_obj=None)
         else:
@@ -746,11 +753,12 @@ class Storage:
             op=op,
             pre_call_uid=pre_call_id,
             inputs=wrapped_inputs,
-            code_state=self.guess_code_state() if self.versioned else None,
-            versioner=self.cached_versioner if self.versioned else None,
+            code_state=self.guess_code_state() if must_version_call else None,
+            versioner=self.cached_versioner if must_version_call else None,
+            must_version=must_version_call,
         )
         tracer_option = (
-            self.cached_versioner.make_tracer() if self.versioned else None
+            self.cached_versioner.make_tracer() if must_version_call and not op.__structural__ else None
         )
 
         call_exists = (call_option is not None)
@@ -817,7 +825,7 @@ class Storage:
             #             f"Function {f.__name__} has side effects on inputs {changed_inputs}; aborting call."
             #         )
 
-        if tracer_option is not None:
+        if must_version_call:
             # check the trace against the code state hypothesis
             self.cached_versioner.apply_state_hypothesis(
                 hypothesis=self.code_state, trace_result=tracer_option.graph.nodes
@@ -832,7 +840,7 @@ class Storage:
                 tracer_option=tracer_option,
                 is_recompute=False,
             )
-            if self.versioned
+            if must_version_call
             else (None, None)
         )
 
@@ -1114,6 +1122,8 @@ class Storage:
         finally:
             self.cached_versioner = None
             self.code_state = None
+            for hook in self._exit_hooks:
+                hook(self)
 
     
 
