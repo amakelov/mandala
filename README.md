@@ -7,18 +7,19 @@
   <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/> </a> | 
 <a href="#tutorials">Tutorials</a> |
 <a href="https://amakelov.github.io/mandala/">Docs</a> |
-<a href="#blogs">Blogs</a> |
+<a href="#blogs--papers">Blogs</a> |
 <a href="#testimonials">Testimonials</a> |
 </div>
 
 # Automatically save, query & version Python computations
 `mandala` eliminates the effort and code overhead of ML experiment tracking (and
-beyond) with two versatile tools:
+beyond) with two generic tools:
 
 1. The `@op` decorator:
-    - **Automatically captures inputs, outputs and code (+dependencies)** of Python function calls
-    - Automatically reuses past results & **never computes the same call twice**
-    - **Designed to be composed** into end-to-end persisted programs, enabling
+    - **captures inputs, outputs and code (+dependencies)** of Python
+    function calls
+    - automatically reuses past results & **never computes the same call twice**
+    - **designed to be composed** into end-to-end persisted programs, enabling
     efficient iterative development in plain-Python, without thinking about the
     storage backend.
 
@@ -30,13 +31,16 @@ beyond) with two versatile tools:
         The <a href="https://amakelov.github.io/mandala/blog/01_cf/">ComputationFrame</a> data structure:
         <ul>
         <li>
-            <strong>Automatically organizes executions of imperative code into a high-level computation graph of variables and operations</strong> by detecting patterns like feedback loops, branching/merging and aggregation/indexing
+            <strong>automatically organizes executions of imperative
+            code</strong> into a high-level computation graph of variables and
+            operations. Detects patterns like feedback loops, branching/merging
+            and aggregation/indexing
         </li>
         <li>
-            <strong>Automatically queries data</strong> by extracting a dataframe where columns are variables and operations in the graph, and each row contains values/calls of a (possibly partial) execution of the graph
+            <strong>queries relationships between variables</strong> by extracting a dataframe where columns are variables and operations in the graph, and each row contains values/calls of a (possibly partial) execution of the graph
         </li>
         <li>
-            <strong>Automates exploration, and high-level operations</strong> over heterogeneous "webs" of <code>@op</code> calls
+            <strong>automates exploration and high-level operations</strong> over heterogeneous "webs" of <code>@op</code> calls
         </li>
         </ul>
     </li>
@@ -48,7 +52,7 @@ beyond) with two versatile tools:
 
 ## Video demo
 A quick demo of how `ComputationFrame`s make code self-organize into high-level
-graphs that can automatically be turned into dataframes:
+graphs that are automatically be turned into dataframes:
 
 https://github.com/amakelov/mandala/assets/1467702/85185599-10fb-479e-bf02-442873732906
 
@@ -60,49 +64,48 @@ pip install git+https://github.com/amakelov/mandala
 # Tutorials 
 - Quickstart: <a href="https://colab.research.google.com/github/amakelov/mandala/blob/master/docs_source/tutorials/01_hello.ipynb"> 
   <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/> </a>
+- `ComputationFrame`s notebook: <a href="https://colab.research.google.com/github/amakelov/mandala/blob/master/docs_source/blog/01_cf.ipynb"> 
+  <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/> </a> 
 - Toy ML project: <a href="https://colab.research.google.com/github/amakelov/mandala/blob/master/docs_source/tutorials/02_ml.ipynb"> 
   <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/> </a>
 
-# Blogs
+# Blogs & papers
 - [Tidy Computations](https://amakelov.github.io/mandala/blog/01_cf/): introduces
 the `ComputationFrame` data structure and its applications
 - [Practical Dependency Tracking for Python Function
 Calls](https://amakelov.github.io/blog/deps/): describes the motivations and designs behind `mandala`'s dependency tracking system
-- [Mandala: Python Programs That Save, Query and Version Themselves](https://amakelov.github.io/blog/pl/): Overall summary of previous version. It holds for the current version except for the section titled "Pattern-matching queries"
-
-Also see the [paper](https://amakelov.github.io/scipy-mandala.pdf) which is to
+- The [paper](https://amakelov.github.io/scipy-mandala.pdf), which is to
 appear in the SciPy 2024 proceedings.
 
 # FAQs
 
 ## How is this different from other experiment tracking frameworks?
 Compared to popular tools like W&B, MLFlow or Comet, `mandala`:
-- **is tightly integrated with the actual Python code execution**, as
-opposed to being an external logging framework. This makes it much easier to
-compose and iterate on multi-step experiments with non-trivial control flow.
-    - For instance, Python's collections can be (if so desired) made
-    transparent to the storage system, so that individual elements are
-    stored separately and can be reused across collections and calls.
-- **is founded on memoization, which allows direct and transparent reuse of
-results**. 
-    - While in other frameworks you need to come up with arbitrary names
-for artifacts (which can later cause confusion)
-- **allows reuse, queries and versioning on a more granular and flexible
-level** - the function call - as opposed to entire scripts and/or notebooks.
-- **provides the `ComputationFrame` data structure**, a much more natural way to
-represent and manipulate persisted computations.
-- **automatically resolves the version of every `@op`** from the current state
-of the codebase.
+- **is integrated with the actual Python code execution on a more granular
+level**
+    - the function call is the synchronized unit of persistence, versioning and
+    querying, as opposed to an entire script or notebook, leading to more
+    efficient reuse and incremental development.
+    - going even further, Python collections (e.g. `list, dict`) can be made
+    transparent to the storage system, so that individual elements are stored
+    and tracked separately and can be reused across collections and calls.
+    - since it's memoization-based as opposed to logging-based, you don't have
+    to think about how to name any of the things you log.
+- **provides the `ComputationFrame` data structure**, a powerful & simple way to
+represent, query and manipulate complex saved computations.
+- **automatically resolves the version of every `@op` call** from the current
+state of the codebase and the inputs to the call.
 
 ## How is the `@op` cache invalidated?
 - given inputs for a call to an `@op`, e.g. `f`, it searches for a past call
 to `f` on inputs with the same contents (as determined by a hash function) where the dependencies accessed by this call (including `f`
 itself) have versions compatible with their current state.
 - compatibility between versions of a function is decided by the user: you
-have the freedom to mark certain changes as compatible with past results.
+have the freedom to mark certain changes as compatible with past results, though
+see the [limitations](#limitations) about marking changes as compatible.
 - internally, `mandala` uses slightly modified `joblib` hashing to compute a
 content hash for Python objects. This is practical for many use cases, but
-not perfect, as discussed in the "gotchas" notebook TODO.
+not perfect, as discussed in the [limitations](#limitations) section.
 
 ## Can I change the code of `@op`s, and what happens if I do?
 - a frequent use case: you have some `@op` you've been using, then want to
@@ -111,14 +114,23 @@ The recommended way is to add a new argument `a`, and provide a default
 value for it wrapped with `NewArgDefault(x)`. When a value equal to `x` is
 passed for this argument, the storage falls back on calls before 
 
+## Is it production-ready?
+- `mandala` is in alpha, and the API is subject to change.
+- moreover, there are known performance bottlenecks that may make working with 
+storages of 10k+ calls slow.
+
 ## How self-contained is it?
-- `mandala`'s core is simple (only a few kLoCs) and only depends on `pandas`
-and `joblib`. 
+- `mandala`'s core is a few kLoCs and only depends on `pandas` and `joblib`. 
 - for visualization of `ComputationFrame`s, you should have `dot` installed
 on the system level, and/or the Python `graphviz` library installed.
 
 # Limitations
-See the "gotchas" notebook: <a href="https://colab.research.google.com/github/amakelov/mandala/blob/master/docs_source/tutorials/gotchas.ipynb"> 
+- When using versioning and you mark a change as compatible with past results,
+you should be careful if the change introduced new dependencies that are not
+tracked by `mandala`. Changes to such "invisible" dependencies may remain 
+unnoticed by the storage system, leading you to believe that certain results 
+are up to date when they are not.
+- See the "gotchas" notebook for some limitations of the hashing used to invalidate the cache: <a href="https://colab.research.google.com/github/amakelov/mandala/blob/master/docs_source/tutorials/gotchas.ipynb"> 
   <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/> </a>
 
 # Roadmap for future features
@@ -141,7 +153,7 @@ See the "gotchas" notebook: <a href="https://colab.research.google.com/github/am
 
 **Versioning**
 - [ ] support restricting CFs by function versions
-- [ ] support ways to manually add dependencies to versions 
+- [ ] support ways to manually add dependencies to versions in order to avoid the "invisible dependency" problem
 
 **Performance**
 - [ ] improve performance of the in-memory cache

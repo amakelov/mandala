@@ -33,9 +33,9 @@ class Ref:
     def __repr__(self) -> str:
         if self.in_memory:
             obj_repr = repr(self.obj)
-            return f"Ref({obj_repr}, hid='{self.hid[:3]}...', cid='{self.cid[:3]}...')"
+            return f"Ref({obj_repr}, hid={self.hid[:3]}...)"
         else:
-            return f"Ref(hid='{self.hid[:3]}...', cid='{self.cid[:3]}...', in_memory={self.in_memory})"
+            return f"Ref(hid={self.hid[:3]}..., in_memory={self.in_memory})"
 
     def __hash__(self) -> int:
         return hash(self.hid)
@@ -219,7 +219,7 @@ class Call:
         self.content_version = content_version
 
     def __repr__(self) -> str:
-        return f"Call({self.op.name}, cid='{self.cid[:3]}...', hid='{self.hid[:3]}...')"
+        return f"Call({self.op.name}, hid={self.hid[:3]}...)"
 
     def detached(self) -> "Call":
         """
