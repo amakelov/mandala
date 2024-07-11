@@ -8,7 +8,7 @@
 <a href="#tutorials">Tutorials</a> |
 <a href="https://amakelov.github.io/mandala/">Docs</a> |
 <a href="#blogs--papers">Blogs</a> |
-<a href="#faqs">FAQs</a> |
+<a href="#faqs">FAQs</a>
 </div>
 
 # Automatically save, query & version Python computations
