@@ -9,12 +9,12 @@
 <g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 90)">
 <title>G</title>
 <polygon fill="white" stroke="transparent" points="-4,4 -4,-90 752,-90 752,4 -4,4"/>
-<!-- y -->
+<!-- x -->
 <g id="node1" class="node">
-<title>y</title>
-<path fill="none" stroke="#268bd2" stroke-width="1.5" d="M428,-40C428,-40 358,-40 358,-40 352,-40 346,-34 346,-28 346,-28 346,-16 346,-16 346,-10 352,-4 358,-4 358,-4 428,-4 428,-4 434,-4 440,-10 440,-16 440,-16 440,-28 440,-28 440,-34 434,-40 428,-40"/>
-<text text-anchor="start" x="389.5" y="-24.4" font-family="Liberation Sans,Helvetica,Arial,sans-serif" font-weight="bold" font-size="12.00" fill="#002b36">y</text>
-<text text-anchor="start" x="354" y="-14" font-family="Liberation Sans,Helvetica,Arial,sans-serif" font-size="10.00" fill="#268bd2">5 values (2 sinks)</text>
+<title>x</title>
+<path fill="none" stroke="#268bd2" stroke-width="1.5" d="M93,-62C93,-62 12,-62 12,-62 6,-62 0,-56 0,-50 0,-50 0,-38 0,-38 0,-32 6,-26 12,-26 12,-26 93,-26 93,-26 99,-26 105,-32 105,-38 105,-38 105,-50 105,-50 105,-56 99,-62 93,-62"/>
+<text text-anchor="start" x="49" y="-46.4" font-family="Liberation Sans,Helvetica,Arial,sans-serif" font-weight="bold" font-size="12.00" fill="#002b36">x</text>
+<text text-anchor="start" x="8" y="-36" font-family="Liberation Sans,Helvetica,Arial,sans-serif" font-size="10.00" fill="#268bd2">5 values (5 sources)</text>
 </g>
 <!-- add -->
 <g id="node4" class="node">
@@ -23,28 +23,6 @@
 <text text-anchor="start" x="536" y="-52.4" font-family="Liberation Sans,Helvetica,Arial,sans-serif" font-weight="bold" font-size="12.00" fill="#002b36">add</text>
 <text text-anchor="start" x="527" y="-42" font-family="Liberation Sans,Helvetica,Arial,sans-serif" font-size="10.00" fill="#002b36">@op:add</text>
 <text text-anchor="start" x="532.5" y="-32" font-family="Liberation Sans,Helvetica,Arial,sans-serif" font-size="10.00" fill="#dc322f">3 calls</text>
-</g>
-<!-- y&#45;&gt;add -->
-<g id="edge4" class="edge">
-<title>y&#45;&gt;add</title>
-<path fill="none" stroke="#002b36" d="M440.09,-24.4C459.07,-25.88 481.2,-28.25 501,-32 503.52,-32.48 506.1,-33.03 508.68,-33.64"/>
-<polygon fill="#002b36" stroke="#002b36" points="508.03,-37.09 518.59,-36.2 509.78,-30.31 508.03,-37.09"/>
-<text text-anchor="middle" x="479.5" y="-46" font-family="Liberation Sans,Helvetica,Arial,sans-serif" font-size="10.00" fill="#002b36">y</text>
-<text text-anchor="middle" x="479.5" y="-35" font-family="Liberation Sans,Helvetica,Arial,sans-serif" font-size="10.00" fill="#002b36">(3 values)</text>
-</g>
-<!-- w -->
-<g id="node2" class="node">
-<title>w</title>
-<path fill="none" stroke="#268bd2" stroke-width="1.5" d="M736,-63C736,-63 666,-63 666,-63 660,-63 654,-57 654,-51 654,-51 654,-39 654,-39 654,-33 660,-27 666,-27 666,-27 736,-27 736,-27 742,-27 748,-33 748,-39 748,-39 748,-51 748,-51 748,-57 742,-63 736,-63"/>
-<text text-anchor="start" x="696" y="-47.4" font-family="Liberation Sans,Helvetica,Arial,sans-serif" font-weight="bold" font-size="12.00" fill="#002b36">w</text>
-<text text-anchor="start" x="662" y="-37" font-family="Liberation Sans,Helvetica,Arial,sans-serif" font-size="10.00" fill="#268bd2">3 values (3 sinks)</text>
-</g>
-<!-- x -->
-<g id="node3" class="node">
-<title>x</title>
-<path fill="none" stroke="#268bd2" stroke-width="1.5" d="M93,-62C93,-62 12,-62 12,-62 6,-62 0,-56 0,-50 0,-50 0,-38 0,-38 0,-32 6,-26 12,-26 12,-26 93,-26 93,-26 99,-26 105,-32 105,-38 105,-38 105,-50 105,-50 105,-56 99,-62 93,-62"/>
-<text text-anchor="start" x="49" y="-46.4" font-family="Liberation Sans,Helvetica,Arial,sans-serif" font-weight="bold" font-size="12.00" fill="#002b36">x</text>
-<text text-anchor="start" x="8" y="-36" font-family="Liberation Sans,Helvetica,Arial,sans-serif" font-size="10.00" fill="#268bd2">5 values (5 sources)</text>
 </g>
 <!-- x&#45;&gt;add -->
 <g id="edge3" class="edge">
@@ -69,6 +47,28 @@
 <polygon fill="#002b36" stroke="#002b36" points="174.4,-28.91 183.93,-24.29 173.6,-21.96 174.4,-28.91"/>
 <text text-anchor="middle" x="144.5" y="-46" font-family="Liberation Sans,Helvetica,Arial,sans-serif" font-size="10.00" fill="#002b36">x</text>
 <text text-anchor="middle" x="144.5" y="-35" font-family="Liberation Sans,Helvetica,Arial,sans-serif" font-size="10.00" fill="#002b36">(5 values)</text>
+</g>
+<!-- w -->
+<g id="node2" class="node">
+<title>w</title>
+<path fill="none" stroke="#268bd2" stroke-width="1.5" d="M736,-63C736,-63 666,-63 666,-63 660,-63 654,-57 654,-51 654,-51 654,-39 654,-39 654,-33 660,-27 666,-27 666,-27 736,-27 736,-27 742,-27 748,-33 748,-39 748,-39 748,-51 748,-51 748,-57 742,-63 736,-63"/>
+<text text-anchor="start" x="696" y="-47.4" font-family="Liberation Sans,Helvetica,Arial,sans-serif" font-weight="bold" font-size="12.00" fill="#002b36">w</text>
+<text text-anchor="start" x="662" y="-37" font-family="Liberation Sans,Helvetica,Arial,sans-serif" font-size="10.00" fill="#268bd2">3 values (3 sinks)</text>
+</g>
+<!-- y -->
+<g id="node3" class="node">
+<title>y</title>
+<path fill="none" stroke="#268bd2" stroke-width="1.5" d="M428,-40C428,-40 358,-40 358,-40 352,-40 346,-34 346,-28 346,-28 346,-16 346,-16 346,-10 352,-4 358,-4 358,-4 428,-4 428,-4 434,-4 440,-10 440,-16 440,-16 440,-28 440,-28 440,-34 434,-40 428,-40"/>
+<text text-anchor="start" x="389.5" y="-24.4" font-family="Liberation Sans,Helvetica,Arial,sans-serif" font-weight="bold" font-size="12.00" fill="#002b36">y</text>
+<text text-anchor="start" x="354" y="-14" font-family="Liberation Sans,Helvetica,Arial,sans-serif" font-size="10.00" fill="#268bd2">5 values (2 sinks)</text>
+</g>
+<!-- y&#45;&gt;add -->
+<g id="edge4" class="edge">
+<title>y&#45;&gt;add</title>
+<path fill="none" stroke="#002b36" d="M440.09,-24.4C459.07,-25.88 481.2,-28.25 501,-32 503.52,-32.48 506.1,-33.03 508.68,-33.64"/>
+<polygon fill="#002b36" stroke="#002b36" points="508.03,-37.09 518.59,-36.2 509.78,-30.31 508.03,-37.09"/>
+<text text-anchor="middle" x="479.5" y="-46" font-family="Liberation Sans,Helvetica,Arial,sans-serif" font-size="10.00" fill="#002b36">y</text>
+<text text-anchor="middle" x="479.5" y="-35" font-family="Liberation Sans,Helvetica,Arial,sans-serif" font-size="10.00" fill="#002b36">(3 values)</text>
 </g>
 <!-- add&#45;&gt;w -->
 <g id="edge5" class="edge">

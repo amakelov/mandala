@@ -82,7 +82,7 @@ with storage:
     Loading data
     Training model
     Getting accuracy
-    AtomRef(0.99, hid='d16...', cid='12a...')
+    AtomRef(1.0, hid=d16...)
 
 
 ## Retracing your steps with memoization
@@ -101,9 +101,9 @@ with storage:
     print(acc)
 ```
 
-    AtomRef(hid='d0f...', cid='908...', in_memory=False) AtomRef(hid='f1a...', cid='69f...', in_memory=False)
-    AtomRef(hid='caf...', cid='e85...', in_memory=False)
-    AtomRef(hid='d16...', cid='12a...', in_memory=False)
+    AtomRef(hid=d0f..., in_memory=False) AtomRef(hid=f1a..., in_memory=False)
+    AtomRef(hid=caf..., in_memory=False)
+    AtomRef(hid=d16..., in_memory=False)
 
 
 This puts all the `Ref`s along the way in your local variables (as if you've
@@ -118,7 +118,7 @@ storage.unwrap(acc)
 
 
 
-    0.99
+    1.0
 
 
 
@@ -140,17 +140,17 @@ with storage:
             print(acc)
 ```
 
-    AtomRef(hid='d16...', cid='12a...', in_memory=False)
+    AtomRef(hid=d16..., in_memory=False)
     Training model
     Getting accuracy
-    AtomRef(1.0, hid='6fd...', cid='b67...')
+    AtomRef(1.0, hid=6fd...)
     Loading data
     Training model
     Getting accuracy
-    AtomRef(0.87, hid='158...', cid='fce...')
+    AtomRef(0.88, hid=158...)
     Training model
     Getting accuracy
-    AtomRef(0.85, hid='214...', cid='302...')
+    AtomRef(0.88, hid=214...)
 
 
 Note that the first value of `acc` from the nested loop is with
@@ -178,7 +178,7 @@ with storage:
                 print(n_class, n_estimators, storage.unwrap(acc))
 ```
 
-    2 5 0.99
+    2 5 1.0
     2 10 1.0
 
 
@@ -198,5 +198,5 @@ with storage:
             print(storage.unwrap(acc), storage.unwrap(model))
 ```
 
-    0.87 RandomForestClassifier(max_depth=2, n_estimators=5)
+    0.88 RandomForestClassifier(max_depth=2, n_estimators=5)
 

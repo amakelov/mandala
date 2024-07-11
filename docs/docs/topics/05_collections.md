@@ -78,9 +78,9 @@ We can observe this by taking the dataframe of the above CF:
 print(cf.df(values='objs').to_markdown())
 ```
 
-    |    | elts                             | __make_list__                                   | nums            | average                                   |   var_0 |
-    |---:|:---------------------------------|:------------------------------------------------|:----------------|:------------------------------------------|--------:|
-    |  0 | ValueCollection([2, 4, 1, 3, 5]) | Call(__make_list__, cid='3f6...', hid='172...') | [1, 2, 3, 4, 5] | Call(average, cid='445...', hid='38e...') |       3 |
+    |    | elts                             | __make_list__                   | nums            | average                   |   var_0 |
+    |---:|:---------------------------------|:--------------------------------|:----------------|:--------------------------|--------:|
+    |  0 | ValueCollection([2, 4, 1, 3, 5]) | Call(__make_list__, hid=172...) | [1, 2, 3, 4, 5] | Call(average, hid=38e...) |       3 |
 
 
 There's only a single row, but in the `elts` column we see a `ValueCollection`

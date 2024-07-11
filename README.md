@@ -51,8 +51,8 @@ beyond) with two generic tools:
 </table>
 
 ## Video demo
-A quick demo of how `ComputationFrame`s make code self-organize into high-level
-graphs that are automatically be turned into dataframes:
+A quick demo of running computations in `mandala` and simultaneously updating a view of the corresponding `ComputationFrame` and the dataframe extracted from it (code can
+be found [here](https://github.com/amakelov/mandala/blob/master/_demos/cf_vid.ipynb)):
 
 https://github.com/amakelov/mandala/assets/1467702/85185599-10fb-479e-bf02-442873732906
 

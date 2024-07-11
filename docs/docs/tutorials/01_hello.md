@@ -130,13 +130,13 @@ value/call is present:
 print(cf.df().to_markdown())
 ```
 
-    |    |   x | inc                                   |   var_0 | add                                   |   var_1 |
-    |---:|----:|:--------------------------------------|--------:|:--------------------------------------|--------:|
-    |  0 |   0 | Call(inc, cid='355...', hid='52f...') |       1 | Call(add, cid='16b...', hid='38e...') |       1 |
-    |  1 |   3 | Call(inc, cid='56b...', hid='f62...') |       4 |                                       |     nan |
-    |  2 |   1 | Call(inc, cid='9d3...', hid='66c...') |       2 |                                       |     nan |
-    |  3 |   2 | Call(inc, cid='c38...', hid='ec7...') |       3 | Call(add, cid='bbb...', hid='d3f...') |       5 |
-    |  4 |   4 | Call(inc, cid='16b...', hid='f05...') |       5 | Call(add, cid='2ee...', hid='5f0...') |       9 |
+    |    |   x | inc                   |   var_0 | add                   |   var_1 |
+    |---:|----:|:----------------------|--------:|:----------------------|--------:|
+    |  0 |   3 | Call(inc, hid=f62...) |       4 |                       |     nan |
+    |  1 |   2 | Call(inc, hid=ec7...) |       3 | Call(add, hid=d3f...) |       5 |
+    |  2 |   4 | Call(inc, hid=f05...) |       5 | Call(add, hid=5f0...) |       9 |
+    |  3 |   0 | Call(inc, hid=52f...) |       1 | Call(add, hid=38e...) |       1 |
+    |  4 |   1 | Call(inc, hid=66c...) |       2 |                       |     nan |
 
 
 ## Automatic per-call versioning w/ dependency tracking

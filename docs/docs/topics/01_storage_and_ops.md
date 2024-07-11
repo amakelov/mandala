@@ -64,7 +64,7 @@ with storage: # all `@op` calls inside this block use `storage`
     print(s)
 ```
 
-    AtomRef(42, hid='168...', cid='d92...')
+    AtomRef(42, hid=168...)
 
 
 This code runs the call to `sum_args`, and saves the inputs and outputs in the
@@ -106,7 +106,7 @@ with storage:
     print(s)
 ```
 
-    AtomRef(hid='168...', cid='d92...', in_memory=False)
+    AtomRef(hid=168..., in_memory=False)
 
 
 To get the object wrapped by a `Ref`, call `storage.unwrap`:
@@ -136,8 +136,8 @@ print(storage.attach(obj=s, inplace=False))
 print(storage.load_ref(s.hid))
 ```
 
-    AtomRef(42, hid='168...', cid='d92...')
-    AtomRef(42, hid='168...', cid='d92...')
+    AtomRef(42, hid=168...)
+    AtomRef(42, hid=168...)
 
 
 ## Working with `Call` objects
@@ -162,18 +162,18 @@ display(call.inputs)
 display(call.outputs)
 ```
 
-    Call(sum_args, cid='e91...', hid='f99...')
+    Call(sum_args, hid=f99...)
 
 
 
-    {'a': AtomRef(hid='c6a...', cid='489...', in_memory=False),
-     'args_0': AtomRef(hid='e0f...', cid='2da...', in_memory=False),
-     'args_1': AtomRef(hid='479...', cid='f2c...', in_memory=False),
-     'args_2': AtomRef(hid='c37...', cid='81a...', in_memory=False),
-     'b': AtomRef(hid='610...', cid='366...', in_memory=False),
-     'c': AtomRef(hid='a33...', cid='c84...', in_memory=False)}
+    {'a': AtomRef(hid=c6a..., in_memory=False),
+     'args_0': AtomRef(hid=e0f..., in_memory=False),
+     'args_1': AtomRef(hid=479..., in_memory=False),
+     'args_2': AtomRef(hid=c37..., in_memory=False),
+     'b': AtomRef(hid=610..., in_memory=False),
+     'c': AtomRef(hid=a33..., in_memory=False)}
 
 
 
-    {'output_0': AtomRef(hid='168...', cid='d92...', in_memory=False)}
+    {'output_0': AtomRef(hid=168..., in_memory=False)}
 
