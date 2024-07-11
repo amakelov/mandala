@@ -8,6 +8,8 @@ def get_mandala_path() -> Path:
 class Config:
     func_interface_cls_name = "Op"
     mandala_path = get_mandala_path()
+    module_name = "mandala"
+    tests_module_name = "mandala.tests"
 
     try:
         import PIL

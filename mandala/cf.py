@@ -352,7 +352,8 @@ class ComputationFrame:
             if hid in self.consumers:
                 del self.consumers[hid]
         else:  # if there are other variables containing the ref
-            self.refinv[hid].remove(vname)
+            if vname in self.refinv[hid]:
+                self.refinv[hid].remove(vname)
 
     def add_call(self, fname: str, call: Call, with_refs: bool, allow_existing: bool = False):
         if call.hid in self.fs[fname]:
@@ -1978,10 +1979,10 @@ class ComputationFrame:
         if not res.sets[node_to_merge] <= res.sets[merge_into]:
             for hid in res.sets[node_to_merge] - res.sets[merge_into]:
                 self.move_ref(node_to_merge, merge_into, hid, inplace=True)
-        for hid in res.sets[node_to_merge]:
-            # remove from the refinv
-            if node_to_merge in res.refinv[hid]:
-                res.refinv[hid].remove(node_to_merge)
+        # for hid in res.sets[node_to_merge]:
+        #     # remove from the refinv
+        #     if node_to_merge in res.refinv[hid]:
+        #         res.refinv[hid].remove(node_to_merge)
         ### then, update the graph
         for src, dst, label in res.in_edges(node_to_merge):
             res._drop_edge(src, dst, label)
@@ -1990,6 +1991,33 @@ class ComputationFrame:
             res._drop_edge(src, dst, label)
             res._add_edge(merge_into, dst, label, allow_existing=True)
         res.drop_node(node_to_merge, inplace=True)
+        return res if not inplace else None
+    
+    def merge_vars(self, inplace: bool = False) -> Optional["ComputationFrame"]:
+        """
+        If variables are found that have an intersection, merge the smaller
+        into the larger until no such intersections are found.
+        """
+        res = self if inplace else self.copy()
+        current_size = len(res.vs)
+        while True:
+            found = False
+            for v1 in list(res.vs):
+                for v2 in list(res.vs):
+                    if v1 == v2:
+                        continue
+                    if res.vs[v1] <= res.vs[v2] and len(res.vs[v1]) < len(res.vs[v2]):
+                        res.merge_into(v1, v2, inplace=True)
+                        found = True
+                    if found:
+                        break
+                if found:
+                    break
+            new_size = len(res.vs)
+            if new_size == current_size:
+                break
+            else:
+                current_size = new_size
         return res if not inplace else None
 
     def merge(self, vars: Set[str], new_name: Optional[str] = None) -> str:

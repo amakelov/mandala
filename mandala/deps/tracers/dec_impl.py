@@ -140,10 +140,10 @@ def track(obj: Union[types.FunctionType, type]) -> "obj":
         )
         return wrapper
     elif type(obj).__name__ == Config.func_interface_cls_name:
-        obj.func_op.func = make_tracked_copy(f=obj.func_op.func)
+        obj.f = make_tracked_copy(f=obj.f)
         TracerState.registry[
-            (obj.func_op.func.__module__, obj.func_op.func.__qualname__)
-        ] = obj.func_op.func
+            (obj.f.__module__, obj.f.__qualname__)
+        ] = obj.f
         return obj
     else:
         raise TypeError("Can only track callable objects")

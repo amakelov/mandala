@@ -52,7 +52,6 @@ class Storage:
         else:
             current_versioner = self.sources['versioner']
 
-        # self.version_adapter = VersionAdapter(rel_adapter=self.rel_adapter)
         if deps_path is not None:
             deps_path = (
                 Path(deps_path).absolute().resolve()
@@ -75,7 +74,6 @@ class Storage:
                     track_methods=True,
                     package_name=deps_package,
                 )
-                # self.version_adapter.dump_state(state=versioner)
                 self.sources["versioner"] = versioner
         else:
             self._versioned = False
@@ -929,7 +927,7 @@ class Storage:
             is_semantic_change=is_semantic_change,
             code_state=code_state,
         )
-        self.version_adapter.dump_state(state=versioner, conn=conn)
+        self.sources["versioned"] = versioner
         return result
 
     @transaction
