@@ -8,7 +8,7 @@
 <a href="#tutorials">Tutorials</a> |
 <a href="https://amakelov.github.io/mandala/">Docs</a> |
 <a href="#blogs--papers">Blogs</a> |
-<a href="#testimonials">Testimonials</a> |
+<a href="#faqs">FAQs</a> |
 </div>
 
 # Automatically save, query & version Python computations
@@ -146,8 +146,9 @@ are up to date when they are not.
 - [ ] support for inputs/outputs to exclude from the storage
 
 **Computation frames**
+- [x] add support for cycles in the computation graph
+- [ ] improve heuristics for the `expand_...` methods
 - [ ] add tools for restricting a CF to specific subsets of variable values via predicates
-- [ ] add support for cycles in the computation graph
 - [ ] improve support & examples for using collections
 - [ ] add support for merging or splitting nodes in the CF and similar simplifications
 
@@ -158,12 +159,6 @@ are up to date when they are not.
 **Performance**
 - [ ] improve performance of the in-memory cache
 - [ ] improve performance of `ComputationFrame` operations
-
-# Testimonials
-
-> "`mandala` addresses a core challenge in my notebook workflow: being able to
-> explore data with code, without having to worry about losing the results of
-> expensive calculations." - *Adam Jermyn, Member of Technical Staff, Anthropic*
 
 # Galaxybrained vision
 Aspirationally, `mandala` is about much more than ML experiment tracking. The
