@@ -114,6 +114,9 @@ extend its functionality in a way that doesn't invalidate the past results.
 The recommended way is to add a new argument `a`, and provide a default
 value for it wrapped with `NewArgDefault(x)`. When a value equal to `x` is
 passed for this argument, the storage falls back on calls before 
+- beyond changes like this, you probably want to use the versioning system to
+detect dependencies of `@op`s and changes to them. See the
+[documentation](https://amakelov.github.io/mandala/topics/04_versions/).
 
 ## Is it production-ready?
 - `mandala` is in alpha, and the API is subject to change.
