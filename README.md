@@ -76,6 +76,7 @@ the `ComputationFrame` data structure and its applications
 Calls](https://amakelov.github.io/blog/deps/): describes the motivations and designs behind `mandala`'s dependency tracking system
 - The [paper](https://amakelov.github.io/scipy-mandala.pdf), which is to
 appear in the SciPy 2024 proceedings.
+- A [discussion on Hacker News](https://news.ycombinator.com/item?id=40940181)
 
 # FAQs
 
@@ -186,6 +187,9 @@ these questions.
 `mandala` combines ideas from, and shares similarities with, many technologies.
 Here are some useful points of comparison:
 - **memoization**: 
+  - the [`provenance`](https://github.com/bmabey/provenance) library is quite
+  similar to the memoization part of `mandala`, but lacks the querying and
+  dependency tracking features.
   - standard Python memoization solutions are [`joblib.Memory`](https://joblib.readthedocs.io/en/latest/generated/joblib.Memory.html)
   and
   [`functools.lru_cache`](https://docs.python.org/3/library/functools.html#functools.lru_cache).
