@@ -3,7 +3,7 @@
     <img src="assets/logo-no-background.png" height=128 alt="logo" align="center">
   <br>
 <a href="#install">Install</a> |
-<a href="https://colab.research.google.com/github/amakelov/mandala/blob/master/docs_source/tutorials/01_hello.ipynb"> Quickstart 
+<a href="https://colab.research.google.com/github/amakelov/mandala/blob/master/docs_source/tutorials/01_hello.ipynb">
   <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/> </a> | 
 <a href="#tutorials">Tutorials</a> |
 <a href="https://amakelov.github.io/mandala/">Docs</a> |
@@ -63,11 +63,11 @@ pip install git+https://github.com/amakelov/mandala
 
 # Tutorials 
 - Quickstart: <a href="https://colab.research.google.com/github/amakelov/mandala/blob/master/docs_source/tutorials/01_hello.ipynb"> 
-  <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/> </a>
-- `ComputationFrame`s notebook: <a href="https://colab.research.google.com/github/amakelov/mandala/blob/master/docs_source/blog/01_cf.ipynb"> 
-  <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/> </a> 
+  <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/> </a> | [read in docs](https://amakelov.github.io/mandala/tutorials/01_hello/)
+- `ComputationFrame`s: <a href="https://colab.research.google.com/github/amakelov/mandala/blob/master/docs_source/blog/01_cf.ipynb"> 
+  <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/> </a>  | [read in docs](https://amakelov.github.io/mandala/blog/01_cf/)
 - Toy ML project: <a href="https://colab.research.google.com/github/amakelov/mandala/blob/master/docs_source/tutorials/02_ml.ipynb"> 
-  <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/> </a>
+  <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/> </a> | [read in docs](https://amakelov.github.io/mandala/tutorials/02_ml/)
 
 # Blogs & papers
 - [Tidy Computations](https://amakelov.github.io/mandala/blog/01_cf/): introduces
