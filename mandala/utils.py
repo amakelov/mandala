@@ -2,13 +2,20 @@ from .common_imports import *
 import joblib
 import io
 import inspect
-import prettytable
 import sqlite3
 from .config import *
 from abc import ABC, abstractmethod
 from typing import Hashable, TypeVar
+if Config.has_prettytable:
+    import prettytable
 
 def dataframe_to_prettytable(df: pd.DataFrame) -> str:
+    if not Config.has_prettytable:
+        # fallback to pandas printing
+        logger.info(
+            "Install the 'prettytable' package to get prettier tables in the console."
+        )
+        return df.to_string()
     # Initialize a PrettyTable object
     table = prettytable.PrettyTable()
     

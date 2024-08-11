@@ -31,6 +31,13 @@ class Config:
         has_rich = True
     except ImportError:
         has_rich = False
+    
+    try:
+        import prettytable
+
+        has_prettytable = True
+    except ImportError:
+        has_prettytable = False
 
 
 if Config.has_torch:

@@ -208,7 +208,7 @@ class DecTracer(TracerABC):
         )
         if len(closure_names) > 0:
             msg = f"Found closure variables accessed by function {module_name}.{qualname}:\n{closure_names}"
-            raise ValueError(msg)
+            self._process_failure(msg)
         ### get call node
         node = CallableNode.from_runtime(
             module_name=module_name, obj_name=qualname, code_obj=extract_code(obj=func)
@@ -269,3 +269,9 @@ class DecTracer(TracerABC):
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         DecTracer.set_active_trace_obj(None)
+
+    def _process_failure(self, msg: str):
+        if self.strict:
+            raise RuntimeError(msg)
+        else:
+            logger.warning(msg)

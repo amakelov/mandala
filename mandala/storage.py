@@ -1,6 +1,5 @@
 from .common_imports import *
 from tqdm import tqdm
-import prettytable
 import datetime
 from .model import *
 import sqlite3
@@ -26,6 +25,7 @@ class Storage:
     def __init__(self, db_path: str = ":memory:", 
                  deps_path: Optional[Union[str, Path]] = None,
                  tracer_impl: Optional[type] = None,
+                 strict_tracing: bool = True,
                  deps_package: Optional[str] = None,
                  ):
         self.db = DBAdapter(db_path=db_path)
@@ -70,7 +70,7 @@ class Storage:
                 versioner = Versioner(
                     paths=roots,
                     TracerCls=DecTracer if tracer_impl is None else tracer_impl,
-                    strict=True,
+                    strict=strict_tracing,
                     track_methods=True,
                     package_name=deps_package,
                 )

@@ -1,5 +1,6 @@
 from .common_imports import *
 from .common_imports import sess
+from .config import Config
 import textwrap
 import pprint
 from .utils import (
@@ -19,6 +20,10 @@ from .utils import (
 from .model import Call, Ref, Op, __make_list__, RefCollection, CallCollection
 
 from .viz import Node, Edge, SOLARIZED_LIGHT, to_dot_string, write_output
+
+if Config.has_prettytable:
+    import prettytable
+from io import StringIO
 
 
 def get_name_proj(op: Op) -> Callable[[str], str]:
@@ -2340,8 +2345,12 @@ class ComputationFrame:
         return pd.DataFrame(rows)
 
     def _get_prettytable_str(self, df: pd.DataFrame) -> str:
-        import prettytable
-        from io import StringIO
+        if not Config.has_prettytable:
+            # fallback
+            logger.info(
+                "Install the `prettytable` package to get a prettier output for the `info` method."
+            )
+            return str(df)
 
         output = StringIO()
         df.to_csv(output, index=False)
