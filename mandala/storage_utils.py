@@ -190,6 +190,9 @@ class CachedDictStorage(DictStorage):
         self.dirty_keys.add(key)
 
     def commit(self, conn: Optional[sqlite3.Connection] = None) -> None:
+        """
+        Persist the values of all dirty keys and clear them
+        """
         for key in self.dirty_keys:
             self.persistent.set(key, self.cache[key], conn=conn)
         self.dirty_keys.clear()

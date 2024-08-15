@@ -136,6 +136,8 @@ class Storage:
             self.atoms.commit(conn=conn)
             self.shapes.commit(conn=conn)
             self.ops.commit(conn=conn)
+            if self.versioned:
+                self.sources.commit(conn=conn)
             self.calls.commit(conn=conn)
 
 
@@ -1120,6 +1122,7 @@ class Storage:
         finally:
             self.cached_versioner = None
             self.code_state = None
+
             for hook in self._exit_hooks:
                 hook(self)
 

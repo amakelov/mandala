@@ -8,7 +8,7 @@ install_requires = [
 ]
 
 extras_require = {
-    "base": [],
+    "base": ["prettytable", "graphviz"],
     "ui": [
         "rich",
     ],
