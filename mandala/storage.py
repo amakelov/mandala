@@ -137,7 +137,7 @@ class Storage:
             self.shapes.commit(conn=conn)
             self.ops.commit(conn=conn)
             if self.versioned:
-                self.sources.commit(conn=conn)
+                self.sources.persistent.set(key='versioner', value=self.sources.cache['versioner'], conn=conn)
             self.calls.commit(conn=conn)
 
 
