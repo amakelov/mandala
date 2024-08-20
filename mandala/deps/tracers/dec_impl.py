@@ -192,20 +192,28 @@ class DecTracer(TracerABC):
         TracerState.tracer = trace_obj
 
     def get_globals(self, func: Callable) -> List[GlobalVarNode]:
-        result = []
-        code_obj = extract_code(obj=func)
-        global_scope = extract_func_obj(obj=func, strict=self.strict).__globals__
-        for name in get_global_names_candidates(code=code_obj):
-            # names used by the function; not all of them are global variables
-            if name in global_scope.keys():
-                global_val = global_scope[name]
-                if not is_global_val(global_val):
-                    continue
-                node = GlobalVarNode.from_obj(
-                    obj=global_val, dep_key=(func.__module__, name)
-                )
-                result.append(node)
-        return result
+        """
+        Get the global variables available to the function as a list of
+        GlobalVarNode objects. 
+
+        Currently, this is not used, because it doesn't really track accesses
+        to globals, and can thus over-estimate the dependencies of a function.
+        """
+        # result = []
+        # code_obj = extract_code(obj=func)
+        # global_scope = extract_func_obj(obj=func, strict=self.strict).__globals__
+        # for name in get_global_names_candidates(code=code_obj):
+        #     # names used by the function; not all of them are global variables
+        #     if name in global_scope.keys():
+        #         global_val = global_scope[name]
+        #         if not is_global_val(global_val):
+        #             continue
+        #         node = GlobalVarNode.from_obj(
+        #             obj=global_val, dep_key=(func.__module__, name)
+        #         )
+        #         result.append(node)
+        # return result
+        return []
 
     def register_call(self, func: Callable) -> CallableNode:
         module_name = func.__module__
@@ -216,7 +224,7 @@ class DecTracer(TracerABC):
         )
         if len(closure_names) > 0:
             msg = f"Found closure variables accessed by function {module_name}.{qualname}:\n{closure_names}"
-            self._process_failure(msg)
+            self._process_failure(msg, level='debug')
         ### get call node
         node = CallableNode.from_runtime(
             module_name=module_name, obj_name=qualname, code_obj=extract_code(obj=func)
@@ -278,8 +286,11 @@ class DecTracer(TracerABC):
     def __exit__(self, exc_type, exc_val, exc_tb):
         DecTracer.set_active_trace_obj(None)
 
-    def _process_failure(self, msg: str):
+    def _process_failure(self, msg: str, level: str = 'warning'):
         if self.strict:
             raise RuntimeError(msg)
         else:
-            logger.warning(msg)
+            if level == 'warning':
+                logger.warning(msg)
+            elif level == 'debug':
+                logger.debug(msg)

@@ -9,6 +9,7 @@ from .viz import _get_colorized_diff
 from .deps.versioner import Versioner, CodeState
 from .deps.utils import get_dep_key_from_func, extract_func_obj
 from .deps.tracers import DecTracer, SysTracer, TracerABC
+from .deps.tracers.dec_impl import track
 
 from .storage_utils import (
     DBAdapter,
@@ -25,7 +26,7 @@ class Storage:
     def __init__(self, db_path: str = ":memory:", 
                  deps_path: Optional[Union[str, Path]] = None,
                  tracer_impl: Optional[type] = None,
-                 strict_tracing: bool = True,
+                 strict_tracing: bool = False,
                  deps_package: Optional[str] = None,
                  ):
         self.db = DBAdapter(db_path=db_path)
@@ -805,7 +806,8 @@ class Storage:
                 tracer = tracer_option
                 with tracer:
                     if isinstance(tracer, DecTracer):
-                        node = tracer.register_call(func=op.f)
+                        f = track(op.f)
+                        node = tracer.register_call(func=f)
                     returns = f(*args, **kwargs)
                     if isinstance(tracer, DecTracer):
                         tracer.register_return(node=node)
