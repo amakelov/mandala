@@ -16,14 +16,14 @@ from ..utils import (
     extract_code,
     extract_func_obj,
     DepKey,
-    GlobalsStrictness,
+    GlobalClassifier,
 )
 from .tracer_base import TracerABC, get_module_flow, KEEP, get_closure_names
 
 
 class DecTracerConfig:
     allow_class_tracking = True
-    restrict_global_accesses = True
+    restrict_global_accesses = False
     allow_owned_class_accesses = False
     allow_nonfunc_attributes = False
 
@@ -45,6 +45,9 @@ class TrackedDict(dict):
     """
     def __init__(self, original: dict):
         self.__original__ = original
+    
+    def __repr__(self) -> str:
+        return f"TrackedDict({self.__original__})"
 
     def __getitem__(self, __key: str) -> Any:
         result = self.__original__.__getitem__(__key)
@@ -72,10 +75,15 @@ class TrackedDict(dict):
             else:
                 if (
                     DecTracerConfig.restrict_global_accesses
-                    and not GlobalsStrictness.is_excluded(result)
+                    and not GlobalClassifier.is_excluded(result)
                 ):
                     raise ValueError(
                         f"Accessing global value {result} of type {type(result)} is not allowed"
+                    )
+                else:
+                    # we failed to classify this value
+                    logger.warning(
+                        f"Accessing global value {result} of type {type(result)} is not tracked"
                     )
         return result
 

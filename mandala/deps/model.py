@@ -7,6 +7,7 @@ from ..utils import get_content_hash
 from ..viz import (
     write_output,
 )
+from ..model import Ref
 
 from .utils import (
     DepKey,
@@ -199,17 +200,28 @@ class GlobalVarNode(Node):
 
     @staticmethod
     def represent(obj: Any, allow_fallback: bool = False) -> Tuple[str, str]:
+        """
+        Return a hash of this global variable's value + a truncated
+        representation useful for debugging/printing. 
+
+        If `obj` is a `Ref`, the content hash is reused from the `Ref` object. 
+        This is so that you can avoid repeatedly hashing the same (potentially
+        large) object any time the code state needs to be synced. 
+        """
         truncated_repr = textwrap.shorten(text=repr(obj), width=80)
-        try:
-            content_hash = get_content_hash(obj=obj)
-        except Exception as e:
-            shortened_exception = textwrap.shorten(text=str(e), width=80)
-            msg = f"Failed to hash global variable {truncated_repr} of type {type(obj)}, because {shortened_exception}"
-            if allow_fallback:
-                content_hash = UNKNOWN_GLOBAL_VAR
-                logger.warning(msg)
-            else:
-                raise RuntimeError(msg)
+        if isinstance(obj, Ref):
+            content_hash = obj.cid
+        else:
+            try:
+                content_hash = get_content_hash(obj=obj)
+            except Exception as e:
+                shortened_exception = textwrap.shorten(text=str(e), width=80)
+                msg = f"Failed to hash global variable {truncated_repr} of type {type(obj)}, because {shortened_exception}"
+                if allow_fallback:
+                    content_hash = UNKNOWN_GLOBAL_VAR
+                    logger.warning(msg)
+                else:
+                    raise RuntimeError(msg)
         return content_hash, truncated_repr
 
     def present_key(self) -> str:

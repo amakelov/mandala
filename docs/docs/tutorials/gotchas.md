@@ -1,8 +1,9 @@
-# Caveats
+# Gotchas
 <a href="https://colab.research.google.com/github/amakelov/mandala/blob/master/docs_notebooks/tutorials/gotchas.ipynb"> 
   <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/> </a>
 
-This notebook lists some things that can go wrong when using `mandala`.
+This notebook lists some things that can go wrong when using `mandala`, and
+how to avoid and/or fix them.
 
 
 ```python
@@ -14,7 +15,84 @@ except:
     pass
 ```
 
-## If `x == y`, this doesn't guarantee that `x` and `y` will have the same content hash
+## Versioning tips
+
+### Avoiding overhead when versioning large global variables
+If you use versioning (by passing the `deps_path=...` argument to a `Storage`),
+`mandala` will automatically track the content hashes of any global variables
+accessed by your `@op`s. 
+
+This is a useful way to avoid a class of bugs, but can also lead to significant
+overhead if you have large global variables, because each time a `with storage:`
+context is entered, `mandala` will compute the hashes of all known global
+variables to check for changes, which can be slow.
+
+To overcome this, if you have a large global variable that you know will not
+change often, you can effectively manually pre-compute its hash so that
+`mandala` does not need to recompute it each time. This can be done by simply
+wrapping the global in a `Ref` object, and then using `ref.obj` when you want
+to access the underlying object in a function.
+
+
+```python
+import numpy as np
+from mandala.imports import wrap_atom, op, Storage, track
+
+LARGE_GLOBAL = wrap_atom(np.ones((10_000, 5000)))
+
+@op
+def test_op(x):
+    return x + LARGE_GLOBAL.obj
+
+storage = Storage(deps_path='__main__', strict_tracing=False)
+```
+
+
+```python
+with storage:
+    y = test_op(0)
+```
+
+You can check that now (unlike the case when you don't wrap the global),
+retracing the memoized code takes very little time because the hash of the large
+global variable is not recomputed:
+
+
+```python
+with storage:
+    y = test_op(0)
+```
+
+You can also see the object reflected in the version of `test_op`:
+
+
+```python
+storage.versions(test_op)
+```
+
+
+<pre style="white-space:pre;overflow-x:auto;line-height:normal;font-family:Menlo,'DejaVu Sans Mono',consolas,'Courier New',monospace">╭─────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ <span style="color: #93a1a1; text-decoration-color: #93a1a1; background-color: #fdf6e3; font-style: italic">### Dependencies for version of function test_op from module __main__</span><span style="background-color: #fdf6e3">                                          </span> │
+│ <span style="color: #93a1a1; text-decoration-color: #93a1a1; background-color: #fdf6e3; font-style: italic">### content_version_id=0b20075a89aec9dc391db79ff1d0aef6</span><span style="background-color: #fdf6e3">                                                        </span> │
+│ <span style="color: #93a1a1; text-decoration-color: #93a1a1; background-color: #fdf6e3; font-style: italic">### semantic_version_id=4360b08a7c57f017bbebbdec2fbd92b3</span><span style="background-color: #fdf6e3">                                                       </span> │
+│ <span style="background-color: #fdf6e3">                                                                                                               </span> │
+│ <span style="color: #93a1a1; text-decoration-color: #93a1a1; background-color: #fdf6e3; font-style: italic">################################################################################</span><span style="background-color: #fdf6e3">                               </span> │
+│ <span style="color: #93a1a1; text-decoration-color: #93a1a1; background-color: #fdf6e3; font-style: italic">### IN MODULE "__main__"</span><span style="background-color: #fdf6e3">                                                                                       </span> │
+│ <span style="color: #93a1a1; text-decoration-color: #93a1a1; background-color: #fdf6e3; font-style: italic">################################################################################</span><span style="background-color: #fdf6e3">                               </span> │
+│ <span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3">LARGE_GLOBAL </span><span style="color: #93a1a1; text-decoration-color: #93a1a1; background-color: #fdf6e3">=</span><span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3"> AtomRef(array([[</span><span style="color: #2aa198; text-decoration-color: #2aa198; background-color: #fdf6e3">1.</span><span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3">, </span><span style="color: #2aa198; text-decoration-color: #2aa198; background-color: #fdf6e3">1.</span><span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3">, </span><span style="color: #2aa198; text-decoration-color: #2aa198; background-color: #fdf6e3">1.</span><span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3">, </span><span style="color: #93a1a1; text-decoration-color: #93a1a1; background-color: #fdf6e3">...</span><span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3">, </span><span style="color: #2aa198; text-decoration-color: #2aa198; background-color: #fdf6e3">1.</span><span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3">, </span><span style="color: #2aa198; text-decoration-color: #2aa198; background-color: #fdf6e3">1.</span><span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3">, </span><span style="color: #2aa198; text-decoration-color: #2aa198; background-color: #fdf6e3">1.</span><span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3">], [</span><span style="color: #2aa198; text-decoration-color: #2aa198; background-color: #fdf6e3">1.</span><span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3">, </span><span style="color: #2aa198; text-decoration-color: #2aa198; background-color: #fdf6e3">1.</span><span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3">, </span><span style="color: #2aa198; text-decoration-color: #2aa198; background-color: #fdf6e3">1.</span><span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3">, </span><span style="color: #93a1a1; text-decoration-color: #93a1a1; background-color: #fdf6e3">...</span><span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3">, </span><span style="color: #2aa198; text-decoration-color: #2aa198; background-color: #fdf6e3">1.</span><span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3">, </span><span style="color: #2aa198; text-decoration-color: #2aa198; background-color: #fdf6e3">1.</span><span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3">, [</span><span style="color: #93a1a1; text-decoration-color: #93a1a1; background-color: #fdf6e3">...</span><span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3">]</span><span style="background-color: #fdf6e3">                   </span> │
+│ <span style="background-color: #fdf6e3">                                                                                                               </span> │
+│ <span style="color: #268bd2; text-decoration-color: #268bd2; background-color: #fdf6e3">@op</span><span style="background-color: #fdf6e3">                                                                                                            </span> │
+│ <span style="color: #859900; text-decoration-color: #859900; background-color: #fdf6e3">def</span><span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3"> </span><span style="color: #268bd2; text-decoration-color: #268bd2; background-color: #fdf6e3">test_op</span><span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3">(x):</span><span style="background-color: #fdf6e3">                                                                                                </span> │
+│ <span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3">    </span><span style="color: #859900; text-decoration-color: #859900; background-color: #fdf6e3">return</span><span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3"> x </span><span style="color: #93a1a1; text-decoration-color: #93a1a1; background-color: #fdf6e3">+</span><span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3"> LARGE_GLOBAL</span><span style="color: #93a1a1; text-decoration-color: #93a1a1; background-color: #fdf6e3">.</span><span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3">obj</span><span style="background-color: #fdf6e3">                                                                                </span> │
+│ <span style="background-color: #fdf6e3">                                                                                                               </span> │
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+</pre>
+
+
+
+## Caveats of hashing
+
+### If `x == y`, this doesn't guarantee that `x` and `y` will have the same content hash
 
 
 ```python
@@ -32,7 +110,7 @@ print(f'Is the hash of 23 == the hash of 23.0? {get_content_hash(23) == get_cont
     Is the hash of 23 == the hash of 23.0? False
 
 
-## Hashing numerical values is sensitive to precision and type
+### Hashing numerical values is sensitive to precision and type
 All three of the values `42, 42.0, 42.000000001` have different content hashes:
 
 
@@ -52,7 +130,7 @@ print(get_content_hash(42.00000000001))
 It's possible to define custom types that will be insensitive to types and
 rounding errors when hashed, but this is currently not implemented.
 
-## Non-deterministic hashes for complex objects
+### Non-deterministic hashes for complex objects
 Below we illustrate several potentially confusing behaviors that are hard to
 eradicate in general:
 - even if we set all random seeds properly, certain computations (e.g., training

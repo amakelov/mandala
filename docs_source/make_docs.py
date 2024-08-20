@@ -1,4 +1,7 @@
-### convert .ipynb files in this directory to .md files
+"""
+convert .ipynb files in this directory to .md files and move them to the docs
+directory for mkdocs to use
+"""
 
 import os
 import argparse

@@ -237,6 +237,12 @@ class Call:
 
 
 def wrap_atom(obj: Any, history_id: Optional[str] = None) -> AtomRef:
+    """
+    Wrap a Python object in an AtomRef. If the object is already a Ref, return
+    it unchanged. If `history_id` is not provided, it will be initialized
+    from the object's content hash (thereby representing an object without any
+    history).
+    """
     if isinstance(obj, Ref):
         assert history_id is None
         return obj

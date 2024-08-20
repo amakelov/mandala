@@ -5,13 +5,18 @@ import gc
 from typing import Literal
 
 from ..common_imports import *
+from ..model import Ref
 from ..utils import get_content_hash, unwrap_decorators
 from ..config import Config
 
 DepKey = Tuple[str, str]  # (module name, object address in module)
 
 
-class GlobalsStrictness:
+class GlobalClassifier:
+    """
+    Try to bucket Python objects into categories for the sake of tracking
+    global state.
+    """
     SCALARS = "scalars"
     DATA = "data"
     ALL = "all"
@@ -22,9 +27,8 @@ class GlobalsStrictness:
             inspect.ismodule(obj)  # exclude modules
             or isinstance(obj, type)  # exclude classes
             or inspect.isfunction(obj)  # exclude functions
-            or callable(obj)  # exclude callables
-            or type(obj).__name__
-            == Config.func_interface_cls_name  #! a hack to exclude memoized functions
+            # or callable(obj)  # exclude callables... this is very questionable
+            or type(obj).__name__ == Config.func_interface_cls_name  #! a hack to exclude memoized functions
         )
 
     @staticmethod
@@ -34,12 +38,12 @@ class GlobalsStrictness:
 
     @staticmethod
     def is_data(obj: Any) -> bool:
-        if GlobalsStrictness.is_scalar(obj):
+        if GlobalClassifier.is_scalar(obj):
             result = True
         elif type(obj) in (tuple, list):
-            result = all(GlobalsStrictness.is_data(x) for x in obj)
+            result = all(GlobalClassifier.is_data(x) for x in obj)
         elif type(obj) is dict:
-            result = all(GlobalsStrictness.is_data((x, y)) for (x, y) in obj.items())
+            result = all(GlobalClassifier.is_data((x, y)) for (x, y) in obj.items())
         elif type(obj) in (np.ndarray, pd.DataFrame, pd.Series, pd.Index):
             result = True
         else:
@@ -49,23 +53,36 @@ class GlobalsStrictness:
         return result
 
 
-def is_global_val(obj: Any, strictness: str = "data") -> bool:
-    if strictness == GlobalsStrictness.SCALARS:
-        return GlobalsStrictness.is_scalar(obj=obj)
-    elif strictness == GlobalsStrictness.DATA:
-        return GlobalsStrictness.is_data(obj=obj)
-    elif strictness == GlobalsStrictness.ALL:
+def is_global_val(obj: Any, allow_only: str = "all") -> bool:
+    """
+    Determine whether the given Python object should be treated as a global
+    variable whose *content* should be tracked.
+
+    The alternative is that this is a callable object whose *dependencies*
+    should be tracked.
+
+    However, the distinction is not always clear, making this method somewhat
+    heuristic. For example, a callable object could be either a function or a
+    global variable we want to track.
+    """
+    if isinstance(obj, Ref): # easy case; we always track globals that we explicitly wrapped
+        return True
+    if allow_only == GlobalClassifier.SCALARS:
+        return GlobalClassifier.is_scalar(obj=obj)
+    elif allow_only == GlobalClassifier.DATA:
+        return GlobalClassifier.is_data(obj=obj)
+    elif allow_only == GlobalClassifier.ALL:
         return not (
             inspect.ismodule(obj)  # exclude modules
             or isinstance(obj, type)  # exclude classes
             or inspect.isfunction(obj)  # exclude functions
-            or callable(obj)  # exclude callables
+            # or callable(obj)  # exclude callables ### this is very questionable
             or type(obj).__name__
             == Config.func_interface_cls_name  #! a hack to exclude memoized functions
         )
     else:
         raise ValueError(
-            f"Unknown strictness level for tracking global variables: {strictness}"
+            f"Unknown strictness level for tracking global variables: {allow_only}"
         )
 
 
