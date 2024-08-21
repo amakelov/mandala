@@ -87,6 +87,21 @@ class Versioner:
             "outputs",
         ]
         self.df = pd.DataFrame(columns=columns)
+    
+    def drop_semantic_version(self, semantic_version: str):
+        # drop from df
+        self.df = self.df[self.df["semantic_version"] != semantic_version]
+        # drop from .versions
+        for dep_key, versions in self.versions.items():
+            keys_to_drop = []
+            for k, version in versions.items():
+                if version.semantic_version == semantic_version:
+                    keys_to_drop.append(k)
+            for k in keys_to_drop:
+                del versions[k]
+        # TODO: we should clean up more thoroughly, but this is a start
+        # TODO: remove from component_dags if no longer used
+        # TODO: remove from nodes if no longer used
 
     def get_version_ids(
         self,

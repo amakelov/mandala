@@ -329,7 +329,9 @@ class Storage:
     def get_call(self, hid: str, lazy: bool) -> Call:
         return self.mget_call([hid], in_memory=lazy)[0]
 
-    def drop_calls(self, calls_or_hids: Union[Iterable[str], Iterable[Call]], delete_dependents: bool):
+    @transaction
+    def drop_calls(self, calls_or_hids: Union[Iterable[str], Iterable[Call]], delete_dependents: bool, 
+                   conn: Optional[sqlite3.Connection] = None):
         """
         Remove the calls with the given HIDs (and optionally their dependents)
         from the storage *and* the cache. 
@@ -345,7 +347,7 @@ class Storage:
         hids = set(hids)
         if delete_dependents:
             _, dependent_call_hids = self.call_storage.get_dependents(
-                ref_hids=set(), call_hids=hids
+                ref_hids=set(), call_hids=hids, conn=conn,
             )
             hids |= dependent_call_hids
         num_dropped_cache = 0
@@ -355,8 +357,8 @@ class Storage:
                 self.call_cache.drop(hid)
                 num_dropped_cache += 1
         for hid in hids:
-            if self.call_storage.exists(hid):
-                self.call_storage.drop(hid)
+            if self.call_storage.exists(hid, conn=conn):
+                self.call_storage.drop(hid, conn=conn)
                 num_dropped_persistent += 1
         logger.info(f"Dropped {num_dropped_persistent} calls (and {num_dropped_cache} from cache).")
 
@@ -977,39 +979,47 @@ class Storage:
     @transaction
     def versions(
         self,
-        f: Union[Callable, "funcs.FuncInterface"],
-        meta: bool = False,
+        f: Op,
+        show_dep_commit_ids: bool = False, # show the commit ids of the dependencies
         plain: bool = False,
         conn: Optional[sqlite3.Connection] = None,
     ):
+        """
+        Show each stored version of the `@op` together with the code/reprs of
+        all dependencies for this version. 
+        """
         self._show_version_data(
             f=f,
             deps=True,
-            meta=meta,
+            meta=show_dep_commit_ids,
             plain=plain,
             compact=False,
             conn=conn,
         )
 
-    # @transaction
-    # def sources(
-    #     self,
-    #     f: Union[Callable, "funcs.FuncInterface"],
-    #     meta: bool = False,
-    #     plain: bool = False,
-    #     compact: bool = False,
-    #     conn: Optional[sqlite3.Connection] = None,
-    # ):
-    #     func = extract_func_obj(obj=f, strict=True)
-    #     component = get_dep_key_from_func(func=func)
-    #     versioner = self.get_versioner(conn=conn)
-    #     print(
-    #         f"Revision history for the source code of function {component[1]} from module {component[0]} "
-    #         '("===HEAD===" is the current version):'
-    #     )
-    #     versioner.component_dags[component].show(
-    #         compact=compact, plain=plain, include_metadata=meta
-    #     )
+    @transaction
+    def source_history(
+        self,
+        f: Op,
+        show_commit_ids: bool = False, # show the commit ids of each version
+        plain: bool = False,
+        compact: bool = False,
+        conn: Optional[sqlite3.Connection] = None,
+    ):
+        """
+        Print a tree representation of how the source code of this function
+        was modified over time.
+        """
+        func = extract_func_obj(obj=f, strict=True)
+        component = get_dep_key_from_func(func=func)
+        versioner = self.get_versioner(conn=conn)
+        print(
+            f"Revision history for the source code of function {component[1]} from module {component[0]} "
+            '("===HEAD===" is the current version):'
+        )
+        versioner.component_dags[component].show(
+            compact=compact, plain=plain, include_metadata=show_commit_ids
+        )
 
     @transaction
     def code(
@@ -1062,6 +1072,26 @@ class Storage:
         print(
             _get_colorized_diff(current=code_1, new=code_2, context_lines=context_lines)
         )
+    
+    @transaction
+    def drop_version(
+        self, semantic_version: str, conn: Optional[sqlite3.Connection] = None
+    ):
+        """
+        Does the following things:
+        - deletes all calls to this semantic version and their dependencies;
+        - deletes the semantic version from the versioner;
+        """
+        ### delete all calls first (and their dependents)
+        # TODO: very inefficient, we should have a DB query for this
+        calls_df = self.calls.persistent.get_df(conn=conn)
+        calls_df = calls_df.query(f'semantic_version == "{semantic_version}"')
+        call_hids = calls_df.index.get_level_values('call_history_id').unique()
+        self.drop_calls(calls_or_hids=call_hids, delete_dependents=True, conn=conn)
+        ### remove from versioner
+        versioner = self.get_versioner(conn=conn)
+        versioner.drop_semantic_version(semantic_version=semantic_version)
+        self.save_versioner(versioner=versioner, conn=conn)
 
     ############################################################################
     ### user-facing functions
