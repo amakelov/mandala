@@ -50,12 +50,15 @@ class Node(ABC):
     def content_hash(self) -> str:
         raise NotImplementedError
 
-    def load_obj(self, allow_fallback: bool) -> Any:
+    def load_obj(self, skip_missing: bool, skip_silently: bool) -> Any:
         obj, found = load_obj(module_name=self.module_name, obj_name=self.obj_name)
         if not found:
             msg = f"{self.present_key()} not found"
-            if allow_fallback:
-                logger.warning(msg)
+            if skip_missing:
+                if skip_silently:
+                    logger.debug(msg)
+                else:
+                    logger.warning(msg)
                 if hasattr(self, "FALLBACK_OBJ"):
                     return self.FALLBACK_OBJ
                 else:

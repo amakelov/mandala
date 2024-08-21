@@ -27,8 +27,10 @@ class Storage:
                  deps_path: Optional[Union[str, Path]] = None,
                  tracer_impl: Optional[type] = None,
                  strict_tracing: bool = False,
-                 skip_unhashable_globals: bool = True,
-                 skip_globals_silently: bool = False,
+                 skip_unhashable_globals: bool = True, # whether to allow global variables that are not hashable
+                 skip_globals_silently: bool = False, # whether to skip such global variables silently
+                 skip_missing_deps: bool = True, # whether to allow dependencies that were not found
+                 skip_missing_silently: bool = False, # whether to skip such dependencies silently
                  deps_package: Optional[str] = None,
                  ):
         self.db = DBAdapter(db_path=db_path)
@@ -77,7 +79,9 @@ class Storage:
                     track_methods=True,
                     package_name=deps_package,
                     skip_unhashable_globals=skip_unhashable_globals,
-                    skip_globals_silently=skip_globals_silently
+                    skip_globals_silently=skip_globals_silently,
+                    skip_missing_deps=skip_missing_deps,
+                    skip_missing_silently=skip_missing_silently,
                 )
                 self.sources["versioner"] = versioner
         else:

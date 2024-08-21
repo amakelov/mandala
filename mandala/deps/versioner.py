@@ -54,6 +54,8 @@ class Versioner:
         TracerCls: type,
         strict: bool,
         skip_unhashable_globals: bool,
+        skip_missing_deps: bool,
+        skip_missing_silently: bool,
         skip_globals_silently: bool,
         track_methods: bool,
         package_name: Optional[str] = None,
@@ -63,6 +65,8 @@ class Versioner:
         self.TracerCls = TracerCls
         self.strict = strict
         self.skip_unhashable_globals = skip_unhashable_globals
+        self.skip_missing_deps = skip_missing_deps
+        self.skip_missing_silently = skip_missing_silently
         self.skip_globals_silently = skip_globals_silently
         self.allow_methods = track_methods
         self.package_name = package_name
@@ -133,7 +137,7 @@ class Versioner:
                 isinstance(node, (GlobalVarNode, CallableNode))
                 and dep_key not in result_graph.nodes.keys()
             ):
-                obj = node.load_obj(allow_fallback=not self.strict)
+                obj = node.load_obj(skip_missing=self.skip_missing_deps, skip_silently=self.skip_missing_silently)
                 fallback_result[dep_key] = node.from_obj(obj=obj, dep_key=dep_key)
         nodes = {**result_graph.nodes, **fallback_result}
         # fill in the gaps with a static crawl
