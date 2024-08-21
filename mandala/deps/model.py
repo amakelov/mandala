@@ -199,7 +199,7 @@ class GlobalVarNode(Node):
         return self._representation
 
     @staticmethod
-    def represent(obj: Any, allow_fallback: bool = False) -> Tuple[str, str]:
+    def represent(obj: Any, allow_fallback: bool = True) -> Tuple[str, str]:
         """
         Return a hash of this global variable's value + a truncated
         representation useful for debugging/printing. 
