@@ -32,6 +32,7 @@ class Storage:
                  skip_missing_deps: bool = True, # whether to allow dependencies that were not found
                  skip_missing_silently: bool = False, # whether to skip such dependencies silently
                  deps_package: Optional[str] = None,
+                 track_globals: bool = True,
                  ):
         self.db = DBAdapter(db_path=db_path)
 
@@ -82,6 +83,7 @@ class Storage:
                     skip_globals_silently=skip_globals_silently,
                     skip_missing_deps=skip_missing_deps,
                     skip_missing_silently=skip_missing_silently,
+                    track_globals=track_globals,
                 )
                 self.sources["versioner"] = versioner
         else:

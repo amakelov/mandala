@@ -71,7 +71,7 @@ class TrackedDict(dict):
                         f"Function/class {result} from module {unwrapped_result.__module__} is accessed but not tracked"
                     )
             elif is_global_val(result):
-                TracerState.tracer.register_global_access(key=__key, value=result)
+                tracer.register_global_access(key=__key, value=result)
             else:
                 if (
                     DecTracerConfig.restrict_global_accesses
@@ -166,6 +166,7 @@ class DecTracer(TracerABC):
         paths: List[Path],
         graph: Optional[DependencyGraph] = None,
         strict: bool = True,
+        track_globals: bool = True,
         allow_methods: bool = False,
         skip_unhashable_globals: bool = True,
         skip_globals_silently: bool = False,
@@ -174,8 +175,11 @@ class DecTracer(TracerABC):
         self.graph = DependencyGraph() if graph is None else graph
         self.paths = paths
         self.strict = strict
+
+        self.track_globals = track_globals
         self.skip_unhashable_globals = skip_unhashable_globals
         self.skip_globals_silently = skip_globals_silently
+
         self.allow_methods = allow_methods
 
         self._traced = {}
@@ -240,15 +244,17 @@ class DecTracer(TracerABC):
             assert parent is not None
             self.graph.add_edge(parent, node)
         ### get globals
-        global_nodes = self.get_globals(func=func)
-        for global_node in global_nodes:
-            self.graph.add_edge(node, global_node)
+        # global_nodes = self.get_globals(func=func)
+        # for global_node in global_nodes:
+        #     self.graph.add_edge(node, global_node)
         if len(self.call_stack) == 1:
             # this is the root of the graph
             self.graph.roots.add(node.key)
         return node
 
     def register_global_access(self, key: str, value: Any):
+        if not self.track_globals:
+            return
         assert len(self.call_stack) > 0
         calling_node = self.call_stack[-1]
         node = GlobalVarNode.from_obj(

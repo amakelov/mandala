@@ -53,10 +53,11 @@ class Versioner:
         paths: List[Path],
         TracerCls: type,
         strict: bool,
+        track_globals: bool,
         skip_unhashable_globals: bool,
+        skip_globals_silently: bool,
         skip_missing_deps: bool,
         skip_missing_silently: bool,
-        skip_globals_silently: bool,
         track_methods: bool,
         package_name: Optional[str] = None,
     ):
@@ -64,10 +65,14 @@ class Versioner:
         self.paths = paths
         self.TracerCls = TracerCls
         self.strict = strict
-        self.skip_unhashable_globals = skip_unhashable_globals
+
         self.skip_missing_deps = skip_missing_deps
         self.skip_missing_silently = skip_missing_silently
+
+        self.track_globals = track_globals
+        self.skip_unhashable_globals = skip_unhashable_globals
         self.skip_globals_silently = skip_globals_silently
+
         self.allow_methods = track_methods
         self.package_name = package_name
         self.global_topology: DependencyGraph = DependencyGraph()
@@ -124,6 +129,7 @@ class Versioner:
             paths=[Config.mandala_path] + self.paths,
             strict=self.strict,
             allow_methods=self.allow_methods,
+            track_globals=self.track_globals,
             skip_unhashable_globals=self.skip_unhashable_globals,
             skip_globals_silently=self.skip_globals_silently,
         )

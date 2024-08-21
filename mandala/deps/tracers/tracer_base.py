@@ -11,12 +11,14 @@ class TracerABC(ABC):
         paths: List[Path],
         strict: bool = True,
         allow_methods: bool = False,
+        track_globals: bool = True,
     ):
         self.call_stack: List[Optional[CallableNode]] = []
         self.graph = DependencyGraph()
         self.paths = paths
         self.strict = strict
         self.allow_methods = allow_methods
+        self.track_globals = track_globals
 
     @abstractmethod
     def __enter__(self):
