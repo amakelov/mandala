@@ -129,12 +129,17 @@ storages of 10k+ calls slow.
 on the system level, and/or the Python `graphviz` library installed.
 
 # Limitations
+- The versioning system is currently not feature-rich and documented enough for
+realistic use cases. For example, it doesn't support removing old versions in a
+consistent way, or restricting `ComputationFrame`s by function versions.
+Moreover, many of the error messages are not informative enough and/or don't
+suggest solutions.
 - When using versioning and you mark a change as compatible with past results,
 you should be careful if the change introduced new dependencies that are not
 tracked by `mandala`. Changes to such "invisible" dependencies may remain 
 unnoticed by the storage system, leading you to believe that certain results 
 are up to date when they are not.
-- See the "gotchas" notebook for some limitations of the hashing used to invalidate the cache: <a href="https://colab.research.google.com/github/amakelov/mandala/blob/master/docs_source/tutorials/gotchas.ipynb"> 
+- See the "gotchas" notebook for mistakes to avoid: <a href="https://colab.research.google.com/github/amakelov/mandala/blob/master/docs_source/tutorials/gotchas.ipynb"> 
   <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/></a>
 
 # Roadmap for future features
@@ -157,6 +162,9 @@ are up to date when they are not.
 - [ ] add support for merging or splitting nodes in the CF and similar simplifications
 
 **Versioning**
+- [ ] support ways to remove old versions in a consistent way
+- [ ] improve documentation and error messages
+- [ ] test this system more thoroughly
 - [ ] support restricting CFs by function versions
 - [ ] support ways to manually add dependencies to versions in order to avoid the "invisible dependency" problem
 
