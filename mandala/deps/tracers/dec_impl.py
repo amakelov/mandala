@@ -167,11 +167,15 @@ class DecTracer(TracerABC):
         graph: Optional[DependencyGraph] = None,
         strict: bool = True,
         allow_methods: bool = False,
+        skip_unhashable_globals: bool = True,
+        skip_globals_silently: bool = False,
     ):
         self.call_stack: List[CallableNode] = []
         self.graph = DependencyGraph() if graph is None else graph
         self.paths = paths
         self.strict = strict
+        self.skip_unhashable_globals = skip_unhashable_globals
+        self.skip_globals_silently = skip_globals_silently
         self.allow_methods = allow_methods
 
         self._traced = {}
@@ -248,7 +252,9 @@ class DecTracer(TracerABC):
         assert len(self.call_stack) > 0
         calling_node = self.call_stack[-1]
         node = GlobalVarNode.from_obj(
-            obj=value, dep_key=(calling_node.module_name, key)
+            obj=value, dep_key=(calling_node.module_name, key), 
+            skip_unhashable=self.skip_unhashable_globals,
+            skip_silently=self.skip_globals_silently
         )
         self.graph.add_edge(calling_node, node)
 

@@ -186,8 +186,10 @@ class GlobalVarNode(Node):
         self._representation = representation
 
     @staticmethod
-    def from_obj(obj: Any, dep_key: DepKey) -> "GlobalVarNode":
-        representation = GlobalVarNode.represent(obj=obj)
+    def from_obj(obj: Any, dep_key: DepKey, 
+                 skip_unhashable: bool = False,
+                 skip_silently: bool = False,) -> "GlobalVarNode":
+        representation = GlobalVarNode.represent(obj=obj, skip_unhashable=skip_unhashable, skip_silently=skip_silently)
         return GlobalVarNode(
             module_name=dep_key[0],
             obj_name=dep_key[1],
@@ -199,7 +201,9 @@ class GlobalVarNode(Node):
         return self._representation
 
     @staticmethod
-    def represent(obj: Any, allow_fallback: bool = True) -> Tuple[str, str]:
+    def represent(obj: Any, skip_unhashable: bool = True, 
+                  skip_silently: bool = False,
+                  ) -> Tuple[str, str]:
         """
         Return a hash of this global variable's value + a truncated
         representation useful for debugging/printing. 
@@ -217,9 +221,12 @@ class GlobalVarNode(Node):
             except Exception as e:
                 shortened_exception = textwrap.shorten(text=str(e), width=80)
                 msg = f"Failed to hash global variable {truncated_repr} of type {type(obj)}, because {shortened_exception}"
-                if allow_fallback:
+                if skip_unhashable:
                     content_hash = UNKNOWN_GLOBAL_VAR
-                    logger.warning(msg)
+                    if skip_silently:
+                        logger.debug(msg)
+                    else:
+                        logger.warning(msg)
                 else:
                     raise RuntimeError(msg)
         return content_hash, truncated_repr
