@@ -897,6 +897,11 @@ class Storage:
         if result is None:
             raise ValueError("This storage is not versioned.")
         return result
+    
+    @transaction
+    def save_versioner(self, versioner: Versioner, conn: Optional[sqlite3.Connection] = None):
+        self.sources["versioner"] = versioner
+        self.sources.commit(conn=conn)
 
     @property
     def versioned(self) -> bool:
