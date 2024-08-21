@@ -43,8 +43,9 @@ class TrackedDict(dict):
     """
     A dictionary that tracks global variable accesses.
     """
-    def __init__(self, original: dict):
+    def __init__(self, original: dict, verbose: bool = False):
         self.__original__ = original
+        self.verbose = verbose
     
     def __repr__(self) -> str:
         return f"TrackedDict({self.__original__})"
@@ -82,9 +83,11 @@ class TrackedDict(dict):
                     )
                 else:
                     # we failed to classify this value
-                    logger.warning(
-                        f"Accessing global value {result} of type {type(result)} is not tracked"
-                    )
+                    msg = f"Accessing global value {result} of type {type(result)} is not tracked, because it couldn't be classified."
+                    if self.verbose:
+                        logger.warning(msg)
+                    else:
+                        logger.debug(msg)
         return result
 
 
