@@ -133,7 +133,10 @@ def track(obj: Union[types.FunctionType, type]) -> "obj":
         TracerState.registry[(obj.__module__, obj.__qualname__)] = obj
         return obj
     elif isinstance(obj, types.FunctionType):
-        obj = make_tracked_copy(unwrap_decorators(obj, strict=True))
+        #! NOTE: this was done with weird decorators in mind, but might actually
+        # be a bad idea...
+        # obj = make_tracked_copy(unwrap_decorators(obj, strict=True))
+        obj = make_tracked_copy(obj)
 
         @wraps(obj)
         def wrapper(*args, **kwargs) -> Any:
