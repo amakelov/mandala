@@ -131,3 +131,26 @@ def test_lists():
     with storage:
         elts = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
         squares = chunked_square(elts)
+
+
+
+def test_ignore():
+
+    storage = Storage()
+
+    @op(ignore_args=('irrelevant',))
+    def inc(x, irrelevant):
+        return x + 1
+    
+
+    with storage:
+        inc(23, 0)
+    
+    df = storage.cf(inc).df()
+    assert len(df) == 1
+
+    with storage:
+        inc(23, 1)
+    
+    df = storage.cf(inc).df()
+    assert len(df) == 1

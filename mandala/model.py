@@ -100,6 +100,7 @@ class Op:
         nout: Union[Literal["var", "auto"], int] = "auto",
         output_names: Optional[List[str]] = None,
         version: Optional[int] = 0,
+        ignore_args: Optional[Tuple[str,...]] = None, # ignore these arguments when hashing
         __structural__: bool = False,
         __allow_side_effects__: bool = False,
     ) -> None:
@@ -107,6 +108,7 @@ class Op:
         self.nout = nout
         self.version = version
         self.output_names = output_names
+        self.ignore_args = ignore_args
         self.__structural__ = __structural__
         self.__allow_side_effects__ = __allow_side_effects__
         self.f = f
@@ -405,15 +407,25 @@ def make_ref_set(resf: Iterable[Ref]) -> SetRef:
 def op(
     output_names: Union[Optional[List[str]], Callable] = None,
     nout: Union[Literal["var", "auto"], int] = "auto",
+    ignore_args: Optional[Tuple[str,...]] = None,
     __structural__: bool = False,
     __allow_side_effects__: bool = False,
 ):
+    """
+    Decorator used to make a function memoized by the storage. Some options:
+
+    - `ignore_args` is a tuple of argument names (keyword or positional) that
+    should be ignored when hashing the function. This is useful when the
+    function has arguments that are not relevant to the output, like a batch
+    size.
+    """
     def decorator(f: Callable, output_names = None) -> 'f': # some IDE magic to make it recognize that @op(f) has the same type as f
         res = Op(
             f.__name__,
             f,
             output_names=output_names,
             nout=nout,
+            ignore_args=ignore_args,
             __structural__=__structural__,
             __allow_side_effects__=__allow_side_effects__,
         )

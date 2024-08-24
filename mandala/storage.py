@@ -636,36 +636,37 @@ class Storage:
             if v.default is not inspect.Parameter.empty
         }
     
-    def preprocess_args_kwargs(self,
-                               f: Callable,
-                               args: Tuple[Any, ...],
-                               kwargs: Dict[str, Any]):
-        """
-        Find which inputs should be ignored by the storage, and replace them
-        with their underlying objects.
-        """
-        sig = inspect.signature(f)
-        defaults = self.get_defaults(f)
-        bound_args = sig.bind(*args, **kwargs)
-        bound_args.apply_defaults()
-        ignored_inputs = set()
-        for k, v in bound_args.arguments.items():
-            if isinstance(v, _Ignore):
-                ignored_inputs.add(k)
-        # now, check for defaults we should ignore
-        for k, v in defaults.items():
-            given_value = bound_args.arguments[v]
-            if isinstance(given_value, _Ignore):
-                ignored_inputs.add(k)
-            elif isinstance(v, _NewArgDefault):
-                if isinstance(given_value, Ref):
-                    if self.unwrap(given_value) == v.value:
-                        ignored_inputs.add(k)
-                else:
-                    if given_value == v.value:
-                        ignored_inputs.add(k)
+    # def preprocess_args_kwargs(self,
+    #                            f: Callable,
+    #                            args: Tuple[Any, ...],
+    #                            kwargs: Dict[str, Any]):
+    #     """
+    #     Find which inputs should be ignored by the storage, and replace them
+    #     with their underlying objects.
+    #     """
+    #     sig = inspect.signature(f)
+    #     defaults = self.get_defaults(f)
+    #     bound_args = sig.bind(*args, **kwargs)
+    #     bound_args.apply_defaults()
+    #     ignored_inputs = set()
+    #     for k, v in bound_args.arguments.items():
+    #         if isinstance(v, _Ignore):
+    #             ignored_inputs.add(k)
+    #     # now, check for defaults we should ignore
+    #     for k, v in defaults.items():
+    #         given_value = bound_args.arguments[v]
+    #         if isinstance(given_value, _Ignore):
+    #             ignored_inputs.add(k)
+    #         elif isinstance(v, _NewArgDefault):
+    #             if isinstance(given_value, Ref):
+    #                 if self.unwrap(given_value) == v.value:
+    #                     ignored_inputs.add(k)
+    #             else:
+    #                 if given_value == v.value:
+    #                     ignored_inputs.add(k)
     
-    def parse_args(self, sig: inspect.Signature, args, kwargs, apply_defaults: bool) -> Tuple[inspect.BoundArguments, Dict[str, Any], Dict[str, Any]]:
+    def parse_args(self, sig: inspect.Signature, args, kwargs, apply_defaults: bool, 
+                   ignore_args: Optional[Tuple[str,...]] = None) -> Tuple[inspect.BoundArguments, Dict[str, Any], Dict[str, Any]]:
         """
         Given the inputs passed to an @op call (could be wrapped or unwrapped),
         figure out the inputs we should pass to storage functions, their type
@@ -708,6 +709,8 @@ class Storage:
                         storage_inputs[name] = val
                         storage_annotations[name] = var_keyword.annotation
             else:
+                if ignore_args is not None and k in ignore_args:
+                    v = Ignore(v)
                 # could have a default
                 if isinstance(v, _Ignore):
                     # regardless of defaults, any _Ignore instance should be ignored
@@ -1130,6 +1133,7 @@ class Storage:
             args=args,
             kwargs=kwargs,
             apply_defaults=True,
+            ignore_args=__op__.ignore_args,
         )
 
         storage_tps = {
