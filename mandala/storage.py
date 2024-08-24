@@ -769,7 +769,8 @@ class Storage:
             op=op,
             pre_call_uid=pre_call_id,
             inputs=wrapped_inputs,
-            code_state=self.guess_code_state() if must_version_call else None,
+            # code_state=self.guess_code_state() if must_version_call else None,
+            code_state = self.code_state if must_version_call else None,
             versioner=self.cached_versioner if must_version_call else None,
             must_version=must_version_call,
         )
