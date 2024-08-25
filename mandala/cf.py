@@ -2147,7 +2147,7 @@ class ComputationFrame:
         hids = set()
         for col in df.columns:
             hids |= {elt.hid for elt in df[col] if isinstance(elt, Call)}
-        self.storage.drop_calls(hids=hids, delete_dependents=True)
+        self.storage.drop_calls(calls_or_hids=hids, delete_dependents=True)
 
     ############################################################################
     ### helpers for pretty printing
