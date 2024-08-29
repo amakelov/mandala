@@ -18,12 +18,16 @@ from .storage_utils import (
     CachedDictStorage,
     SQLiteDictStorage,
     CachedCallStorage,
+    JoblibDictStorage,
     transaction
 )
 
 
 class Storage:
-    def __init__(self, db_path: str = ":memory:", 
+    def __init__(self, 
+                 db_path: str = ":memory:", 
+                 overflow_dir: Optional[str] = None,
+                 overflow_threshold_MB: Optional[Union[int, float]] = 50.0,
                  deps_path: Optional[Union[str, Path]] = None,
                  tracer_impl: Optional[type] = None,
                  strict_tracing: bool = False,
@@ -40,8 +44,18 @@ class Storage:
         self.calls = CachedCallStorage(persistent=self.call_storage)
         self.call_cache = self.calls.cache
 
+        self.overflow_dir = overflow_dir
+        self.overflow_threshold_MB = overflow_threshold_MB
+        if self.overflow_dir is not None:
+            self.overflow_storage = JoblibDictStorage(root=self.overflow_dir)
+        else:
+            self.overflow_storage = None
+
         self.atoms = CachedDictStorage(
-            persistent=SQLiteDictStorage(self.db, table="atoms")
+            persistent=SQLiteDictStorage(self.db, table="atoms", 
+                                         overflow_storage=self.overflow_storage,
+                                         overflow_threshold_MB=self.overflow_threshold_MB
+                                         )
         )
         self.shapes = CachedDictStorage(
             persistent=SQLiteDictStorage(self.db, table="shapes")
@@ -743,6 +757,8 @@ class Storage:
         """
         Main function to call an op, operating on the representations used
         internally by the storage.
+
+        NOTE: this function does NOT save the call to the storage. 
         """
         ### wrap the inputs
         if not op.__structural__: logger.debug(f"Calling {op.name} with args {bound_arguments}.")
