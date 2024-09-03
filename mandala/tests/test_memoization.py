@@ -154,3 +154,26 @@ def test_ignore():
     
     df = storage.cf(inc).df()
     assert len(df) == 1
+
+
+def test_clear_uncommitted():
+    storage = Storage()
+
+    @op
+    def inc(x):
+        return x + 1
+    
+    with storage:
+        for i in range(10):
+            inc(i)
+        # attempt to clear the atoms cache without having committed; this should
+        # fail by default
+        try:
+            storage.atoms.clear()
+            assert False
+        except ValueError:
+            pass
+    
+        # now clear the atoms cache after committing
+        storage.commit()
+        storage.atoms.clear()

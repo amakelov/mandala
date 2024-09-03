@@ -242,7 +242,9 @@ class SQLiteDictStorage(DictStorage):
 class CachedDictStorage(DictStorage):
     def __init__(self, persistent: DictStorage):
         self.persistent = persistent
+        # keep a cache of the values for faster lookups
         self.cache: Dict[str, Any] = {}
+        # keep track of keys that have been added but not yet persisted
         self.dirty_keys: Set[str] = set()
     
     def load_all(self) -> Dict[str, Any]:
@@ -271,7 +273,13 @@ class CachedDictStorage(DictStorage):
             self.persistent.set(key, self.cache[key], conn=conn)
         self.dirty_keys.clear()
     
-    def clear(self) -> None:
+    def clear(self, allow_uncommited: bool = False) -> None:
+        if len(self.dirty_keys) > 0 and not allow_uncommited:
+            # we add this as a precaution to avoid data loss. Otherwise, it's
+            # easy to shoot yourself in the foot by calling `clear()` before
+            # `commit()`
+            msg = "Cannot clear cache with uncommitted changes; call `commit()` first, or use `allow_uncommited=True`"
+            raise ValueError(msg)
         self.cache.clear()
         self.dirty_keys.clear()
 
@@ -739,6 +747,10 @@ class CachedCallStorage:
             self.persistent.save(self.cache.get_data(hid), conn=conn)
         self.dirty_hids.clear()
     
-    def clear(self):
+    def clear(self, allow_uncommited: bool = False):
+        if len(self.dirty_hids) > 0 and not allow_uncommited:
+            # see `CachedDictStorage.clear` for an explanation
+            msg = "Cannot clear cache with uncommitted changes; call `commit()` first, or use `allow_uncommited=True`"
+            raise ValueError(msg)
         self.cache = InMemCallStorage()
         self.dirty_hids.clear()

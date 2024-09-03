@@ -122,6 +122,13 @@ class Storage:
     ############################################################################
     ### managing the caches
     ############################################################################
+    def clear_cache(self, allow_uncommitted: False):
+        self.atoms.clear(allow_uncommited=allow_uncommitted)
+        self.shapes.clear(allow_uncommited=allow_uncommitted)
+        self.ops.clear(allow_uncommited=allow_uncommitted)
+        self.calls.clear(allow_uncommited=allow_uncommitted)
+        print("Cleared all caches.")
+
     def cache_info(self) -> str:
         """
         Display information about the contents of the cache in a pretty table.
