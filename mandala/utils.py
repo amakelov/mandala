@@ -47,6 +47,26 @@ def deserialize(value: bytes) -> Any:
     return joblib.load(buffer)
 
 
+def _conservative_equality_check(safe_value: Any, unknown_value: Any) -> bool:
+    """
+    An equality checker that treats `safe_value` as a "simple" type, but is 
+    conservative about how __eq__ can be applied to `unknown_value`. This is
+    necessary when comparing against e.g. numpy arrays.
+    """
+    if type(safe_value) != type(unknown_value):
+        return False
+    if isinstance(unknown_value, (int, float, str, bytes, bool, type(None))):
+        return safe_value == unknown_value
+    # handle some common cases
+    if isinstance(unknown_value, np.ndarray):
+        return np.array_equal(safe_value, unknown_value)
+    elif isinstance(unknown_value, pd.DataFrame):
+        return safe_value.equals(unknown_value)
+    else:
+        # fall back to the default equality check
+        return safe_value == unknown_value
+
+
 def get_content_hash(obj: Any) -> str:
     if hasattr(obj, "__get_mandala_dict__"):
         obj = obj.__get_mandala_dict__()

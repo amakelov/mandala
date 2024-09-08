@@ -4,7 +4,7 @@ import datetime
 from .model import *
 import sqlite3
 from .model import __make_list__, __list_getitem__, __make_dict__, __dict_getitem__, _Ignore, _NewArgDefault
-from .utils import dataframe_to_prettytable, parse_returns
+from .utils import dataframe_to_prettytable, parse_returns, _conservative_equality_check
 from .viz import _get_colorized_diff
 from .deps.versioner import Versioner, CodeState
 from .deps.utils import get_dep_key_from_func, extract_func_obj
@@ -51,6 +51,10 @@ class Storage:
         else:
             self.overflow_storage = None
 
+        # storage for ref values: {cid -> serialized object}
+        # storing the serialized object prevents accidental modification of the
+        # object in memory, but also means that we have to deserialize it when
+        # we want to use it.
         self.atoms = CachedDictStorage(
             persistent=SQLiteDictStorage(self.db, table="atoms", 
                                          overflow_storage=self.overflow_storage,
@@ -122,7 +126,7 @@ class Storage:
     ############################################################################
     ### managing the caches
     ############################################################################
-    def clear_cache(self, allow_uncommitted: False):
+    def clear_cache(self, allow_uncommitted: bool = False):
         self.atoms.clear(allow_uncommited=allow_uncommitted)
         self.shapes.clear(allow_uncommited=allow_uncommitted)
         self.ops.clear(allow_uncommited=allow_uncommitted)
@@ -223,6 +227,12 @@ class Storage:
             raise NotImplementedError
 
     def load_ref(self, hid: str, in_memory: bool = False) -> Ref:
+        """
+        Loads the Ref with the given `hid`, *and* caches it in the `.atoms` and
+        `.shapes`.
+
+        TODO: add option to disable automatic caching of atoms.
+        """
         shape = self.shapes[hid]
         if isinstance(shape, AtomRef):
             if in_memory:
@@ -435,10 +445,13 @@ class Storage:
     ############################################################################
     ###
     ############################################################################
-    def _unwrap_atom(self, obj: Any) -> Any:
+    def _unwrap_atom(self, obj: Any, cache: bool = True) -> Any:
+        # TODO: implement `cache = False` in `load_ref`
         assert isinstance(obj, AtomRef)
         if not obj.in_memory:
             ref = self.load_ref(hid=obj.hid, in_memory=False)
+            if cache:
+                self.atoms[obj.cid] = serialize(ref.obj)
             return ref.obj
         else:
             return obj.obj
@@ -458,7 +471,7 @@ class Storage:
             else:
                 return ref.attached(obj=deserialize(self.atoms[ref.cid]))
 
-    def unwrap(self, obj: Any) -> Any:
+    def unwrap(self, obj: Any, cache: bool = True) -> Any:
         """
         Given a `Ref` or a nested python collection containing `Ref`s, return
         the "unwrapped" object, where all `Ref`s are replaced by the objects
@@ -467,7 +480,7 @@ class Storage:
         NOTE: will trigger a load from the storage backend when some of the
         objects are not in memory.
         """
-        return recurse_on_ref_collections(self._unwrap_atom, obj)
+        return recurse_on_ref_collections(self._unwrap_atom, obj, **{"cache": cache})
 
     def attach(self, obj: T, inplace: bool = False) -> Optional[T]:
         """
@@ -740,7 +753,8 @@ class Storage:
                     if isinstance(v, Ref) and self.unwrap(v) == default_values[k].value:
                         # the value is wrapped
                         bound_arguments.arguments[k] = default_values[k].value
-                    elif v == default_values[k].value:
+                    # elif v == default_values[k].value:
+                    elif _conservative_equality_check(safe_value=default_values[k].value, unknown_value=v):
                         # the value is unwrapped
                         bound_arguments.arguments[k] = default_values[k].value
                     else:

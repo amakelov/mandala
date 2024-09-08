@@ -1,4 +1,5 @@
 from mandala.imports import *
+import numpy as np
 
 
 def test_storage():
@@ -177,3 +178,49 @@ def test_clear_uncommitted():
         # now clear the atoms cache after committing
         storage.commit()
         storage.atoms.clear()
+
+
+
+def test_newargdefault():
+    storage = Storage()
+
+    @op
+    def add(x,):
+        return x + 1
+    
+    with storage:
+        add(1)
+
+    @op
+    def add(x, y=NewArgDefault(1)):
+        return x + y
+    
+    with storage:
+        add(1)
+    # check that we didn't make a new call 
+    assert len(storage.cf(add).calls) == 1
+
+    with storage:
+        add(1, 1)
+    # check that we didn't make a new call 
+    assert len(storage.cf(add).calls) == 1
+
+    with storage:
+        add(1, 2)
+    # now this should have made a new call!
+    assert len(storage.cf(add).calls) == 2
+
+def test_newargdefault_compound_types():
+    storage = Storage()
+
+    @op
+    def add_array(x:np.ndarray):
+        return x
+    with storage:
+        add_array(np.array([1, 2, 3]))
+    
+    @op
+    def add_array(x:np.ndarray, y=NewArgDefault(None)):
+        return x + y
+    with storage:
+        add_array(np.array([1, 2, 3]), y=np.array([4, 5, 6]))
