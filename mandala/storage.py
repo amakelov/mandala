@@ -750,7 +750,8 @@ class Storage:
                     # regardless of defaults, any _Ignore instance should be ignored
                     bound_arguments.arguments[k] = v.value
                 elif k in default_values and isinstance(default_values[k], _NewArgDefault):
-                    if isinstance(v, Ref) and self.unwrap(v) == default_values[k].value:
+                    # if isinstance(v, Ref) and self.unwrap(v) == default_values[k].value:
+                    if isinstance(v, Ref) and _conservative_equality_check(safe_value=default_values[k].value, unknown_value=self.unwrap(v)):
                         # the value is wrapped
                         bound_arguments.arguments[k] = default_values[k].value
                     # elif v == default_values[k].value:

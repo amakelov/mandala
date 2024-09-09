@@ -222,5 +222,10 @@ def test_newargdefault_compound_types():
     @op
     def add_array(x:np.ndarray, y=NewArgDefault(None)):
         return x + y
+    # test passing a raw value
     with storage:
         add_array(np.array([1, 2, 3]), y=np.array([4, 5, 6]))
+    
+    # now test passing a wrapped value
+    with storage:
+        add_array(np.array([1, 2, 3]), y=wrap_atom(np.array([7, 8, 9])))
