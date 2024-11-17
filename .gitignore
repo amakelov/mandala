@@ -79,5 +79,8 @@ mandala/tests/output/*
 # ignore docs build
 site/
 
+# ignore PyPi build
+dist/
+
 # Ignore previous version 
 mandala/_prev/

@@ -164,6 +164,8 @@ class ComputationFrame:
         """
         res = {}
         for fname, call_hids in self.fs.items():
+            if not call_hids:
+                raise NotImplementedError("TODO: handle empty function nodes")
             res[fname] = self.calls[next(iter(call_hids))].op
         return res
 
