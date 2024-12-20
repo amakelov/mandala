@@ -1,5 +1,5 @@
 from .storage import Storage
-from .model import op, Ignore, NewArgDefault, wrap_atom
+from .model import op, Ignore, NewArgDefault, wrap_atom, ValuePointer
 from .tps import MList, MDict
 from .deps.tracers.dec_impl import track
 

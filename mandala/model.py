@@ -63,6 +63,9 @@ class AtomRef(Ref):
         return "Atom" + super().__repr__()
 
 
+################################################################################
+### wrappers for values that should be treated in special ways
+###############################################################################
 class _Ignore:
     """
     Used to mark values that should be ignored by the storage, but still
@@ -83,6 +86,41 @@ class _NewArgDefault(_Ignore):
     """
     pass
 
+
+class ValuePointer:
+    """
+    Replace an object by a human-readable name from the point of view of the
+    storage.
+
+    A value wrapped in a `ValuePointer` will:
+    - be identified via its `id` when hashing (when computing both the content
+    and history IDs)
+    - will not be saved in the storage
+    - will be replaced by the underlying `obj` when passed to a memoized
+    function 
+
+    This is useful for passing large, complex objects (e.g., a machine learning
+    dataset or model) that is immutable over the course of a project and is 
+    either not serializable, or stored elsewhere and thus we don't need to 
+    duplicate it in the storage.
+    
+    """
+    def __init__(self, id: str, obj: Any):
+        if not isinstance(id, str) or not id:
+            raise ValueError("The `id` must be a non-empty string.")
+        self.id = id
+        self.obj = obj
+    
+    def __eq__(self, other: Any) -> bool:
+        raise NotImplementedError("ValuePointer objects should not be compared.")
+    
+    def __hash__(self) -> int:
+        raise NotImplementedError("ValuePointer objects should not be hashed.")
+    
+    def __repr__(self) -> str:
+        obj_repr = repr(self.obj)
+        return f"ValuePointer({self.id!r}, {obj_repr})"
+
     
 T = TypeVar("T")
 def Ignore(value: T = None) -> T:
@@ -92,6 +130,9 @@ def NewArgDefault(value: T = None) -> T:
     return _NewArgDefault(value)
 
 
+################################################################################
+### ops and calls
+################################################################################
 class Op:
     def __init__(
         self,
@@ -244,10 +285,19 @@ def wrap_atom(obj: Any, history_id: Optional[str] = None) -> AtomRef:
     it unchanged. If `history_id` is not provided, it will be initialized
     from the object's content hash (thereby representing an object without any
     history).
+
+    All operations that wrap a value (whether a collection or an atom) must 
+    factor through this function.
     """
     if isinstance(obj, Ref):
+        if not isinstance(obj, AtomRef):
+            raise ValueError(f"Expected an AtomRef, got {type(obj)}")
         assert history_id is None
         return obj
+    if isinstance(obj, ValuePointer):
+        # we never directly hash the object, but rather the id
+        uid = get_content_hash(obj.id) 
+        return AtomRef(cid=uid, hid=uid, in_memory=True, obj=ValuePointer(id=obj.id, obj=None))
     uid = get_content_hash(obj)
     if history_id is None:
         history_id = get_content_hash(uid)

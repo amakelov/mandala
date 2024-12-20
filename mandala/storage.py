@@ -3,7 +3,7 @@ from tqdm import tqdm
 import datetime
 from .model import *
 import sqlite3
-from .model import __make_list__, __list_getitem__, __make_dict__, __dict_getitem__, _Ignore, _NewArgDefault
+from .model import __make_list__, __list_getitem__, __make_dict__, __dict_getitem__, _Ignore, _NewArgDefault, ValuePointer
 from .utils import dataframe_to_prettytable, parse_returns, _conservative_equality_check
 from .viz import _get_colorized_diff
 from .deps.versioner import Versioner, CodeState
@@ -510,11 +510,6 @@ class Storage:
             # the keys must be strings
             assert all(isinstance(k, str) for k in val.keys())
             res = val
-            # sorted_keys = sorted(val.keys())
-            # res = {}
-            # for i, k in enumerate(sorted_keys):
-            #     res[f'key_{i}'] = k
-            #     res[f'value_{i}'] = val[k]
             return res
         else:
             raise NotImplementedError
@@ -532,19 +527,15 @@ class Storage:
             result = {}
             for input_name in struct_inputs.keys():
                 result[input_name] = tp.val
-                # if input_name.startswith("key_"):
-                #     i = int(input_name.split("_")[-1])
-                #     result[f"key_{i}"] = tp.key
-                # elif input_name.startswith("value_"):
-                #     i = int(input_name.split("_")[-1])
-                #     result[f"value_{i}"] = tp.val
-                # else:
-                #     raise ValueError(f"Invalid input name {input_name}")
             return result
         else:
             raise NotImplementedError
 
     def construct(self, tp: Type, val: Any) -> Tuple[Ref, List[Call]]:
+        """
+        Given a target type and a value, construct a `Ref` of the target type,
+        as well as the associated structural calls, if any.
+        """
         if isinstance(val, Ref):
             return val, []
         if isinstance(tp, AtomType):
@@ -833,10 +824,10 @@ class Storage:
         if op.__structural__:
             returns = f(**wrapped_inputs)
         else:
-            # #! guard against side effects
+            # # guard against side effects
             # cids_before = {k: v.cid for k, v in wrapped_inputs.items()}
             # raw_values = {k: self.unwrap(v) for k, v in wrapped_inputs.items()}
-            #! call the function
+            ### we must run the function
             kwargs = {}
             if kwarg_keys is not None:
                 for k in kwarg_keys:
@@ -855,6 +846,9 @@ class Storage:
             args = self.unwrap(args)
             kwargs.update(leftover_kwargs)
             kwargs = self.unwrap(kwargs)
+            # replace any ValuePointer instances with their underlying objects
+            kwargs = {k: v.obj if isinstance(v, ValuePointer) else v for k, v in kwargs.items()}  
+            args = tuple([v.obj if isinstance(v, ValuePointer) else v for v in args])
 
             if tracer_option is not None:
                 tracer = tracer_option
@@ -862,6 +856,7 @@ class Storage:
                     if isinstance(tracer, DecTracer):
                         f = track(op.f)
                         node = tracer.register_call(func=f)
+                    #! call the function
                     returns = f(*args, **kwargs)
                     if isinstance(tracer, DecTracer):
                         tracer.register_return(node=node)

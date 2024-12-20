@@ -229,3 +229,23 @@ def test_newargdefault_compound_types():
     # now test passing a wrapped value
     with storage:
         add_array(np.array([1, 2, 3]), y=wrap_atom(np.array([7, 8, 9])))
+
+
+
+
+def test_value_pointer():
+    storage = Storage()
+
+    @op
+    def get_mean(x: np.ndarray) -> float:
+        return x.mean()
+    
+    with storage:
+        X = np.array([1, 2, 3, 4, 5])
+        X_pointer = ValuePointer("X", X)
+        mean = get_mean(X_pointer)
+    
+    assert storage.unwrap(mean) == 3.0
+    df = storage.cf(get_mean).df()
+    assert len(df) == 1
+    assert df['x'].item().id == "X"
