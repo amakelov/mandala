@@ -33,7 +33,7 @@ packages = [
 ]
 
 setup(
-    name="mandala",
+    name="pymandala",
     version="v0.2.0-alpha",
     author="Aleksandar (Alex) Makelov",
     author_email="aleksandar.makelov@gmail.com",

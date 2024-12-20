@@ -58,6 +58,10 @@ https://github.com/amakelov/mandala/assets/1467702/85185599-10fb-479e-bf02-44287
 
 # Install
 ```
+pip install pymandala
+```
+or
+```
 pip install git+https://github.com/amakelov/mandala
 ```
 
