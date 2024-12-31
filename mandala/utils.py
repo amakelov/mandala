@@ -2,6 +2,7 @@ from .common_imports import *
 import joblib
 import io
 import inspect
+from inspect import Parameter
 import sqlite3
 from .config import *
 from abc import ABC, abstractmethod
@@ -89,7 +90,6 @@ def get_content_hash(obj: Any) -> str:
 
 
 def dump_output_name(index: int, output_names: Optional[List[str]] = None) -> str:
-    sess.d()
     if output_names is not None and index < len(output_names):
         return output_names[index]
     else:
@@ -171,6 +171,48 @@ def get_adj_from_edges(
             if node not in inp:
                 inp[node] = {}
     return out, inp
+
+
+def boundargs_to_args_kwargs(bound_args: inspect.BoundArguments) -> Tuple[Tuple[Any,...], Dict[str, Any]]:
+    """
+    Convert a BoundArguments object into a tuple of args and a dict of kwargs.
+
+    Parameters
+    ----------
+    bound_args : inspect.BoundArguments
+        The BoundArguments object, typically obtained via signature.bind(*args, **kwargs).
+
+    Returns
+    -------
+    args_tuple : tuple
+        The positional arguments in correct order.
+    kwargs_dict : dict
+        The keyword arguments.
+    """
+    args_list = []
+    kwargs_dict = {}
+
+    for param_name, param in bound_args.signature.parameters.items():
+        kind = param.kind
+        value = bound_args.arguments[param_name]
+
+        if kind in (Parameter.POSITIONAL_ONLY, Parameter.POSITIONAL_OR_KEYWORD):
+            # Regular positional or positional+keyword
+            args_list.append(value)
+
+        elif kind == Parameter.VAR_POSITIONAL:
+            # args captured
+            args_list.extend(value)
+
+        elif kind == Parameter.KEYWORD_ONLY:
+            # Keyword-only argument
+            kwargs_dict[param_name] = value
+
+        elif kind == Parameter.VAR_KEYWORD:
+            # kwargs captured
+            kwargs_dict.update(value)
+
+    return tuple(args_list), kwargs_dict
 
 
 def parse_returns(

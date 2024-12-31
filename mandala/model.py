@@ -129,6 +129,13 @@ def Ignore(value: T = None) -> T:
 def NewArgDefault(value: T = None) -> T:
     return _NewArgDefault(value)
 
+def unwrap_special_value(obj: ValuePointer | _Ignore | Any) -> Any:
+    if isinstance(obj, ValuePointer):
+        return obj.obj
+    elif isinstance(obj, _Ignore):
+        return obj.value
+    else:
+        return obj
 
 ################################################################################
 ### ops and calls
@@ -239,7 +246,7 @@ class Op:
             return self.f(*args, **kwargs)
         else:
             storage = Context.current_context.storage
-            return storage.call(self, args, kwargs, __config__={"save_calls": True})
+            return storage.call(self, args, kwargs, config={"save_calls": True})
 
 
 class Call:

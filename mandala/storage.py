@@ -4,7 +4,7 @@ import datetime
 from .model import *
 import sqlite3
 from .model import __make_list__, __list_getitem__, __make_dict__, __dict_getitem__, _Ignore, _NewArgDefault, ValuePointer
-from .utils import dataframe_to_prettytable, parse_returns, _conservative_equality_check
+from .utils import dataframe_to_prettytable, parse_returns, _conservative_equality_check, boundargs_to_args_kwargs
 from .viz import _get_colorized_diff
 from .deps.versioner import Versioner, CodeState
 from .deps.utils import get_dep_key_from_func, extract_func_obj
@@ -114,7 +114,13 @@ class Storage:
         # a list of functions to call when the storage is exited
         # each function should have a single argument, the storage object
         self._exit_hooks = []
-
+        # stack of modes
+        self._mode_stack = []
+        self._next_mode = 'run'
+    
+    @property
+    def mode(self) -> str:
+        return self._mode_stack[-1] if self._mode_stack else 'run'
     
     def conn(self) -> sqlite3.Connection:
         return self.db.conn()
@@ -661,35 +667,6 @@ class Storage:
             if v.default is not inspect.Parameter.empty
         }
     
-    # def preprocess_args_kwargs(self,
-    #                            f: Callable,
-    #                            args: Tuple[Any, ...],
-    #                            kwargs: Dict[str, Any]):
-    #     """
-    #     Find which inputs should be ignored by the storage, and replace them
-    #     with their underlying objects.
-    #     """
-    #     sig = inspect.signature(f)
-    #     defaults = self.get_defaults(f)
-    #     bound_args = sig.bind(*args, **kwargs)
-    #     bound_args.apply_defaults()
-    #     ignored_inputs = set()
-    #     for k, v in bound_args.arguments.items():
-    #         if isinstance(v, _Ignore):
-    #             ignored_inputs.add(k)
-    #     # now, check for defaults we should ignore
-    #     for k, v in defaults.items():
-    #         given_value = bound_args.arguments[v]
-    #         if isinstance(given_value, _Ignore):
-    #             ignored_inputs.add(k)
-    #         elif isinstance(v, _NewArgDefault):
-    #             if isinstance(given_value, Ref):
-    #                 if self.unwrap(given_value) == v.value:
-    #                     ignored_inputs.add(k)
-    #             else:
-    #                 if given_value == v.value:
-    #                     ignored_inputs.add(k)
-    
     def parse_args(self, sig: inspect.Signature, args, kwargs, apply_defaults: bool, 
                    ignore_args: Optional[Tuple[str,...]] = None) -> Tuple[inspect.BoundArguments, Dict[str, Any], Dict[str, Any]]:
         """
@@ -862,19 +839,6 @@ class Storage:
                         tracer.register_return(node=node)
             else:
                 returns = f(*args, **kwargs)
-
-            # if not op.__allow_side_effects__:
-            #     # capture changes in the inputs; TODO: this is hacky; ideally, we would
-            #     # avoid calling `construct` and instead recurse on the values, looking for differences.
-            #     cids_after = {
-            #         k: self.construct(tp=storage_tps[k], val=v)[0].cid
-            #         for k, v in raw_values.items()
-            #     }
-            #     changed_inputs = {k for k in cids_before if cids_before[k] != cids_after[k]}
-            #     if len(changed_inputs) > 0:
-            #         raise ValueError(
-            #             f"Function {f.__name__} has side effects on inputs {changed_inputs}; aborting call."
-            #         )
 
         if must_version_call:
             # check the trace against the code state hypothesis
@@ -1158,40 +1122,55 @@ class Storage:
             raise ValueError("Invalid input to `cf`")
 
     def call(
-        self, __op__: Op, args, kwargs, __config__: Optional[dict] = None
+        self, op: Op, args, kwargs, config: Optional[dict] = None
     ) -> Union[Tuple[Ref, ...], Ref]:
-        __config__ = {} if __config__ is None else __config__
+        config = {} if config is None else config
         kwarg_keys = set(kwargs.keys())
         bound_arguments, storage_inputs, storage_annotations = self.parse_args(
-            sig=inspect.signature(__op__.f),
+            sig=inspect.signature(op.f),
             args=args,
             kwargs=kwargs,
             apply_defaults=True,
-            ignore_args=__op__.ignore_args,
+            ignore_args=op.ignore_args,
         )
 
-        storage_tps = {
-            k: Type.from_annotation(annotation=v) for k, v in storage_annotations.items()
-        }
-        res, main_call, calls = self.call_internal(
-            op=__op__,
-            storage_inputs = storage_inputs,
-            bound_arguments = bound_arguments,
-            storage_tps=storage_tps,
-            kwarg_keys=kwarg_keys,
-        )
-        if __config__.get("save_calls", False):
-            self.save_call(main_call)
-            for call in calls:
-                self.save_call(call)
-        ord_outputs = __op__.get_ordered_outputs(main_call.outputs)
-        if len(ord_outputs) == 1:
-            return ord_outputs[0]
-        else:
-            return ord_outputs
+        if self.mode == "noop":
+            args, kwargs = boundargs_to_args_kwargs(bound_arguments)
+            # unwrap the special values from the arguments and keywords
+            args = tuple([unwrap_special_value(arg) for arg in args])
+            kwargs = {k: unwrap_special_value(v) for k, v in kwargs.items()}
+            # now unwrap the values of the arguments
+            args = tuple([self.unwrap(arg) for arg in args])
+            kwargs = {k: self.unwrap(v) for k, v in kwargs.items()}
+            return op.f(*args, **kwargs)
+        elif self.mode == "run":
+            storage_tps = {
+                k: Type.from_annotation(annotation=v) for k, v in storage_annotations.items()
+            }
+            res, main_call, calls = self.call_internal(
+                op=op,
+                storage_inputs = storage_inputs,
+                bound_arguments = bound_arguments,
+                storage_tps=storage_tps,
+                kwarg_keys=kwarg_keys,
+            )
+            if config.get("save_calls", False):
+                self.save_call(main_call)
+                for call in calls:
+                    self.save_call(call)
+            ord_outputs = op.get_ordered_outputs(main_call.outputs)
+            if len(ord_outputs) == 1:
+                return ord_outputs[0]
+            else:
+                return ord_outputs
+    
+    def __call__(self, mode: Literal['run', 'noop'] = 'run') -> "Storage":
+        self._next_mode = mode
+        return self
 
     def __enter__(self) -> "Storage":
         Context.current_context = Context(storage=self)
+        self._mode_stack.append(self._next_mode)
         if self.versioned:
             versioner, code_state = self.sync_code()
             self.cached_versioner = versioner
@@ -1207,10 +1186,13 @@ class Storage:
         finally:
             self.cached_versioner = None
             self.code_state = None
-
+            _ = self._mode_stack.pop()
+            if self._mode_stack:
+                self._next_mode = self._mode_stack[-1]
+            else:
+                self._next_mode = 'run'
             for hook in self._exit_hooks:
                 hook(self)
 
-    
 
 from .cf import ComputationFrame
