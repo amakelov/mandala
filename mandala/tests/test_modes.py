@@ -49,3 +49,22 @@ def test_noop_composition():
         with storage(mode='noop'):
             z = add(x, 21)
         assert z == 42
+
+
+def test_noop_standalone():
+    storage = Storage()
+    
+    @op
+    def inc(x: int) -> int:
+        return x + 1
+    
+    with storage:
+        x = inc(20)
+        assert storage.mode == 'run'
+        with noop():
+            assert storage.mode == 'noop'
+            y = inc(x)
+            z = inc(20)
+        assert storage.mode == 'run'
+        assert y == 22
+        assert z == 21

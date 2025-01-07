@@ -1195,4 +1195,28 @@ class Storage:
                 hook(self)
 
 
+class noop:
+    """
+    A noop context manager that sets the mode to 'noop' without reference to the
+    storage object. Requires that a context is already active. 
+
+    This is useful when you want to call an `@op` inside another `@op` without
+    having to pass the storage object around.
+    """
+    def __init__(self,):
+        pass
+
+    def __enter__(self) -> "Storage":
+        assert Context.current_context is not None, "A context must be active to use `noop`"
+        storage = Context.current_context.storage
+        res = storage(mode='noop')
+        return res.__enter__()
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        assert Context.current_context is not None, "A context must be active to use `noop`"
+        storage = Context.current_context.storage
+        res = storage(mode='run')
+        return res.__exit__(exc_type, exc_value, traceback)
+
+
 from .cf import ComputationFrame
