@@ -68,3 +68,8 @@ def test_noop_standalone():
         assert storage.mode == 'run'
         assert y == 22
         assert z == 21
+    
+    # now, test it without a context
+    with noop():
+        x = inc(20)
+        assert x == 21

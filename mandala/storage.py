@@ -1207,13 +1207,15 @@ class noop:
         pass
 
     def __enter__(self) -> "Storage":
-        assert Context.current_context is not None, "A context must be active to use `noop`"
+        if Context.current_context is None:
+            return self
         storage = Context.current_context.storage
         res = storage(mode='noop')
         return res.__enter__()
 
     def __exit__(self, exc_type, exc_value, traceback):
-        assert Context.current_context is not None, "A context must be active to use `noop`"
+        if Context.current_context is None:
+            return
         storage = Context.current_context.storage
         res = storage(mode='run')
         return res.__exit__(exc_type, exc_value, traceback)
