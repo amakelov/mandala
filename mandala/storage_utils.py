@@ -53,24 +53,48 @@ def transaction(method):  # transaction decorator for classes with a `conn` meth
         if kwargs.get("conn") is not None:  # already in a transaction
             logging.debug("Folding into existing transaction")
             return method(self, *args, **kwargs)
-        else:  # open a connection
-            logging.debug(
-                f"Opening new transaction from {self.__class__.__name__}.{method.__name__}"
-            )
+
+        # 10 attempts with exponential backoff, max. time is ~17 minutes
+        max_attempts = 10
+        base_delay = 1.0 # in seconds
+
+        for attempt in range(max_attempts):
             conn = self.conn()
             try:
+                conn.execute("BEGIN IMMEDIATE")
                 res = method(self, *args, conn=conn, **kwargs)
                 conn.commit()
                 return res
+            except sqlite3.OperationalError as e:
+                delay = base_delay * (2 ** attempt)
+                logging.info(f'Transaction failed with error: {e}. Retrying in {delay:.2f} seconds...')
+                time.sleep(delay)
+                continue
             except Exception as e:
                 conn.rollback()
                 raise e
             finally:
                 if not is_in_memory_db(conn):
                     conn.close()
-                else:
-                    # in-memory databases are kept open
-                    pass
+        raise sqlite3.OperationalError("Max retry attempts reached")
+        # else:  # open a connection
+        #     logging.debug(
+        #         f"Opening new transaction from {self.__class__.__name__}.{method.__name__}"
+        #     )
+        #     conn = self.conn()
+        #     try:
+        #         res = method(self, *args, conn=conn, **kwargs)
+        #         conn.commit()
+        #         return res
+        #     except Exception as e:
+        #         conn.rollback()
+        #         raise e
+        #     finally:
+        #         if not is_in_memory_db(conn):
+        #             conn.close()
+        #         else:
+        #             # in-memory databases are kept open
+        #             pass
     return wrapper
 
 

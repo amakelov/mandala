@@ -28,6 +28,7 @@ class Storage:
                  db_path: str = ":memory:", 
                  overflow_dir: Optional[str] = None,
                  overflow_threshold_MB: Optional[Union[int, float]] = 50.0,
+                 #! versioning config. this is too much...
                  deps_path: Optional[Union[str, Path]] = None,
                  tracer_impl: Optional[type] = None,
                  strict_tracing: bool = False,
@@ -76,6 +77,15 @@ class Storage:
         else:
             current_versioner = self.sources['versioner']
 
+        self._deps_path = deps_path
+        self._tracer_impl = tracer_impl
+        self._strict_tracing = strict_tracing
+        self._skip_unhashable_globals = skip_unhashable_globals
+        self._skip_globals_silently = skip_globals_silently
+        self._skip_missing_deps = skip_missing_deps
+        self._skip_missing_silently = skip_missing_silently
+        self._deps_package = deps_package
+        self._track_globals = track_globals
         if deps_path is not None:
             deps_path = (
                 Path(deps_path).absolute().resolve()
@@ -117,6 +127,22 @@ class Storage:
         # stack of modes
         self._mode_stack = []
         self._next_mode = 'run'
+    
+    def dump_config(self) -> dict[str, Any]:
+        return {
+            "db_path": self.db.db_path,
+            "overflow_dir": self.overflow_dir,
+            "overflow_threshold_MB": self.overflow_threshold_MB,
+            "deps_path": self._deps_path,
+            "tracer_impl": self._tracer_impl,
+            "strict_tracing": self._strict_tracing,
+            "skip_unhashable_globals": self._skip_unhashable_globals,
+            "skip_globals_silently": self._skip_globals_silently,
+            "skip_missing_deps": self._skip_missing_deps,
+            "skip_missing_silently": self._skip_missing_silently,
+            "deps_package": self._deps_package,
+            "track_globals": self._track_globals,
+        }
     
     @property
     def mode(self) -> str:
@@ -1177,22 +1203,45 @@ class Storage:
             self.code_state = code_state
         return self
 
+    # def __exit__(self, exc_type, exc_value, traceback) -> None:
+    #     Context.current_context = None
+    #     try:
+    #         self.commit()
+    #     except Exception as e:
+    #         raise e
+    #     finally:
+    #         self.cached_versioner = None
+    #         self.code_state = None
+    #         _ = self._mode_stack.pop()
+    #         if self._mode_stack:
+    #             self._next_mode = self._mode_stack[-1]
+    #         else:
+    #             self._next_mode = 'run'
+    #         for hook in self._exit_hooks:
+    #             hook(self)
+
     def __exit__(self, exc_type, exc_value, traceback) -> None:
-        Context.current_context = None
+        # Context.current_context = None
         try:
-            self.commit()
+            if len(self._mode_stack) == 1: # this is the topmost level
+                self.commit()
         except Exception as e:
             raise e
         finally:
-            self.cached_versioner = None
-            self.code_state = None
+            if len(self._mode_stack) == 1: # this is the topmost level
+                Context.current_context = None
+                self.cached_versioner = None
+                self.code_state = None
+
+                for hook in self._exit_hooks:
+                    hook(self)
+
             _ = self._mode_stack.pop()
             if self._mode_stack:
                 self._next_mode = self._mode_stack[-1]
             else:
                 self._next_mode = 'run'
-            for hook in self._exit_hooks:
-                hook(self)
+
 
 
 class noop:
@@ -1206,9 +1255,9 @@ class noop:
     def __init__(self,):
         pass
 
-    def __enter__(self) -> "Storage":
+    def __enter__(self) -> Optional["Storage"]:
         if Context.current_context is None:
-            return self
+            return None
         storage = Context.current_context.storage
         res = storage(mode='noop')
         return res.__enter__()
