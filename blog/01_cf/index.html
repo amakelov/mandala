@@ -1,0 +1,1390 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+      
+        <link rel="prev" href="../..">
+      
+      
+        <link rel="next" href="../02_deps/">
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.5.49">
+    
+    
+      
+        <title>Tidy Computations - Mandala Documentation</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.6f8fc17f.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.06af60db.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../stylesheets/extra.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#tidy-computations" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="Mandala Documentation" class="md-header__button md-logo" aria-label="Mandala Documentation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Mandala Documentation
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Tidy Computations
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      <label class="md-header__button md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+      </label>
+      <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+    
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="Mandala Documentation" class="md-nav__button md-logo" aria-label="Mandala Documentation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Mandala Documentation
+  </label>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Introduction
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    Blog
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            Blog
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  <span class="md-ellipsis">
+    Tidy Computations
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  <span class="md-ellipsis">
+    Tidy Computations
+  </span>
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#so-whats-a-computationframe" class="md-nav__link">
+    <span class="md-ellipsis">
+      So what's a ComputationFrame?
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="So what's a ComputationFrame?">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#minimal-interesting-example" class="md-nav__link">
+    <span class="md-ellipsis">
+      Minimal interesting example
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#precise-definition" class="md-nav__link">
+    <span class="md-ellipsis">
+      Precise definition
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#case-studies" class="md-nav__link">
+    <span class="md-ellipsis">
+      Case studies
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Case studies">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#in-place-updates-as-cycles-in-the-computation-graph" class="md-nav__link">
+    <span class="md-ellipsis">
+      In-place updates as cycles in the computation graph
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pipelines-that-branch-andor-merge" class="md-nav__link">
+    <span class="md-ellipsis">
+      Pipelines that branch and/or merge
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tidy-tools-merging-computationframes" class="md-nav__link">
+    <span class="md-ellipsis">
+      Tidy tools: merging ComputationFrames
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#operations-that-aggregate-multiple-results" class="md-nav__link">
+    <span class="md-ellipsis">
+      Operations that aggregate multiple results
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#conclusion-limitations-outlook" class="md-nav__link">
+    <span class="md-ellipsis">
+      Conclusion, limitations &amp; outlook
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#why-tidy-and-some-other-related-work" class="md-nav__link">
+    <span class="md-ellipsis">
+      Why "tidy"? And some other related work
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Why "tidy"? And some other related work">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#tidy-data-vs-tidy-computations" class="md-nav__link">
+    <span class="md-ellipsis">
+      Tidy data vs tidy computations
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#graphs-databases-categories" class="md-nav__link">
+    <span class="md-ellipsis">
+      Graphs, databases, categories
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../02_deps/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Practical dependency tracking for Python function calls
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    Topics
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            Topics
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../topics/01_storage_and_ops/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Storage &amp; the @op Decorator
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../topics/02_retracing/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Patterns for Incremental Computation &amp; Development
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../topics/03_cf/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Query the Storage with ComputationFrames
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../topics/04_versions/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Changing @ops and managing versions
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../topics/05_collections/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Natively handling Python collections
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../topics/06_advanced_cf/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Advanced ComputationFrame tools
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    Tutorials
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            Tutorials
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/01_hello/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Quickstart
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/02_ml/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Random forest ML project
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/gotchas/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Gotchas
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#so-whats-a-computationframe" class="md-nav__link">
+    <span class="md-ellipsis">
+      So what's a ComputationFrame?
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="So what's a ComputationFrame?">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#minimal-interesting-example" class="md-nav__link">
+    <span class="md-ellipsis">
+      Minimal interesting example
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#precise-definition" class="md-nav__link">
+    <span class="md-ellipsis">
+      Precise definition
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#case-studies" class="md-nav__link">
+    <span class="md-ellipsis">
+      Case studies
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Case studies">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#in-place-updates-as-cycles-in-the-computation-graph" class="md-nav__link">
+    <span class="md-ellipsis">
+      In-place updates as cycles in the computation graph
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pipelines-that-branch-andor-merge" class="md-nav__link">
+    <span class="md-ellipsis">
+      Pipelines that branch and/or merge
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tidy-tools-merging-computationframes" class="md-nav__link">
+    <span class="md-ellipsis">
+      Tidy tools: merging ComputationFrames
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#operations-that-aggregate-multiple-results" class="md-nav__link">
+    <span class="md-ellipsis">
+      Operations that aggregate multiple results
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#conclusion-limitations-outlook" class="md-nav__link">
+    <span class="md-ellipsis">
+      Conclusion, limitations &amp; outlook
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#why-tidy-and-some-other-related-work" class="md-nav__link">
+    <span class="md-ellipsis">
+      Why "tidy"? And some other related work
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Why "tidy"? And some other related work">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#tidy-data-vs-tidy-computations" class="md-nav__link">
+    <span class="md-ellipsis">
+      Tidy data vs tidy computations
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#graphs-databases-categories" class="md-nav__link">
+    <span class="md-ellipsis">
+      Graphs, databases, categories
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+<h1 id="tidy-computations">Tidy Computations</h1>
+<p><a href="https://colab.research.google.com/github/amakelov/mandala/blob/master/docs_source/blog/01_cf.ipynb"> 
+  <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/> </a></p>
+<p>In data-driven fields, such as machine learning, a lot of effort is spent
+organizing <em>computational data</em> &mdash; results of running programs &mdash; so
+that it can be analyzed and manipulated. This blog post introduces the
+<code>ComputationFrame</code> (CF) data structure &mdash; a synthesis of computation graphs
+and relational databases &mdash; which provides a natural and simple grammar of
+operations to eliminate this effort.</p>
+<p>The main benefit of CFs is that they give a single view of heterogeneous
+computations that go beyond a fixed schema. They automatically represent in a
+familiar and intuitive way constructs like conditional execution, feedback
+loops, branching/merging pipelines, and aggregation/indexing using collections.
+This view can be declaratively queried for relationships between any variables
+in (literally) a single line of code, without leaving Python or writing in a
+domain-specific language like SQL.</p>
+<p><code>ComputationFrame</code> is implemented as <a href="https://amakelov.github.io/mandala/topics/03_cf/">part
+of</a>
+<a href="https://github.com/amakelov/mandala">mandala</a>, a Python library for experiment
+tracking and incremental computation. All examples in this post are ran using
+the library.</p>
+<h2 id="so-whats-a-computationframe">So what's a <code>ComputationFrame</code>?</h2>
+<p>A <code>ComputationFrame</code> is a "generalized dataframe", where the set of columns is
+replaced by a computation graph of variables and operations, and rows are
+(possibly partial) executions of the graph.</p>
+<h3 id="minimal-interesting-example">Minimal interesting example</h3>
+<p>Below is a simple example of defining two Python functions  (decorated via <code>@op</code>
+from <code>mandala</code>), running some computations using them, and creating a CF from
+the results.</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="c1"># for Google Colab</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="k">try</span><span class="p">:</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="kn">import</span><span class="w"> </span><span class="nn">google.colab</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="err">!</span><span class="n">pip</span> <span class="n">install</span> <span class="n">git</span><span class="o">+</span><span class="n">https</span><span class="p">:</span><span class="o">//</span><span class="n">github</span><span class="o">.</span><span class="n">com</span><span class="o">/</span><span class="n">amakelov</span><span class="o">/</span><span class="n">mandala</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="k">except</span><span class="p">:</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="k">pass</span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="kn">from</span><span class="w"> </span><span class="nn">mandala.imports</span><span class="w"> </span><span class="kn">import</span> <span class="o">*</span>
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>
+</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="nd">@op</span><span class="p">(</span><span class="n">output_names</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;y&#39;</span><span class="p">])</span>
+</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="k">def</span><span class="w"> </span><span class="nf">increment</span><span class="p">(</span><span class="n">x</span><span class="p">):</span> <span class="k">return</span> <span class="n">x</span> <span class="o">+</span> <span class="mi">1</span>
+</span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>
+</span><span id="__span-0-13"><a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a><span class="nd">@op</span><span class="p">(</span><span class="n">output_names</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;w&#39;</span><span class="p">])</span>
+</span><span id="__span-0-14"><a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a><span class="k">def</span><span class="w"> </span><span class="nf">add</span><span class="p">(</span><span class="n">y</span><span class="p">,</span> <span class="n">z</span><span class="p">):</span> <span class="k">return</span> <span class="n">y</span> <span class="o">+</span> <span class="n">z</span>
+</span><span id="__span-0-15"><a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a>
+</span><span id="__span-0-16"><a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a><span class="c1"># compose the operations</span>
+</span><span id="__span-0-17"><a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a><span class="k">with</span> <span class="n">Storage</span><span class="p">()</span> <span class="k">as</span> <span class="n">storage</span><span class="p">:</span> <span class="c1"># the `storage` automatically stores calls to `@op`s</span>
+</span><span id="__span-0-18"><a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a>    <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">5</span><span class="p">):</span>
+</span><span id="__span-0-19"><a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a>        <span class="n">y</span> <span class="o">=</span> <span class="n">increment</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+</span><span id="__span-0-20"><a id="__codelineno-0-20" name="__codelineno-0-20" href="#__codelineno-0-20"></a>        <span class="k">if</span> <span class="n">x</span> <span class="o">%</span> <span class="mi">2</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+</span><span id="__span-0-21"><a id="__codelineno-0-21" name="__codelineno-0-21" href="#__codelineno-0-21"></a>            <span class="n">w</span> <span class="o">=</span> <span class="n">add</span><span class="p">(</span><span class="n">y</span><span class="o">=</span><span class="n">y</span><span class="p">,</span> <span class="n">z</span><span class="o">=</span><span class="n">x</span><span class="p">)</span>
+</span><span id="__span-0-22"><a id="__codelineno-0-22" name="__codelineno-0-22" href="#__codelineno-0-22"></a>
+</span><span id="__span-0-23"><a id="__codelineno-0-23" name="__codelineno-0-23" href="#__codelineno-0-23"></a><span class="c1"># get a CF for just the `increment` operation </span>
+</span><span id="__span-0-24"><a id="__codelineno-0-24" name="__codelineno-0-24" href="#__codelineno-0-24"></a><span class="n">cf</span> <span class="o">=</span> <span class="n">storage</span><span class="o">.</span><span class="n">cf</span><span class="p">(</span><span class="n">increment</span><span class="p">)</span>
+</span><span id="__span-0-25"><a id="__codelineno-0-25" name="__codelineno-0-25" href="#__codelineno-0-25"></a><span class="c1"># expand the CF to include the `add` operation</span>
+</span><span id="__span-0-26"><a id="__codelineno-0-26" name="__codelineno-0-26" href="#__codelineno-0-26"></a><span class="n">cf</span> <span class="o">=</span> <span class="n">cf</span><span class="o">.</span><span class="n">expand_forward</span><span class="p">()</span>
+</span><span id="__span-0-27"><a id="__codelineno-0-27" name="__codelineno-0-27" href="#__codelineno-0-27"></a><span class="c1"># draw the CF</span>
+</span><span id="__span-0-28"><a id="__codelineno-0-28" name="__codelineno-0-28" href="#__codelineno-0-28"></a><span class="n">cf</span><span class="o">.</span><span class="n">draw</span><span class="p">(</span><span class="n">verbose</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">orientation</span><span class="o">=</span><span class="s1">&#39;LR&#39;</span><span class="p">)</span>
+</span><span id="__span-0-29"><a id="__codelineno-0-29" name="__codelineno-0-29" href="#__codelineno-0-29"></a><span class="c1"># convert the CF to a dataframe</span>
+</span><span id="__span-0-30"><a id="__codelineno-0-30" name="__codelineno-0-30" href="#__codelineno-0-30"></a><span class="nb">print</span><span class="p">(</span><span class="n">cf</span><span class="o">.</span><span class="n">df</span><span class="p">()</span><span class="o">.</span><span class="n">to_markdown</span><span class="p">())</span>
+</span></code></pre></div>
+<p><img alt="svg" src="../01_cf_files/01_cf_2_0.svg" /></p>
+<div class="language-text highlight"><pre><span></span><code>|    |   x | increment                   |   y | add                   |   w |
+|---:|----:|:----------------------------|----:|:----------------------|----:|
+|  0 |   2 | Call(increment, hid=5dd...) |   3 | Call(add, hid=626...) |   5 |
+|  1 |   4 | Call(increment, hid=adf...) |   5 | Call(add, hid=deb...) |   9 |
+|  2 |   3 | Call(increment, hid=df2...) |   4 |                       | nan |
+|  3 |   0 | Call(increment, hid=230...) |   1 | Call(add, hid=247...) |   1 |
+|  4 |   1 | Call(increment, hid=6e2...) |   2 |                       | nan |
+</code></pre></div>
+<p>This small example illustrates the main components of the CF workflow:</p>
+<ul>
+<li><strong>run some computations</strong>: we ran a computation by composing calls to
+<code>increment</code> and <code>add</code> (which are automatically saved by <code>mandala</code> in a way that 
+keeps track of how the calls compose).</li>
+<li><strong>create a CF and add desired context to it</strong>: we explored the computation by
+starting from a CF containing all calls to <code>increment</code> and <em>expanding it</em>
+forward to add the downstream calls to <code>add</code>.</li>
+<li><strong>convert to a dataframe for downstream analysis</strong>: we turned the expanded CF
+into a dataframe, where the columns are the variables and operations in the
+graph, and the rows are the executions of the graph &mdash; recorded as values
+of variables and <code>Call</code> objects for operations. </li>
+</ul>
+<p>When a given computation is partial, missing values and calls are represented by
+nulls in the dataframe, which allows for easy filtering and analysis.</p>
+<h3 id="precise-definition">Precise definition</h3>
+<p>Concretely, a <code>ComputationFrame</code> consists of:</p>
+<ul>
+<li>a directed computation graph of operations and variables, where each operation
+has multiple named inputs and outputs. The names of these inputs and outputs are
+the edge labels in the graph;</li>
+<li>a set of calls for each operation node, and a set of values for each variable
+node. Details about how calls/values are distinguished are beyond the scope of
+this post, but the key idea is that each call/value has a unique ID based on its
+full computational history in terms of composition of <code>@op</code> calls; see
+<a href="https://amakelov.github.io/mandala/topics/01_storage_and_ops/#working-with-op-outputs-refs">here</a>
+for more.</li>
+</ul>
+<p>The only &mdash; but key &mdash; property this data must satisfy is that,
+whenever input/output variables are connected to an operation node <code>f</code>, the
+corresponding input/output values of all calls in <code>f</code> are found in these
+variables.</p>
+<h2 id="case-studies">Case studies</h2>
+<p>To illustrate the versatility of <code>ComputationFrame</code>s and the grammar of
+operations they support, let's now consider a fairly standard machine learning
+pipeline as a running example. </p>
+<p>The goal will be to train several kinds of machine learning models on the <a href="https://scikit-learn.org/0.16/modules/generated/sklearn.datasets.make_moons.html">moons
+dataset</a>
+from <a href="https://scikit-learn.org/stable/">scikit-learn</a>, and iterate on the
+pipeline by adding new preprocessing steps, models, hyperparameters and
+ensembling across model types. Here's some code to get us started:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">sklearn.datasets</span><span class="w"> </span><span class="kn">import</span> <span class="n">make_moons</span>
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">sklearn.model_selection</span><span class="w"> </span><span class="kn">import</span> <span class="n">train_test_split</span>
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">sklearn.preprocessing</span><span class="w"> </span><span class="kn">import</span> <span class="n">StandardScaler</span>
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="mi">42</span><span class="p">)</span>
+</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>
+</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="nd">@op</span><span class="p">(</span><span class="n">output_names</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;X&quot;</span><span class="p">,</span> <span class="s2">&quot;y&quot;</span><span class="p">])</span>
+</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="k">def</span><span class="w"> </span><span class="nf">get_data</span><span class="p">():</span>
+</span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>    <span class="k">return</span> <span class="n">make_moons</span><span class="p">(</span><span class="n">n_samples</span><span class="o">=</span><span class="mi">1000</span><span class="p">,</span> <span class="n">noise</span><span class="o">=</span><span class="mf">0.3</span><span class="p">,</span> <span class="n">random_state</span><span class="o">=</span><span class="mi">42</span><span class="p">)</span>
+</span><span id="__span-1-10"><a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a>
+</span><span id="__span-1-11"><a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a><span class="nd">@op</span><span class="p">(</span><span class="n">output_names</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;X_train&quot;</span><span class="p">,</span> <span class="s2">&quot;X_test&quot;</span><span class="p">,</span> <span class="s2">&quot;y_train&quot;</span><span class="p">,</span> <span class="s2">&quot;y_test&quot;</span><span class="p">])</span>
+</span><span id="__span-1-12"><a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a><span class="k">def</span><span class="w"> </span><span class="nf">get_train_test_split</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">y</span><span class="p">):</span>
+</span><span id="__span-1-13"><a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a>    <span class="k">return</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">train_test_split</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">test_size</span><span class="o">=</span><span class="mf">0.2</span><span class="p">,</span> <span class="n">random_state</span><span class="o">=</span><span class="mi">42</span><span class="p">))</span>
+</span><span id="__span-1-14"><a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a>
+</span><span id="__span-1-15"><a id="__codelineno-1-15" name="__codelineno-1-15" href="#__codelineno-1-15"></a><span class="nd">@op</span><span class="p">(</span><span class="n">output_names</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;X_scaled&quot;</span><span class="p">])</span>
+</span><span id="__span-1-16"><a id="__codelineno-1-16" name="__codelineno-1-16" href="#__codelineno-1-16"></a><span class="k">def</span><span class="w"> </span><span class="nf">scale_data</span><span class="p">(</span><span class="n">X</span><span class="p">):</span>
+</span><span id="__span-1-17"><a id="__codelineno-1-17" name="__codelineno-1-17" href="#__codelineno-1-17"></a>    <span class="n">scaler</span> <span class="o">=</span> <span class="n">StandardScaler</span><span class="p">()</span>
+</span><span id="__span-1-18"><a id="__codelineno-1-18" name="__codelineno-1-18" href="#__codelineno-1-18"></a>    <span class="n">X</span> <span class="o">=</span> <span class="n">scaler</span><span class="o">.</span><span class="n">fit_transform</span><span class="p">(</span><span class="n">X</span><span class="p">)</span>
+</span><span id="__span-1-19"><a id="__codelineno-1-19" name="__codelineno-1-19" href="#__codelineno-1-19"></a>    <span class="k">return</span> <span class="n">X</span>
+</span></code></pre></div>
+<p>We begin by loading the dataset, optionally scaling it, and splitting it into
+training and test sets:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="k">with</span> <span class="n">Storage</span><span class="p">()</span> <span class="k">as</span> <span class="n">storage</span><span class="p">:</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>    <span class="k">for</span> <span class="n">scale</span> <span class="ow">in</span> <span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="kc">False</span><span class="p">):</span>
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>        <span class="n">X</span><span class="p">,</span> <span class="n">y</span> <span class="o">=</span> <span class="n">get_data</span><span class="p">()</span>
+</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>        <span class="k">if</span> <span class="n">scale</span><span class="p">:</span>
+</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>            <span class="n">X</span> <span class="o">=</span> <span class="n">scale_data</span><span class="p">(</span><span class="n">X</span><span class="o">=</span><span class="n">X</span><span class="p">)</span>
+</span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>        <span class="n">X_train</span><span class="p">,</span> <span class="n">X_test</span><span class="p">,</span> <span class="n">y_train</span><span class="p">,</span> <span class="n">y_test</span> <span class="o">=</span> <span class="n">get_train_test_split</span><span class="p">(</span><span class="n">X</span><span class="o">=</span><span class="n">X</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="n">y</span><span class="p">)</span>
+</span></code></pre></div>
+<h3 id="in-place-updates-as-cycles-in-the-computation-graph">In-place updates as cycles in the computation graph</h3>
+<p>When a variable in the program is updated in-place (like how <code>X</code> is
+scaled in the above code) or feeds back on itself in a more complex way, it's
+natural to represent this as a cycle in the high-level computation graph. </p>
+<p>The CF expansion algorithm notices these cases by default. When we expand a CF
+back starting from <code>get_train_test_split</code>, we see two values for <code>X</code> used as
+inputs. When we keep expanding, we see that one of these values was actually
+obtained from the other by applying the <code>scale_data</code> operation, so we add a 
+cycle to the graph:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="n">cf</span> <span class="o">=</span> <span class="n">storage</span><span class="o">.</span><span class="n">cf</span><span class="p">(</span><span class="n">get_train_test_split</span><span class="p">)</span><span class="o">.</span><span class="n">expand_back</span><span class="p">(</span><span class="n">recursive</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="n">cf</span><span class="o">.</span><span class="n">draw</span><span class="p">(</span><span class="n">verbose</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">orientation</span><span class="o">=</span><span class="s1">&#39;TB&#39;</span><span class="p">)</span>
+</span></code></pre></div>
+<p><img alt="svg" src="../01_cf_files/01_cf_10_0.svg" /></p>
+<p>Note that <strong>the underlying low-level call graph that the CF represents is still
+acyclic</strong>, because we distinguish between the value before and after the update.
+This shows up in the dataframe representation as two rows, where only one of the
+rows contains a call to <code>scale_data</code>:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="nb">print</span><span class="p">(</span><span class="n">cf</span><span class="o">.</span><span class="n">df</span><span class="p">()[[</span><span class="s1">&#39;get_data&#39;</span><span class="p">,</span> <span class="s1">&#39;scale_data&#39;</span><span class="p">,</span> <span class="s1">&#39;get_train_test_split&#39;</span><span class="p">]]</span><span class="o">.</span><span class="n">to_markdown</span><span class="p">())</span>
+</span></code></pre></div>
+<div class="language-text highlight"><pre><span></span><code>|    | get_data                   | scale_data                   | get_train_test_split                   |
+|---:|:---------------------------|:-----------------------------|:---------------------------------------|
+|  0 | Call(get_data, hid=73a...) |                              | Call(get_train_test_split, hid=7be...) |
+|  1 | Call(get_data, hid=73a...) | Call(scale_data, hid=d6b...) | Call(get_train_test_split, hid=e0a...) |
+</code></pre></div>
+<h3 id="pipelines-that-branch-andor-merge">Pipelines that branch and/or merge</h3>
+<p>Next, let's train and evaluate two kinds of models: an SVC (support vector
+classifier) and a random forest. We then initialize a CF from the <code>eval_model</code>
+function, and we call <code>expand_back</code> to trace back the full computation graph:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">sklearn.svm</span><span class="w"> </span><span class="kn">import</span> <span class="n">SVC</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">sklearn.ensemble</span><span class="w"> </span><span class="kn">import</span> <span class="n">RandomForestClassifier</span>
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">sklearn.metrics</span><span class="w"> </span><span class="kn">import</span> <span class="n">accuracy_score</span>
+</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>
+</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="nd">@op</span><span class="p">(</span><span class="n">output_names</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;svc_model&quot;</span><span class="p">])</span>
+</span><span id="__span-5-6"><a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="k">def</span><span class="w"> </span><span class="nf">train_svc</span><span class="p">(</span><span class="n">X_train</span><span class="p">,</span> <span class="n">y_train</span><span class="p">,</span> <span class="n">C</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span> <span class="n">kernel</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;linear&quot;</span><span class="p">):</span>
+</span><span id="__span-5-7"><a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a>    <span class="n">model</span> <span class="o">=</span> <span class="n">SVC</span><span class="p">(</span><span class="n">C</span><span class="o">=</span><span class="n">C</span><span class="p">,</span> <span class="n">kernel</span><span class="o">=</span><span class="n">kernel</span><span class="p">)</span>
+</span><span id="__span-5-8"><a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a>    <span class="n">model</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">X_train</span><span class="p">,</span> <span class="n">y_train</span><span class="p">)</span>
+</span><span id="__span-5-9"><a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a>    <span class="k">return</span> <span class="n">model</span>
+</span><span id="__span-5-10"><a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a>
+</span><span id="__span-5-11"><a id="__codelineno-5-11" name="__codelineno-5-11" href="#__codelineno-5-11"></a><span class="nd">@op</span><span class="p">(</span><span class="n">output_names</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;rf_model&quot;</span><span class="p">])</span>
+</span><span id="__span-5-12"><a id="__codelineno-5-12" name="__codelineno-5-12" href="#__codelineno-5-12"></a><span class="k">def</span><span class="w"> </span><span class="nf">train_random_forest</span><span class="p">(</span><span class="n">X_train</span><span class="p">,</span> <span class="n">y_train</span><span class="p">,</span> <span class="n">n_estimators</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">5</span><span class="p">,</span> <span class="n">max_depth</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">5</span><span class="p">):</span>
+</span><span id="__span-5-13"><a id="__codelineno-5-13" name="__codelineno-5-13" href="#__codelineno-5-13"></a>    <span class="n">model</span> <span class="o">=</span> <span class="n">RandomForestClassifier</span><span class="p">(</span><span class="n">n_estimators</span><span class="o">=</span><span class="n">n_estimators</span><span class="p">,</span> <span class="n">max_depth</span><span class="o">=</span><span class="n">max_depth</span><span class="p">)</span>
+</span><span id="__span-5-14"><a id="__codelineno-5-14" name="__codelineno-5-14" href="#__codelineno-5-14"></a>    <span class="n">model</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">X_train</span><span class="p">,</span> <span class="n">y_train</span><span class="p">)</span>
+</span><span id="__span-5-15"><a id="__codelineno-5-15" name="__codelineno-5-15" href="#__codelineno-5-15"></a>    <span class="k">return</span> <span class="n">model</span>
+</span><span id="__span-5-16"><a id="__codelineno-5-16" name="__codelineno-5-16" href="#__codelineno-5-16"></a>
+</span><span id="__span-5-17"><a id="__codelineno-5-17" name="__codelineno-5-17" href="#__codelineno-5-17"></a><span class="nd">@op</span><span class="p">(</span><span class="n">output_names</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;accuracy&quot;</span><span class="p">,])</span>
+</span><span id="__span-5-18"><a id="__codelineno-5-18" name="__codelineno-5-18" href="#__codelineno-5-18"></a><span class="k">def</span><span class="w"> </span><span class="nf">eval_model</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">X_test</span><span class="p">,</span> <span class="n">y_test</span><span class="p">):</span>
+</span><span id="__span-5-19"><a id="__codelineno-5-19" name="__codelineno-5-19" href="#__codelineno-5-19"></a>    <span class="n">y_pred</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">X_test</span><span class="p">)</span>
+</span><span id="__span-5-20"><a id="__codelineno-5-20" name="__codelineno-5-20" href="#__codelineno-5-20"></a>    <span class="n">acc</span> <span class="o">=</span> <span class="n">accuracy_score</span><span class="p">(</span><span class="n">y_test</span><span class="p">,</span> <span class="n">y_pred</span><span class="p">)</span>
+</span><span id="__span-5-21"><a id="__codelineno-5-21" name="__codelineno-5-21" href="#__codelineno-5-21"></a>    <span class="k">return</span> <span class="n">acc</span>
+</span><span id="__span-5-22"><a id="__codelineno-5-22" name="__codelineno-5-22" href="#__codelineno-5-22"></a>
+</span><span id="__span-5-23"><a id="__codelineno-5-23" name="__codelineno-5-23" href="#__codelineno-5-23"></a><span class="k">with</span> <span class="n">storage</span><span class="p">:</span>
+</span><span id="__span-5-24"><a id="__codelineno-5-24" name="__codelineno-5-24" href="#__codelineno-5-24"></a>    <span class="k">for</span> <span class="n">scale</span> <span class="ow">in</span> <span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="kc">False</span><span class="p">):</span>
+</span><span id="__span-5-25"><a id="__codelineno-5-25" name="__codelineno-5-25" href="#__codelineno-5-25"></a>        <span class="n">X</span><span class="p">,</span> <span class="n">y</span> <span class="o">=</span> <span class="n">get_data</span><span class="p">()</span>
+</span><span id="__span-5-26"><a id="__codelineno-5-26" name="__codelineno-5-26" href="#__codelineno-5-26"></a>        <span class="k">if</span> <span class="n">scale</span><span class="p">:</span>
+</span><span id="__span-5-27"><a id="__codelineno-5-27" name="__codelineno-5-27" href="#__codelineno-5-27"></a>            <span class="n">X</span> <span class="o">=</span> <span class="n">scale_data</span><span class="p">(</span><span class="n">X</span><span class="o">=</span><span class="n">X</span><span class="p">)</span>
+</span><span id="__span-5-28"><a id="__codelineno-5-28" name="__codelineno-5-28" href="#__codelineno-5-28"></a>        <span class="c1">### new: training an SVC and a Random Forest</span>
+</span><span id="__span-5-29"><a id="__codelineno-5-29" name="__codelineno-5-29" href="#__codelineno-5-29"></a>        <span class="n">X_train</span><span class="p">,</span> <span class="n">X_test</span><span class="p">,</span> <span class="n">y_train</span><span class="p">,</span> <span class="n">y_test</span> <span class="o">=</span> <span class="n">get_train_test_split</span><span class="p">(</span><span class="n">X</span><span class="o">=</span><span class="n">X</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="n">y</span><span class="p">)</span>
+</span><span id="__span-5-30"><a id="__codelineno-5-30" name="__codelineno-5-30" href="#__codelineno-5-30"></a>        <span class="n">svc_model</span> <span class="o">=</span> <span class="n">train_svc</span><span class="p">(</span><span class="n">X_train</span><span class="o">=</span><span class="n">X_train</span><span class="p">,</span> <span class="n">y_train</span><span class="o">=</span><span class="n">y_train</span><span class="p">)</span>
+</span><span id="__span-5-31"><a id="__codelineno-5-31" name="__codelineno-5-31" href="#__codelineno-5-31"></a>        <span class="n">svc_acc</span> <span class="o">=</span> <span class="n">eval_model</span><span class="p">(</span><span class="n">model</span><span class="o">=</span><span class="n">svc_model</span><span class="p">,</span> <span class="n">X_test</span><span class="o">=</span><span class="n">X_test</span><span class="p">,</span> <span class="n">y_test</span><span class="o">=</span><span class="n">y_test</span><span class="p">)</span>
+</span><span id="__span-5-32"><a id="__codelineno-5-32" name="__codelineno-5-32" href="#__codelineno-5-32"></a>        <span class="n">rf_model</span> <span class="o">=</span> <span class="n">train_random_forest</span><span class="p">(</span><span class="n">X_train</span><span class="o">=</span><span class="n">X_train</span><span class="p">,</span> <span class="n">y_train</span><span class="o">=</span><span class="n">y_train</span><span class="p">)</span>
+</span><span id="__span-5-33"><a id="__codelineno-5-33" name="__codelineno-5-33" href="#__codelineno-5-33"></a>        <span class="n">rf_acc</span> <span class="o">=</span> <span class="n">eval_model</span><span class="p">(</span><span class="n">model</span><span class="o">=</span><span class="n">rf_model</span><span class="p">,</span> <span class="n">X_test</span><span class="o">=</span><span class="n">X_test</span><span class="p">,</span> <span class="n">y_test</span><span class="o">=</span><span class="n">y_test</span><span class="p">)</span>
+</span><span id="__span-5-34"><a id="__codelineno-5-34" name="__codelineno-5-34" href="#__codelineno-5-34"></a>
+</span><span id="__span-5-35"><a id="__codelineno-5-35" name="__codelineno-5-35" href="#__codelineno-5-35"></a><span class="n">cf</span> <span class="o">=</span> <span class="n">storage</span><span class="o">.</span><span class="n">cf</span><span class="p">(</span><span class="n">eval_model</span><span class="p">)</span><span class="o">.</span><span class="n">expand_back</span><span class="p">(</span><span class="n">recursive</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</span><span id="__span-5-36"><a id="__codelineno-5-36" name="__codelineno-5-36" href="#__codelineno-5-36"></a><span class="n">cf</span><span class="o">.</span><span class="n">draw</span><span class="p">(</span><span class="n">verbose</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</span></code></pre></div>
+<p><img alt="svg" src="../01_cf_files/01_cf_14_0.svg" /></p>
+<p>It's quite clear by looking at the CF's drawing what computations we did. As
+before, we can obtain a single dataframe that expresses the full computation, 
+and we can select operations/variables of interest to analyze the results; for
+example, we see that random forest generally performs better than SVC on this
+dataset.</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="nb">print</span><span class="p">(</span><span class="n">cf</span><span class="o">.</span><span class="n">df</span><span class="p">()[[</span><span class="s1">&#39;accuracy&#39;</span><span class="p">,</span> <span class="s1">&#39;scale_data&#39;</span><span class="p">,</span> <span class="s1">&#39;train_svc&#39;</span><span class="p">,</span> <span class="s1">&#39;train_random_forest&#39;</span><span class="p">]]</span><span class="o">.</span><span class="n">sort_values</span><span class="p">(</span><span class="s1">&#39;accuracy&#39;</span><span class="p">,</span> <span class="n">ascending</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span><span class="o">.</span><span class="n">to_markdown</span><span class="p">())</span>
+</span></code></pre></div>
+<div class="language-text highlight"><pre><span></span><code>|    |   accuracy | scale_data                   | train_svc                   | train_random_forest                   |
+|---:|-----------:|:-----------------------------|:----------------------------|:--------------------------------------|
+|  3 |      0.915 | Call(scale_data, hid=d6b...) |                             | Call(train_random_forest, hid=c42...) |
+|  2 |      0.885 |                              |                             | Call(train_random_forest, hid=997...) |
+|  0 |      0.82  |                              | Call(train_svc, hid=6a0...) |                                       |
+|  1 |      0.82  | Call(scale_data, hid=d6b...) | Call(train_svc, hid=7d9...) |                                       |
+</code></pre></div>
+<p>So is this the full story of this dataset? We might want to investigate further
+by </p>
+<ul>
+<li>training more SVC and random forest models with different hyperparameters;</li>
+<li>ensembling different types of models to see if this improves performance.</li>
+</ul>
+<p>We do this below by trying out more kernels for SVC and increasing the number of
+trees in the random forest. Importantly, when defining the new <code>eval_ensemble</code>
+operation, we type-annotate the <code>models</code> input using the custom <code>MList</code> type
+constructor. This tells <code>mandala</code> to track each element of <code>models</code> as an
+individual entity in the computation graph.</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span>
+</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>
+</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="nd">@op</span><span class="p">(</span><span class="n">output_names</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;accuracy&quot;</span><span class="p">])</span>
+</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="k">def</span><span class="w"> </span><span class="nf">eval_ensemble</span><span class="p">(</span><span class="n">models</span><span class="p">:</span> <span class="n">MList</span><span class="p">[</span><span class="n">Any</span><span class="p">],</span> <span class="n">X_test</span><span class="p">,</span> <span class="n">y_test</span><span class="p">):</span>
+</span><span id="__span-7-5"><a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a>    <span class="n">y_preds</span> <span class="o">=</span> <span class="p">[</span><span class="n">model</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">X_test</span><span class="p">)</span> <span class="k">for</span> <span class="n">model</span> <span class="ow">in</span> <span class="n">models</span><span class="p">]</span>
+</span><span id="__span-7-6"><a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a>    <span class="n">y_pred</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">y_preds</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mf">0.5</span>
+</span><span id="__span-7-7"><a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a>    <span class="n">acc</span> <span class="o">=</span> <span class="n">accuracy_score</span><span class="p">(</span><span class="n">y_test</span><span class="p">,</span> <span class="n">y_pred</span><span class="p">)</span>
+</span><span id="__span-7-8"><a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a>    <span class="k">return</span> <span class="n">acc</span>
+</span><span id="__span-7-9"><a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a>
+</span><span id="__span-7-10"><a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a><span class="k">with</span> <span class="n">storage</span><span class="p">:</span>
+</span><span id="__span-7-11"><a id="__codelineno-7-11" name="__codelineno-7-11" href="#__codelineno-7-11"></a>    <span class="k">for</span> <span class="n">scale</span> <span class="ow">in</span> <span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="kc">False</span><span class="p">):</span>
+</span><span id="__span-7-12"><a id="__codelineno-7-12" name="__codelineno-7-12" href="#__codelineno-7-12"></a>        <span class="n">X</span><span class="p">,</span> <span class="n">y</span> <span class="o">=</span> <span class="n">get_data</span><span class="p">()</span>
+</span><span id="__span-7-13"><a id="__codelineno-7-13" name="__codelineno-7-13" href="#__codelineno-7-13"></a>        <span class="k">if</span> <span class="n">scale</span><span class="p">:</span>
+</span><span id="__span-7-14"><a id="__codelineno-7-14" name="__codelineno-7-14" href="#__codelineno-7-14"></a>            <span class="n">X</span> <span class="o">=</span> <span class="n">scale_data</span><span class="p">(</span><span class="n">X</span><span class="o">=</span><span class="n">X</span><span class="p">)</span>
+</span><span id="__span-7-15"><a id="__codelineno-7-15" name="__codelineno-7-15" href="#__codelineno-7-15"></a>        <span class="n">X_train</span><span class="p">,</span> <span class="n">X_test</span><span class="p">,</span> <span class="n">y_train</span><span class="p">,</span> <span class="n">y_test</span> <span class="o">=</span> <span class="n">get_train_test_split</span><span class="p">(</span><span class="n">X</span><span class="o">=</span><span class="n">X</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="n">y</span><span class="p">)</span>
+</span><span id="__span-7-16"><a id="__codelineno-7-16" name="__codelineno-7-16" href="#__codelineno-7-16"></a>        <span class="n">svc_models</span> <span class="o">=</span> <span class="p">[]</span>
+</span><span id="__span-7-17"><a id="__codelineno-7-17" name="__codelineno-7-17" href="#__codelineno-7-17"></a>        <span class="k">for</span> <span class="n">kernel</span> <span class="ow">in</span> <span class="p">(</span><span class="s1">&#39;linear&#39;</span><span class="p">,</span> <span class="s1">&#39;rbf&#39;</span><span class="p">,</span> <span class="s1">&#39;poly&#39;</span><span class="p">):</span> <span class="c1"># new: trying different kernels</span>
+</span><span id="__span-7-18"><a id="__codelineno-7-18" name="__codelineno-7-18" href="#__codelineno-7-18"></a>            <span class="n">svc_model</span> <span class="o">=</span> <span class="n">train_svc</span><span class="p">(</span><span class="n">X_train</span><span class="o">=</span><span class="n">X_train</span><span class="p">,</span> <span class="n">y_train</span><span class="o">=</span><span class="n">y_train</span><span class="p">,</span> <span class="n">kernel</span><span class="o">=</span><span class="n">kernel</span><span class="p">)</span>
+</span><span id="__span-7-19"><a id="__codelineno-7-19" name="__codelineno-7-19" href="#__codelineno-7-19"></a>            <span class="n">svc_acc</span> <span class="o">=</span> <span class="n">eval_model</span><span class="p">(</span><span class="n">model</span><span class="o">=</span><span class="n">svc_model</span><span class="p">,</span> <span class="n">X_test</span><span class="o">=</span><span class="n">X_test</span><span class="p">,</span> <span class="n">y_test</span><span class="o">=</span><span class="n">y_test</span><span class="p">)</span>
+</span><span id="__span-7-20"><a id="__codelineno-7-20" name="__codelineno-7-20" href="#__codelineno-7-20"></a>            <span class="n">svc_models</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">svc_model</span><span class="p">)</span>
+</span><span id="__span-7-21"><a id="__codelineno-7-21" name="__codelineno-7-21" href="#__codelineno-7-21"></a>        <span class="n">rf_models</span> <span class="o">=</span> <span class="p">[]</span>
+</span><span id="__span-7-22"><a id="__codelineno-7-22" name="__codelineno-7-22" href="#__codelineno-7-22"></a>        <span class="k">for</span> <span class="n">n_estimators</span> <span class="ow">in</span> <span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="mi">10</span><span class="p">,</span> <span class="mi">20</span><span class="p">):</span> <span class="c1"># new: trying different numbers of estimators</span>
+</span><span id="__span-7-23"><a id="__codelineno-7-23" name="__codelineno-7-23" href="#__codelineno-7-23"></a>            <span class="n">rf_model</span> <span class="o">=</span> <span class="n">train_random_forest</span><span class="p">(</span><span class="n">X_train</span><span class="o">=</span><span class="n">X_train</span><span class="p">,</span> <span class="n">y_train</span><span class="o">=</span><span class="n">y_train</span><span class="p">,</span> <span class="n">n_estimators</span><span class="o">=</span><span class="n">n_estimators</span><span class="p">)</span>
+</span><span id="__span-7-24"><a id="__codelineno-7-24" name="__codelineno-7-24" href="#__codelineno-7-24"></a>            <span class="n">rf_acc</span> <span class="o">=</span> <span class="n">eval_model</span><span class="p">(</span><span class="n">model</span><span class="o">=</span><span class="n">rf_model</span><span class="p">,</span> <span class="n">X_test</span><span class="o">=</span><span class="n">X_test</span><span class="p">,</span> <span class="n">y_test</span><span class="o">=</span><span class="n">y_test</span><span class="p">)</span>
+</span><span id="__span-7-25"><a id="__codelineno-7-25" name="__codelineno-7-25" href="#__codelineno-7-25"></a>            <span class="n">rf_models</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">rf_model</span><span class="p">)</span>
+</span><span id="__span-7-26"><a id="__codelineno-7-26" name="__codelineno-7-26" href="#__codelineno-7-26"></a>
+</span><span id="__span-7-27"><a id="__codelineno-7-27" name="__codelineno-7-27" href="#__codelineno-7-27"></a>        <span class="c1">### new: ensembling</span>
+</span><span id="__span-7-28"><a id="__codelineno-7-28" name="__codelineno-7-28" href="#__codelineno-7-28"></a>        <span class="n">ensemble_acc</span> <span class="o">=</span> <span class="n">eval_ensemble</span><span class="p">(</span><span class="n">models</span><span class="o">=</span><span class="n">svc_models</span> <span class="o">+</span> <span class="n">rf_models</span><span class="p">,</span> <span class="n">X_test</span><span class="o">=</span><span class="n">X_test</span><span class="p">,</span> <span class="n">y_test</span><span class="o">=</span><span class="n">y_test</span><span class="p">)</span>
+</span></code></pre></div>
+<h3 id="tidy-tools-merging-computationframes">Tidy tools: merging <code>ComputationFrame</code>s</h3>
+<p>To illustrate how CFs admit <strong>tidy tools</strong> &mdash; operations that take as input
+computation frames and produce new ones &mdash; we'll use the <code>|</code> operator to
+merge the CFs for <code>eval_model</code> and <code>eval_ensemble</code>. </p>
+<p>Merging is similar to concatenation of dataframes: it takes the union of the
+sets of values/calls at each node by matching the names of the operations and
+variables between the two CFs. Because both our functions use the same names for
+analogous inputs (<code>X_test</code> and <code>y_test</code>) and outputs (<code>accuracy</code>), this works
+out nicely: </p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="n">cf</span> <span class="o">=</span> <span class="n">storage</span><span class="o">.</span><span class="n">cf</span><span class="p">(</span><span class="n">eval_ensemble</span><span class="p">)</span> <span class="o">|</span> <span class="n">storage</span><span class="o">.</span><span class="n">cf</span><span class="p">(</span><span class="n">eval_model</span><span class="p">)</span>
+</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="n">cf</span><span class="o">.</span><span class="n">draw</span><span class="p">(</span><span class="n">verbose</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</span></code></pre></div>
+<p><img alt="svg" src="../01_cf_files/01_cf_21_0.svg" /></p>
+<h3 id="operations-that-aggregate-multiple-results">Operations that aggregate multiple results</h3>
+<p>As before, let's expand this CF back to see the full computation graph that
+leads to it:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="n">cf</span> <span class="o">=</span> <span class="n">cf</span><span class="o">.</span><span class="n">expand_back</span><span class="p">(</span><span class="n">recursive</span><span class="o">=</span><span class="kc">True</span><span class="p">);</span> <span class="n">cf</span><span class="o">.</span><span class="n">draw</span><span class="p">(</span><span class="n">verbose</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</span></code></pre></div>
+<p><img alt="svg" src="../01_cf_files/01_cf_24_0.svg" /></p>
+<p>Note the built-in <code>__make_list__</code> operation which got automatically
+added to the graph. This operation groups the items of the <code>models</code> list passed
+to <code>eval_ensemble</code> into a single object, which is what's actually passed to 
+<code>eval_ensemble</code> in the expanded graph. <code>__make_list__</code> is implemented the same
+as any other operation, with (roughly) the following semantics:
+<div class="language-python highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="nd">@op</span>
+</span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="k">def</span><span class="w"> </span><span class="nf">__make_list__</span><span class="p">(</span><span class="o">*</span><span class="n">elts</span><span class="p">:</span><span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
+</span><span id="__span-10-3"><a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>    <span class="k">return</span> <span class="nb">list</span><span class="p">(</span><span class="n">elts</span><span class="p">)</span>
+</span></code></pre></div>
+The "trick" is that all the variadic inputs <code>elts_0</code>, <code>elts_1</code>, ... are grouped
+under the <code>*elts</code>-labeled edge, and are found in the <code>model</code> variable. This is 
+how CFs express the aggregation of multiple values into a single one.</p>
+<p>How does <code>.df()</code> behave in the presence of such aggregation? We can take a look by
+selecting enough columns to paint a complete picture of each branch of the
+overall computation:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="nb">print</span><span class="p">(</span><span class="n">cf</span><span class="o">.</span><span class="n">df</span><span class="p">()[[</span><span class="s1">&#39;n_estimators&#39;</span><span class="p">,</span> <span class="s1">&#39;kernel&#39;</span><span class="p">,</span> <span class="s1">&#39;accuracy&#39;</span><span class="p">,</span> <span class="p">]]</span><span class="o">.</span><span class="n">sort_values</span><span class="p">(</span><span class="s1">&#39;accuracy&#39;</span><span class="p">,</span> <span class="n">ascending</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span><span class="o">.</span><span class="n">to_markdown</span><span class="p">())</span>
+</span></code></pre></div>
+<div class="language-text highlight"><pre><span></span><code>|    | n_estimators                 | kernel                                     |   accuracy |
+|---:|:-----------------------------|:-------------------------------------------|-----------:|
+|  1 |                              | rbf                                        |      0.915 |
+|  4 | 5                            |                                            |      0.915 |
+|  3 |                              | rbf                                        |      0.91  |
+|  0 | 20                           |                                            |      0.9   |
+|  2 | 10                           |                                            |      0.9   |
+|  6 | 20                           |                                            |      0.9   |
+|  8 | 10                           |                                            |      0.9   |
+|  7 | ValueCollection([20, 10, 5]) | ValueCollection([&#39;linear&#39;, &#39;rbf&#39;, &#39;poly&#39;]) |      0.895 |
+|  9 | ValueCollection([20, 10, 5]) | ValueCollection([&#39;linear&#39;, &#39;rbf&#39;, &#39;poly&#39;]) |      0.895 |
+| 12 | 5                            |                                            |      0.885 |
+| 10 |                              | poly                                       |      0.835 |
+|  5 |                              | linear                                     |      0.82  |
+| 11 |                              | linear                                     |      0.82  |
+| 13 |                              | poly                                       |      0.82  |
+</code></pre></div>
+<p>Columns where <code>n_estimators</code> is not null correspond to the random forest runs,
+and similarly columns where <code>kernel</code> is not null correspond to the SVC runs.</p>
+<p>But now we also get some columns containing a <code>ValueCollection</code> object, which is
+the CF's way of distinguishing between depending on a single value of a variable
+versus depending on a collection of values. This makes sense: the
+<code>eval_ensemble</code> calls depend on multiple models, and in turn, on multiple values
+in the <code>n_estimators</code> and <code>kernel</code> variables.</p>
+<h2 id="conclusion-limitations-outlook">Conclusion, limitations &amp; outlook</h2>
+<p>The CF visualizations are now getting out of hand, so it's a good time to wrap
+up! We've seen how <code>ComputationFrame</code>s make complex computations
+"self-organizing", and how they provide a simple grammar of operations to
+manipulate and analyze them. However, there is much other work in progress on
+natural CF methods that we haven't touched on:</p>
+<ul>
+<li>ways to efficiently select and filter the data in the CF <em>before</em> converting
+it to a dataframe;</li>
+<li>operations for fine-grained control over the expansion of the CF, such as ways
+to explicitly merge/split nodes in the result, or options to expand only up to a
+certain depth, or whether/when to group calls to the same operation in a single
+node.</li>
+</ul>
+<p>Another limitation is that, currently, <code>ComputationFrame</code>s are not optimized for
+large-scale computation graphs.</p>
+<p>There's also much more to <code>mandala</code> than what we've covered here. For example,
+the incremental computation features that <code>mandala</code> provides, which only
+recompute <code>@op</code>s when the inputs and/or relevant code changes. If you're
+interested in learning more, check out the <a href="https://amakelov.github.io/mandala/">mandala
+documentation</a>, and feel free to reach out
+on <a href="https://x.com/AMakelov">Twitter</a>.</p>
+<h2 id="why-tidy-and-some-other-related-work">Why "tidy"? And some other related work</h2>
+<h3 id="tidy-data-vs-tidy-computations">Tidy data vs tidy computations</h3>
+<p>In many ways, the ideas here are a re-imagining of Hadley Wickham's
+<a href="https://www.jstatsoft.org/article/view/v059i10">Tidy Data</a> in the context of
+computational data management. In particular, the focus is on computations built
+from repeated calls to the same set of functions composed in various ways, which
+is a common pattern in machine learning and scientific computing. In analogy
+with the tidy data philosophy, the goal of "tidy computations" is to eliminate
+the code and effort required to organize computations, so that only the code
+to compute and analyze the results remains.</p>
+<p>Despite the different setups &mdash; data cleaning versus computation tracking
+&mdash; there are many similarities between the two approaches. This is because
+in an abstract sense you can think of "data" as a kind of "computation" that
+nature has performed via some "data-generating process". The difference stems
+from this process typically being unknown, hidden or otherwise hard to model.
+Perhaps this is also why the tidy data paper spends some time talking about notions of functional 
+dependencies and normal forms, which are also relevant to computations. In fact,
+tidy data is in Codd's <a href="https://en.wikipedia.org/wiki/Third_normal_form">third normal
+form</a>, which is in turn a more
+relaxed version of the <a href="https://en.wikipedia.org/wiki/Boyce%E2%80%93Codd_normal_form">Boyce-Codd normal
+form</a> (BCNF). The
+BCNF is automatically satisfied by operation nodes in a computation frame when
+viewed as relations.</p>
+<p>On the one hand, the explicit knowledge of the data generating process makes the
+job of computation tracking easier in an ontological sense. Wickham remarks
+that, while easy to disambiguate in concrete examples, the concepts of
+"variable" and "observation" are actually hard to define abstractly. Not so for
+computations: variables are inputs/outputs of functions, and observations are
+function calls. </p>
+<p>But on the other hand, this detailed knowledge also gives us more complex
+situations to handle, such as feedback loops, branching pipelines, and
+aggregation/decomposition to name a few. This means we need more expressive
+tools and grammars to handle these situations. Furthermore, even if functions
+impose a notion of variables and observations, this does not prevent one from
+designing function interfaces poorly, which can in turn lead to messy
+computations.</p>
+<h3 id="graphs-databases-categories">Graphs, databases, categories</h3>
+<p>There's a rich history of work in relational databases and graph databases, and
+CFs share some similarities with both:</p>
+<ul>
+<li>A CF can be seen as a relational database, with a table for each operation and
+each variable. The operation tables have columns labeled by the inputs/outputs
+of the operation, and the values in these columns are pointers to the
+corresponding input/output values, which are stored in the (single-column)
+variable tables.</li>
+<li>The <code>.df()</code> method works by performing an outer join operation (in a specific
+order) on the tables containing the full computational history of all final
+values in the CF.</li>
+<li>Similarly, a CF can be seen as a graph database, where the nodes are
+calls and values, and the variables and operations serve as "node types".</li>
+<li>Correspondingly, some operations, such as expansion or finding the
+dependencies/dependents of some nodes/values can be seen as graph traversal
+operations.</li>
+</ul>
+<p>Finally, the CF data structure can be seen as a kind of "functor" from a finite
+category (roughly speaking the call graph) to the category of sets. Some
+consequences of this perspective &mdash; which combines graphs and databases
+&mdash; are presented e.g. in <a href="https://compositionality-journal.org/papers/compositionality-4-5/">this
+paper</a></p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    <script id="__config" type="application/json">{"base": "../..", "features": ["content.code.copy"], "search": "../../assets/javascripts/workers/search.6ce7567c.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.88dd0f4e.min.js"></script>
+      
+    
+  </body>
+</html>

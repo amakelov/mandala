@@ -1,0 +1,1233 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+      
+        <link rel="prev" href="../03_cf/">
+      
+      
+        <link rel="next" href="../05_collections/">
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.5.49">
+    
+    
+      
+        <title>Changing @ops and managing versions - Mandala Documentation</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.6f8fc17f.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.06af60db.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../stylesheets/extra.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#changing-ops-and-managing-versions" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="Mandala Documentation" class="md-header__button md-logo" aria-label="Mandala Documentation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Mandala Documentation
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Changing @ops and managing versions
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      <label class="md-header__button md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+      </label>
+      <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+    
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="Mandala Documentation" class="md-nav__button md-logo" aria-label="Mandala Documentation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Mandala Documentation
+  </label>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Introduction
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    Blog
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            Blog
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../blog/01_cf/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Tidy Computations
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../blog/02_deps/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Practical dependency tracking for Python function calls
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    Topics
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            Topics
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../01_storage_and_ops/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Storage &amp; the @op Decorator
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../02_retracing/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Patterns for Incremental Computation &amp; Development
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../03_cf/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Query the Storage with ComputationFrames
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  <span class="md-ellipsis">
+    Changing @ops and managing versions
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  <span class="md-ellipsis">
+    Changing @ops and managing versions
+  </span>
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#enabling-and-configuring-versioning" class="md-nav__link">
+    <span class="md-ellipsis">
+      Enabling and configuring versioning
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-track-decorator" class="md-nav__link">
+    <span class="md-ellipsis">
+      The @track decorator
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#examining-the-captured-versions" class="md-nav__link">
+    <span class="md-ellipsis">
+      Examining the captured versions
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#making-changes-and-sorting-them-into-breaking-and-non-breaking" class="md-nav__link">
+    <span class="md-ellipsis">
+      Making changes and sorting them into breaking and non-breaking
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#additional-notes" class="md-nav__link">
+    <span class="md-ellipsis">
+      Additional notes
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Additional notes">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#so-what-really-is-a-version-of-an-op" class="md-nav__link">
+    <span class="md-ellipsis">
+      So what really is a version of an @op?
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#going-back-in-time" class="md-nav__link">
+    <span class="md-ellipsis">
+      Going back in time
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#caveats-of-marking-changes-as-non-breaking" class="md-nav__link">
+    <span class="md-ellipsis">
+      Caveats of marking changes as non-breaking
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../05_collections/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Natively handling Python collections
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../06_advanced_cf/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Advanced ComputationFrame tools
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    Tutorials
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            Tutorials
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/01_hello/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Quickstart
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/02_ml/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Random forest ML project
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/gotchas/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Gotchas
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#enabling-and-configuring-versioning" class="md-nav__link">
+    <span class="md-ellipsis">
+      Enabling and configuring versioning
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-track-decorator" class="md-nav__link">
+    <span class="md-ellipsis">
+      The @track decorator
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#examining-the-captured-versions" class="md-nav__link">
+    <span class="md-ellipsis">
+      Examining the captured versions
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#making-changes-and-sorting-them-into-breaking-and-non-breaking" class="md-nav__link">
+    <span class="md-ellipsis">
+      Making changes and sorting them into breaking and non-breaking
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#additional-notes" class="md-nav__link">
+    <span class="md-ellipsis">
+      Additional notes
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Additional notes">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#so-what-really-is-a-version-of-an-op" class="md-nav__link">
+    <span class="md-ellipsis">
+      So what really is a version of an @op?
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#going-back-in-time" class="md-nav__link">
+    <span class="md-ellipsis">
+      Going back in time
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#caveats-of-marking-changes-as-non-breaking" class="md-nav__link">
+    <span class="md-ellipsis">
+      Caveats of marking changes as non-breaking
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+<h1 id="changing-ops-and-managing-versions">Changing <code>@op</code>s and managing versions</h1>
+<p><a href="https://colab.research.google.com/github/amakelov/mandala/blob/master/docs_source/topic/04_versions.ipynb"> 
+  <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/> </a></p>
+<p>It should be easy to change your code and have the storage respond in a correct
+way (e.g., recompute a call <strong>only</strong> when the logic behind it has changed).
+<code>mandala</code> provides the following mechanisms to do that:</p>
+<ul>
+<li><strong>automatic per-call dependency tracking</strong>: every <code>@op</code> call records the
+functions it called along the way. This allows the <code>storage</code> to automatically
+know, given some inputs, whether a past call for these inputs can be reused 
+given the current state of the code. This is a very fine-grained notion of
+reuse.</li>
+<li><strong>marking changes as breaking vs non-breaking</strong>: when a change to an <code>@op</code> or
+its dependencies is detected, you can choose to mark it as breaking the calls that depend on it
+or not. However, <strong>breaking changes are generally more fool-proof</strong>; see <a href="#caveats-of-marking-changes-as-non-breaking">caveats of non-breaking changes</a>.</li>
+<li><strong>content-based versioning</strong>: the current state of the codebase uniquely
+determines the version each <code>@op</code> is in. There are no arbitrary names attached
+to versions. The versions for each <code>@op</code> can be inspected in a <code>git</code>-like data
+structure.</li>
+</ul>
+<h2 id="enabling-and-configuring-versioning">Enabling and configuring versioning</h2>
+<p>Passing a value to the <code>deps_path</code> parameter of the <code>Storage</code> class enables
+dependency tracking and versioning. This means that any time a memoized function
+<em>actually executes</em> (instead of reusing a past call's results), it keeps track
+of the functions and global variables it accesses along the way. </p>
+<p>Usually, the functions we want to track are limited to user-defined ones (you
+typically don't want to track changes in installed libraries!):</p>
+<ul>
+<li>Setting <code>deps_path</code> to <code>"__main__"</code> will only look for dependencies <code>f</code>
+defined in the current interactive session or process (as determined by
+<code>f.__module__</code>).</li>
+<li>Setting it to a folder will only look for dependencies defined in this folder.</li>
+</ul>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="c1"># for Google Colab</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="k">try</span><span class="p">:</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="kn">import</span><span class="w"> </span><span class="nn">google.colab</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="err">!</span><span class="n">pip</span> <span class="n">install</span> <span class="n">git</span><span class="o">+</span><span class="n">https</span><span class="p">:</span><span class="o">//</span><span class="n">github</span><span class="o">.</span><span class="n">com</span><span class="o">/</span><span class="n">amakelov</span><span class="o">/</span><span class="n">mandala</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="k">except</span><span class="p">:</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="k">pass</span>
+</span></code></pre></div>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">mandala.imports</span><span class="w"> </span><span class="kn">import</span> <span class="n">Storage</span><span class="p">,</span> <span class="n">op</span><span class="p">,</span> <span class="n">track</span>
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="n">storage</span> <span class="o">=</span> <span class="n">Storage</span><span class="p">(</span><span class="n">deps_path</span><span class="o">=</span><span class="s1">&#39;__main__&#39;</span><span class="p">)</span>
+</span></code></pre></div>
+<h2 id="the-track-decorator">The <code>@track</code> decorator</h2>
+<p>The most efficient and reliable implementation of dependency tracking currently
+requires you to explicitly put <code>@track</code> on non-memoized functions and classes
+you want to track. This limitation may be lifted in the future, but at the cost
+of more magic (i.e., automatically applying the decorator to functions in the
+current local scope that originate in given paths).</p>
+<p>The alternative (experimental) decorator implementation is based on
+<code>sys.settrace</code>. Limitations are described in this <a href="https://amakelov.github.io/blog/deps/#syssettrace">blog
+post</a>)</p>
+<h2 id="examining-the-captured-versions">Examining the captured versions</h2>
+<p>Let's run a small ML pipeline, where we optionally apply scaling to the data,
+introducing a non-<code>@op</code> dependency for some of the calls:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">sklearn.datasets</span><span class="w"> </span><span class="kn">import</span> <span class="n">load_digits</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">sklearn.linear_model</span><span class="w"> </span><span class="kn">import</span> <span class="n">LogisticRegression</span>
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">sklearn.preprocessing</span><span class="w"> </span><span class="kn">import</span> <span class="n">StandardScaler</span>
+</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>
+</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="n">N_CLASS</span> <span class="o">=</span> <span class="mi">10</span>
+</span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>
+</span><span id="__span-2-7"><a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="nd">@track</span> <span class="c1"># to track a non-memoized function as a dependency</span>
+</span><span id="__span-2-8"><a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="k">def</span><span class="w"> </span><span class="nf">scale_data</span><span class="p">(</span><span class="n">X</span><span class="p">):</span>
+</span><span id="__span-2-9"><a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a>    <span class="k">return</span> <span class="n">StandardScaler</span><span class="p">(</span><span class="n">with_mean</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">with_std</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span><span class="o">.</span><span class="n">fit_transform</span><span class="p">(</span><span class="n">X</span><span class="p">)</span>
+</span><span id="__span-2-10"><a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a>
+</span><span id="__span-2-11"><a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a><span class="nd">@op</span>
+</span><span id="__span-2-12"><a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a><span class="k">def</span><span class="w"> </span><span class="nf">load_data</span><span class="p">():</span>
+</span><span id="__span-2-13"><a id="__codelineno-2-13" name="__codelineno-2-13" href="#__codelineno-2-13"></a>    <span class="n">X</span><span class="p">,</span> <span class="n">y</span> <span class="o">=</span> <span class="n">load_digits</span><span class="p">(</span><span class="n">n_class</span><span class="o">=</span><span class="n">N_CLASS</span><span class="p">,</span> <span class="n">return_X_y</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</span><span id="__span-2-14"><a id="__codelineno-2-14" name="__codelineno-2-14" href="#__codelineno-2-14"></a>    <span class="k">return</span> <span class="n">X</span><span class="p">,</span> <span class="n">y</span>
+</span><span id="__span-2-15"><a id="__codelineno-2-15" name="__codelineno-2-15" href="#__codelineno-2-15"></a>
+</span><span id="__span-2-16"><a id="__codelineno-2-16" name="__codelineno-2-16" href="#__codelineno-2-16"></a><span class="nd">@op</span>
+</span><span id="__span-2-17"><a id="__codelineno-2-17" name="__codelineno-2-17" href="#__codelineno-2-17"></a><span class="k">def</span><span class="w"> </span><span class="nf">train_model</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">scale</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+</span><span id="__span-2-18"><a id="__codelineno-2-18" name="__codelineno-2-18" href="#__codelineno-2-18"></a>    <span class="k">if</span> <span class="n">scale</span><span class="p">:</span>
+</span><span id="__span-2-19"><a id="__codelineno-2-19" name="__codelineno-2-19" href="#__codelineno-2-19"></a>        <span class="n">X</span> <span class="o">=</span> <span class="n">scale_data</span><span class="p">(</span><span class="n">X</span><span class="p">)</span>
+</span><span id="__span-2-20"><a id="__codelineno-2-20" name="__codelineno-2-20" href="#__codelineno-2-20"></a>    <span class="k">return</span> <span class="n">LogisticRegression</span><span class="p">(</span><span class="n">max_iter</span><span class="o">=</span><span class="mi">1000</span><span class="p">,</span> <span class="n">solver</span><span class="o">=</span><span class="s1">&#39;liblinear&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">y</span><span class="p">)</span>
+</span><span id="__span-2-21"><a id="__codelineno-2-21" name="__codelineno-2-21" href="#__codelineno-2-21"></a>
+</span><span id="__span-2-22"><a id="__codelineno-2-22" name="__codelineno-2-22" href="#__codelineno-2-22"></a><span class="nd">@op</span>
+</span><span id="__span-2-23"><a id="__codelineno-2-23" name="__codelineno-2-23" href="#__codelineno-2-23"></a><span class="k">def</span><span class="w"> </span><span class="nf">eval_model</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">X</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">scale</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+</span><span id="__span-2-24"><a id="__codelineno-2-24" name="__codelineno-2-24" href="#__codelineno-2-24"></a>    <span class="k">if</span> <span class="n">scale</span><span class="p">:</span>
+</span><span id="__span-2-25"><a id="__codelineno-2-25" name="__codelineno-2-25" href="#__codelineno-2-25"></a>        <span class="n">X</span> <span class="o">=</span> <span class="n">scale_data</span><span class="p">(</span><span class="n">X</span><span class="p">)</span>
+</span><span id="__span-2-26"><a id="__codelineno-2-26" name="__codelineno-2-26" href="#__codelineno-2-26"></a>    <span class="k">return</span> <span class="n">model</span><span class="o">.</span><span class="n">score</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">y</span><span class="p">)</span>
+</span><span id="__span-2-27"><a id="__codelineno-2-27" name="__codelineno-2-27" href="#__codelineno-2-27"></a>
+</span><span id="__span-2-28"><a id="__codelineno-2-28" name="__codelineno-2-28" href="#__codelineno-2-28"></a><span class="k">with</span> <span class="n">storage</span><span class="p">:</span>
+</span><span id="__span-2-29"><a id="__codelineno-2-29" name="__codelineno-2-29" href="#__codelineno-2-29"></a>    <span class="n">X</span><span class="p">,</span> <span class="n">y</span> <span class="o">=</span> <span class="n">load_data</span><span class="p">()</span>
+</span><span id="__span-2-30"><a id="__codelineno-2-30" name="__codelineno-2-30" href="#__codelineno-2-30"></a>    <span class="k">for</span> <span class="n">scale</span> <span class="ow">in</span> <span class="p">[</span><span class="kc">False</span><span class="p">,</span> <span class="kc">True</span><span class="p">]:</span>
+</span><span id="__span-2-31"><a id="__codelineno-2-31" name="__codelineno-2-31" href="#__codelineno-2-31"></a>        <span class="n">model</span> <span class="o">=</span> <span class="n">train_model</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">scale</span><span class="o">=</span><span class="n">scale</span><span class="p">)</span>
+</span><span id="__span-2-32"><a id="__codelineno-2-32" name="__codelineno-2-32" href="#__codelineno-2-32"></a>        <span class="n">acc</span> <span class="o">=</span> <span class="n">eval_model</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">X</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">scale</span><span class="o">=</span><span class="n">scale</span><span class="p">)</span>
+</span></code></pre></div>
+<p>Now <code>train_model</code> and <code>eval_model</code> will each have two versions - one that
+depends on <code>scale_data</code> and one that doesn't. You can confirm this by calling
+e.g. <code>storage.versions(train_model)</code>:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="n">storage</span><span class="o">.</span><span class="n">versions</span><span class="p">(</span><span class="n">train_model</span><span class="p">)</span>
+</span></code></pre></div>
+<pre style="white-space:pre;overflow-x:auto;line-height:normal;font-family:Menlo,'DejaVu Sans Mono',consolas,'Courier New',monospace">╭─────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ <span style="color: #93a1a1; text-decoration-color: #93a1a1; background-color: #fdf6e3; font-style: italic">### Dependencies for version of function train_model from module __main__</span><span style="background-color: #fdf6e3">                                      </span> │
+│ <span style="color: #93a1a1; text-decoration-color: #93a1a1; background-color: #fdf6e3; font-style: italic">### content_version_id=db93a1e9c60fb37868575845a7afe47d</span><span style="background-color: #fdf6e3">                                                        </span> │
+│ <span style="color: #93a1a1; text-decoration-color: #93a1a1; background-color: #fdf6e3; font-style: italic">### semantic_version_id=2acaa8919ddd4b5d8846f1f2d15bc971</span><span style="background-color: #fdf6e3">                                                       </span> │
+│ <span style="background-color: #fdf6e3">                                                                                                               </span> │
+│ <span style="color: #93a1a1; text-decoration-color: #93a1a1; background-color: #fdf6e3; font-style: italic">################################################################################</span><span style="background-color: #fdf6e3">                               </span> │
+│ <span style="color: #93a1a1; text-decoration-color: #93a1a1; background-color: #fdf6e3; font-style: italic">### IN MODULE "__main__"</span><span style="background-color: #fdf6e3">                                                                                       </span> │
+│ <span style="color: #93a1a1; text-decoration-color: #93a1a1; background-color: #fdf6e3; font-style: italic">################################################################################</span><span style="background-color: #fdf6e3">                               </span> │
+│ <span style="background-color: #fdf6e3">                                                                                                               </span> │
+│ <span style="color: #268bd2; text-decoration-color: #268bd2; background-color: #fdf6e3">@op</span><span style="background-color: #fdf6e3">                                                                                                            </span> │
+│ <span style="color: #859900; text-decoration-color: #859900; background-color: #fdf6e3">def</span><span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3"> </span><span style="color: #268bd2; text-decoration-color: #268bd2; background-color: #fdf6e3">train_model</span><span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3">(X, y, scale</span><span style="color: #93a1a1; text-decoration-color: #93a1a1; background-color: #fdf6e3">=</span><span style="color: #2aa198; text-decoration-color: #2aa198; background-color: #fdf6e3">False</span><span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3">):</span><span style="background-color: #fdf6e3">                                                                            </span> │
+│ <span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3">    </span><span style="color: #859900; text-decoration-color: #859900; background-color: #fdf6e3">if</span><span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3"> scale:</span><span style="background-color: #fdf6e3">                                                                                                  </span> │
+│ <span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3">        X </span><span style="color: #93a1a1; text-decoration-color: #93a1a1; background-color: #fdf6e3">=</span><span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3"> scale_data(X)</span><span style="background-color: #fdf6e3">                                                                                      </span> │
+│ <span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3">    </span><span style="color: #859900; text-decoration-color: #859900; background-color: #fdf6e3">return</span><span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3"> LogisticRegression(max_iter</span><span style="color: #93a1a1; text-decoration-color: #93a1a1; background-color: #fdf6e3">=</span><span style="color: #2aa198; text-decoration-color: #2aa198; background-color: #fdf6e3">1000</span><span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3">, solver</span><span style="color: #93a1a1; text-decoration-color: #93a1a1; background-color: #fdf6e3">=</span><span style="color: #2aa198; text-decoration-color: #2aa198; background-color: #fdf6e3">'liblinear'</span><span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3">)</span><span style="color: #93a1a1; text-decoration-color: #93a1a1; background-color: #fdf6e3">.</span><span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3">fit(X, y)</span><span style="background-color: #fdf6e3">                                     </span> │
+│ <span style="background-color: #fdf6e3">                                                                                                               </span> │
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ <span style="color: #93a1a1; text-decoration-color: #93a1a1; background-color: #fdf6e3; font-style: italic">### Dependencies for version of function train_model from module __main__</span><span style="background-color: #fdf6e3">                                      </span> │
+│ <span style="color: #93a1a1; text-decoration-color: #93a1a1; background-color: #fdf6e3; font-style: italic">### content_version_id=2717c55fbbbb60442535a8dea0c81f67</span><span style="background-color: #fdf6e3">                                                        </span> │
+│ <span style="color: #93a1a1; text-decoration-color: #93a1a1; background-color: #fdf6e3; font-style: italic">### semantic_version_id=4674057d19bbf217687dd9dabe01df36</span><span style="background-color: #fdf6e3">                                                       </span> │
+│ <span style="background-color: #fdf6e3">                                                                                                               </span> │
+│ <span style="color: #93a1a1; text-decoration-color: #93a1a1; background-color: #fdf6e3; font-style: italic">################################################################################</span><span style="background-color: #fdf6e3">                               </span> │
+│ <span style="color: #93a1a1; text-decoration-color: #93a1a1; background-color: #fdf6e3; font-style: italic">### IN MODULE "__main__"</span><span style="background-color: #fdf6e3">                                                                                       </span> │
+│ <span style="color: #93a1a1; text-decoration-color: #93a1a1; background-color: #fdf6e3; font-style: italic">################################################################################</span><span style="background-color: #fdf6e3">                               </span> │
+│ <span style="background-color: #fdf6e3">                                                                                                               </span> │
+│ <span style="color: #268bd2; text-decoration-color: #268bd2; background-color: #fdf6e3">@track</span><span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3"> </span><span style="color: #93a1a1; text-decoration-color: #93a1a1; background-color: #fdf6e3; font-style: italic"># to track a non-memoized function as a dependency</span><span style="background-color: #fdf6e3">                                                      </span> │
+│ <span style="color: #859900; text-decoration-color: #859900; background-color: #fdf6e3">def</span><span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3"> </span><span style="color: #268bd2; text-decoration-color: #268bd2; background-color: #fdf6e3">scale_data</span><span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3">(X):</span><span style="background-color: #fdf6e3">                                                                                             </span> │
+│ <span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3">    </span><span style="color: #859900; text-decoration-color: #859900; background-color: #fdf6e3">return</span><span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3"> StandardScaler(with_mean</span><span style="color: #93a1a1; text-decoration-color: #93a1a1; background-color: #fdf6e3">=</span><span style="color: #2aa198; text-decoration-color: #2aa198; background-color: #fdf6e3">True</span><span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3">, with_std</span><span style="color: #93a1a1; text-decoration-color: #93a1a1; background-color: #fdf6e3">=</span><span style="color: #2aa198; text-decoration-color: #2aa198; background-color: #fdf6e3">False</span><span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3">)</span><span style="color: #93a1a1; text-decoration-color: #93a1a1; background-color: #fdf6e3">.</span><span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3">fit_transform(X)</span><span style="background-color: #fdf6e3">                                     </span> │
+│ <span style="background-color: #fdf6e3">                                                                                                               </span> │
+│ <span style="color: #268bd2; text-decoration-color: #268bd2; background-color: #fdf6e3">@op</span><span style="background-color: #fdf6e3">                                                                                                            </span> │
+│ <span style="color: #859900; text-decoration-color: #859900; background-color: #fdf6e3">def</span><span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3"> </span><span style="color: #268bd2; text-decoration-color: #268bd2; background-color: #fdf6e3">train_model</span><span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3">(X, y, scale</span><span style="color: #93a1a1; text-decoration-color: #93a1a1; background-color: #fdf6e3">=</span><span style="color: #2aa198; text-decoration-color: #2aa198; background-color: #fdf6e3">False</span><span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3">):</span><span style="background-color: #fdf6e3">                                                                            </span> │
+│ <span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3">    </span><span style="color: #859900; text-decoration-color: #859900; background-color: #fdf6e3">if</span><span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3"> scale:</span><span style="background-color: #fdf6e3">                                                                                                  </span> │
+│ <span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3">        X </span><span style="color: #93a1a1; text-decoration-color: #93a1a1; background-color: #fdf6e3">=</span><span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3"> scale_data(X)</span><span style="background-color: #fdf6e3">                                                                                      </span> │
+│ <span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3">    </span><span style="color: #859900; text-decoration-color: #859900; background-color: #fdf6e3">return</span><span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3"> LogisticRegression(max_iter</span><span style="color: #93a1a1; text-decoration-color: #93a1a1; background-color: #fdf6e3">=</span><span style="color: #2aa198; text-decoration-color: #2aa198; background-color: #fdf6e3">1000</span><span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3">, solver</span><span style="color: #93a1a1; text-decoration-color: #93a1a1; background-color: #fdf6e3">=</span><span style="color: #2aa198; text-decoration-color: #2aa198; background-color: #fdf6e3">'liblinear'</span><span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3">)</span><span style="color: #93a1a1; text-decoration-color: #93a1a1; background-color: #fdf6e3">.</span><span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3">fit(X, y)</span><span style="background-color: #fdf6e3">                                     </span> │
+│ <span style="background-color: #fdf6e3">                                                                                                               </span> │
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+</pre>
+
+<h2 id="making-changes-and-sorting-them-into-breaking-and-non-breaking">Making changes and sorting them into breaking and non-breaking</h2>
+<p>Now suppose we make some changes and re-run:</p>
+<ul>
+<li>we change the value of the global variable <code>N_CLASS</code>;</li>
+<li>we change the code of <code>scale_data</code> in a semantically meaningful (i.e.,
+breaking) way</li>
+<li>we change the code of <code>eval_model</code> in a "cosmetic" way that can be considered
+non-breaking.</li>
+</ul>
+<p>When entering the <code>storage</code> block, the storage will detect the changes in
+the tracked components, and for each change will present you with the functions
+affected:</p>
+<ul>
+<li><code>N_CLASS</code> is a dependency for <code>load_data</code>;</li>
+<li><code>scale_data</code> is a dependency for the calls to <code>train_model</code> and <code>eval_model</code>
+  which had <code>scale=True</code>;</li>
+<li><code>eval_model</code> is a dependency for itself.</li>
+</ul>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">mandala.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">mock_input</span>
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">unittest.mock</span><span class="w"> </span><span class="kn">import</span> <span class="n">patch</span>
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>
+</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="n">N_CLASS</span> <span class="o">=</span> <span class="mi">5</span>
+</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>
+</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="nd">@track</span>
+</span><span id="__span-4-7"><a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="k">def</span><span class="w"> </span><span class="nf">scale_data</span><span class="p">(</span><span class="n">X</span><span class="p">):</span>
+</span><span id="__span-4-8"><a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a>    <span class="k">return</span> <span class="n">StandardScaler</span><span class="p">(</span><span class="n">with_mean</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">with_std</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">fit_transform</span><span class="p">(</span><span class="n">X</span><span class="p">)</span>
+</span><span id="__span-4-9"><a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a>
+</span><span id="__span-4-10"><a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a><span class="nd">@op</span>
+</span><span id="__span-4-11"><a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a><span class="k">def</span><span class="w"> </span><span class="nf">eval_model</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">X</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">scale</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+</span><span id="__span-4-12"><a id="__codelineno-4-12" name="__codelineno-4-12" href="#__codelineno-4-12"></a>    <span class="k">if</span> <span class="n">scale</span><span class="p">:</span>
+</span><span id="__span-4-13"><a id="__codelineno-4-13" name="__codelineno-4-13" href="#__codelineno-4-13"></a>        <span class="n">X</span> <span class="o">=</span> <span class="n">scale_data</span><span class="p">(</span><span class="n">X</span><span class="p">)</span>
+</span><span id="__span-4-14"><a id="__codelineno-4-14" name="__codelineno-4-14" href="#__codelineno-4-14"></a>    <span class="k">return</span> <span class="nb">round</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">score</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">y</span><span class="p">),</span> <span class="mi">2</span><span class="p">)</span>
+</span><span id="__span-4-15"><a id="__codelineno-4-15" name="__codelineno-4-15" href="#__codelineno-4-15"></a>
+</span><span id="__span-4-16"><a id="__codelineno-4-16" name="__codelineno-4-16" href="#__codelineno-4-16"></a><span class="n">answers</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;y&#39;</span><span class="p">,</span> <span class="s1">&#39;n&#39;</span><span class="p">,</span> <span class="s1">&#39;y&#39;</span><span class="p">]</span>
+</span><span id="__span-4-17"><a id="__codelineno-4-17" name="__codelineno-4-17" href="#__codelineno-4-17"></a>
+</span><span id="__span-4-18"><a id="__codelineno-4-18" name="__codelineno-4-18" href="#__codelineno-4-18"></a><span class="k">with</span> <span class="n">patch</span><span class="p">(</span><span class="s1">&#39;builtins.input&#39;</span><span class="p">,</span> <span class="n">mock_input</span><span class="p">(</span><span class="n">answers</span><span class="p">)):</span>
+</span><span id="__span-4-19"><a id="__codelineno-4-19" name="__codelineno-4-19" href="#__codelineno-4-19"></a>    <span class="k">with</span> <span class="n">storage</span><span class="p">:</span>
+</span><span id="__span-4-20"><a id="__codelineno-4-20" name="__codelineno-4-20" href="#__codelineno-4-20"></a>        <span class="n">X</span><span class="p">,</span> <span class="n">y</span> <span class="o">=</span> <span class="n">load_data</span><span class="p">()</span>
+</span><span id="__span-4-21"><a id="__codelineno-4-21" name="__codelineno-4-21" href="#__codelineno-4-21"></a>        <span class="k">for</span> <span class="n">scale</span> <span class="ow">in</span> <span class="p">[</span><span class="kc">False</span><span class="p">,</span> <span class="kc">True</span><span class="p">]:</span>
+</span><span id="__span-4-22"><a id="__codelineno-4-22" name="__codelineno-4-22" href="#__codelineno-4-22"></a>            <span class="n">model</span> <span class="o">=</span> <span class="n">train_model</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">scale</span><span class="o">=</span><span class="n">scale</span><span class="p">)</span>
+</span><span id="__span-4-23"><a id="__codelineno-4-23" name="__codelineno-4-23" href="#__codelineno-4-23"></a>            <span class="n">acc</span> <span class="o">=</span> <span class="n">eval_model</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">X</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">scale</span><span class="o">=</span><span class="n">scale</span><span class="p">)</span>
+</span></code></pre></div>
+<div class="language-text highlight"><pre><span></span><code>CHANGE DETECTED in N_CLASS from module __main__
+Dependent components:
+  Version of &quot;load_data&quot; from module &quot;__main__&quot; (content: 426c4c8c56d7c0d6374095c7d4a4974f, semantic: 7d0732b9bfb31e5e2211e0122651a624)
+</code></pre></div>
+<pre style="white-space:pre;overflow-x:auto;line-height:normal;font-family:Menlo,'DejaVu Sans Mono',consolas,'Courier New',monospace">╭───────────────────────────────────────────────────── Diff ──────────────────────────────────────────────────────╮
+│ <span style="color: #74878c; text-decoration-color: #74878c; background-color: #fdf6e3; font-weight: bold">  </span><span style="color: #cfd1c6; text-decoration-color: #cfd1c6; background-color: #fdf6e3">1 </span><span style="color: #dc322f; text-decoration-color: #dc322f; background-color: #fdf6e3">-10</span><span style="background-color: #fdf6e3">                                                                                                        </span> │
+│ <span style="color: #74878c; text-decoration-color: #74878c; background-color: #fdf6e3; font-weight: bold">  </span><span style="color: #cfd1c6; text-decoration-color: #cfd1c6; background-color: #fdf6e3">2 </span><span style="color: #859900; text-decoration-color: #859900; background-color: #fdf6e3">+5</span><span style="background-color: #fdf6e3">                                                                                                         </span> │
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+</pre>
+
+<div class="language-text highlight"><pre><span></span><code>Does this change require recomputation of dependent calls?
+WARNING: if the change created new dependencies and you choose &#39;no&#39;, you should add them by hand or risk missing changes in them.
+Answer: [y]es/[n]o/[a]bort 
+You answered: &quot;y&quot;
+CHANGE DETECTED in eval_model from module __main__
+Dependent components:
+  Version of &quot;eval_model&quot; from module &quot;__main__&quot; (content: 955b2a683de8dacf624047c0e020140a, semantic: c847d6dc3f23c176e6c8bf9e7006576a)
+  Version of &quot;eval_model&quot; from module &quot;__main__&quot; (content: 5bdcd6ffc4888990d8922aa85795198d, semantic: 4e1d702e9797ebba156831294de46425)
+</code></pre></div>
+<pre style="white-space:pre;overflow-x:auto;line-height:normal;font-family:Menlo,'DejaVu Sans Mono',consolas,'Courier New',monospace">╭───────────────────────────────────────────────────── Diff ──────────────────────────────────────────────────────╮
+│ <span style="color: #74878c; text-decoration-color: #74878c; background-color: #fdf6e3; font-weight: bold">  </span><span style="color: #cfd1c6; text-decoration-color: #cfd1c6; background-color: #fdf6e3">1 </span><span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3">     if scale:</span><span style="background-color: #fdf6e3">                                                                                             </span> │
+│ <span style="color: #74878c; text-decoration-color: #74878c; background-color: #fdf6e3; font-weight: bold">  </span><span style="color: #cfd1c6; text-decoration-color: #cfd1c6; background-color: #fdf6e3">2 </span><span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3">         X = scale_data(X)</span><span style="background-color: #fdf6e3">                                                                                 </span> │
+│ <span style="color: #74878c; text-decoration-color: #74878c; background-color: #fdf6e3; font-weight: bold">  </span><span style="color: #cfd1c6; text-decoration-color: #cfd1c6; background-color: #fdf6e3">3 </span><span style="color: #dc322f; text-decoration-color: #dc322f; background-color: #fdf6e3">-    return model.score(X, y)</span><span style="background-color: #fdf6e3">                                                                              </span> │
+│ <span style="color: #74878c; text-decoration-color: #74878c; background-color: #fdf6e3; font-weight: bold">  </span><span style="color: #cfd1c6; text-decoration-color: #cfd1c6; background-color: #fdf6e3">4 </span><span style="color: #859900; text-decoration-color: #859900; background-color: #fdf6e3">+    return round(model.score(X, y), 2)</span><span style="background-color: #fdf6e3">                                                                    </span> │
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+</pre>
+
+<div class="language-text highlight"><pre><span></span><code>Does this change require recomputation of dependent calls?
+WARNING: if the change created new dependencies and you choose &#39;no&#39;, you should add them by hand or risk missing changes in them.
+Answer: [y]es/[n]o/[a]bort 
+You answered: &quot;n&quot;
+CHANGE DETECTED in scale_data from module __main__
+Dependent components:
+  Version of &quot;train_model&quot; from module &quot;__main__&quot; (content: 2717c55fbbbb60442535a8dea0c81f67, semantic: 4674057d19bbf217687dd9dabe01df36)
+  Version of &quot;eval_model&quot; from module &quot;__main__&quot; (content: 5bdcd6ffc4888990d8922aa85795198d, semantic: 4e1d702e9797ebba156831294de46425)
+</code></pre></div>
+<pre style="white-space:pre;overflow-x:auto;line-height:normal;font-family:Menlo,'DejaVu Sans Mono',consolas,'Courier New',monospace">╭───────────────────────────────────────────────────── Diff ──────────────────────────────────────────────────────╮
+│ <span style="color: #74878c; text-decoration-color: #74878c; background-color: #fdf6e3; font-weight: bold">  </span><span style="color: #cfd1c6; text-decoration-color: #cfd1c6; background-color: #fdf6e3">1 </span><span style="color: #dc322f; text-decoration-color: #dc322f; background-color: #fdf6e3">-@track # to track a non-memoized function as a dependency</span><span style="background-color: #fdf6e3">                                                 </span> │
+│ <span style="color: #74878c; text-decoration-color: #74878c; background-color: #fdf6e3; font-weight: bold">  </span><span style="color: #cfd1c6; text-decoration-color: #cfd1c6; background-color: #fdf6e3">2 </span><span style="color: #859900; text-decoration-color: #859900; background-color: #fdf6e3">+@track</span><span style="background-color: #fdf6e3">                                                                                                    </span> │
+│ <span style="color: #74878c; text-decoration-color: #74878c; background-color: #fdf6e3; font-weight: bold">  </span><span style="color: #cfd1c6; text-decoration-color: #cfd1c6; background-color: #fdf6e3">3 </span><span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3"> def scale_data(X):</span><span style="background-color: #fdf6e3">                                                                                        </span> │
+│ <span style="color: #74878c; text-decoration-color: #74878c; background-color: #fdf6e3; font-weight: bold">  </span><span style="color: #cfd1c6; text-decoration-color: #cfd1c6; background-color: #fdf6e3">4 </span><span style="color: #dc322f; text-decoration-color: #dc322f; background-color: #fdf6e3">-    return StandardScaler(with_mean=True, with_std=False).fit_transform(X)</span><span style="background-color: #fdf6e3">                                </span> │
+│ <span style="color: #74878c; text-decoration-color: #74878c; background-color: #fdf6e3; font-weight: bold">  </span><span style="color: #cfd1c6; text-decoration-color: #cfd1c6; background-color: #fdf6e3">5 </span><span style="color: #859900; text-decoration-color: #859900; background-color: #fdf6e3">+    return StandardScaler(with_mean=True, with_std=True).fit_transform(X)</span><span style="background-color: #fdf6e3">                                 </span> │
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+</pre>
+
+<div class="language-text highlight"><pre><span></span><code>Does this change require recomputation of dependent calls?
+WARNING: if the change created new dependencies and you choose &#39;no&#39;, you should add them by hand or risk missing changes in them.
+Answer: [y]es/[n]o/[a]bort 
+You answered: &quot;y&quot;
+</code></pre></div>
+<p>When a change is detected, the UI:</p>
+<ul>
+<li>shows the diffs in each function,</li>
+<li>gives you a list of which <code>@op</code>s' versions are affected by each change</li>
+<li>lets you choose if the change is breaking or non-breaking</li>
+</ul>
+<p>We can check what happened by constructing a computation frame:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="n">cf</span> <span class="o">=</span> <span class="n">storage</span><span class="o">.</span><span class="n">cf</span><span class="p">(</span><span class="n">eval_model</span><span class="p">)</span><span class="o">.</span><span class="n">expand_all</span><span class="p">()</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="n">cf</span><span class="o">.</span><span class="n">draw</span><span class="p">(</span><span class="n">verbose</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</span></code></pre></div>
+<p><img alt="svg" src="../04_versions_files/04_versions_12_0.svg" /></p>
+<p>We see that <code>load_data</code> has two versions in use, whereas <code>train_model</code> and
+<code>eval_model</code> both have three. Which ones? Again, call <code>versions</code> to find out.
+For example, with <code>eval_model</code>, we have 4 different content versions, that 
+overall span 3 semantically different versions:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="n">storage</span><span class="o">.</span><span class="n">versions</span><span class="p">(</span><span class="n">eval_model</span><span class="p">)</span>
+</span></code></pre></div>
+<pre style="white-space:pre;overflow-x:auto;line-height:normal;font-family:Menlo,'DejaVu Sans Mono',consolas,'Courier New',monospace">╭─────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ <span style="color: #93a1a1; text-decoration-color: #93a1a1; background-color: #fdf6e3; font-style: italic">### Dependencies for version of function eval_model from module __main__</span><span style="background-color: #fdf6e3">                                       </span> │
+│ <span style="color: #93a1a1; text-decoration-color: #93a1a1; background-color: #fdf6e3; font-style: italic">### content_version_id=955b2a683de8dacf624047c0e020140a</span><span style="background-color: #fdf6e3">                                                        </span> │
+│ <span style="color: #93a1a1; text-decoration-color: #93a1a1; background-color: #fdf6e3; font-style: italic">### semantic_version_id=c847d6dc3f23c176e6c8bf9e7006576a</span><span style="background-color: #fdf6e3">                                                       </span> │
+│ <span style="background-color: #fdf6e3">                                                                                                               </span> │
+│ <span style="color: #93a1a1; text-decoration-color: #93a1a1; background-color: #fdf6e3; font-style: italic">################################################################################</span><span style="background-color: #fdf6e3">                               </span> │
+│ <span style="color: #93a1a1; text-decoration-color: #93a1a1; background-color: #fdf6e3; font-style: italic">### IN MODULE "__main__"</span><span style="background-color: #fdf6e3">                                                                                       </span> │
+│ <span style="color: #93a1a1; text-decoration-color: #93a1a1; background-color: #fdf6e3; font-style: italic">################################################################################</span><span style="background-color: #fdf6e3">                               </span> │
+│ <span style="background-color: #fdf6e3">                                                                                                               </span> │
+│ <span style="color: #268bd2; text-decoration-color: #268bd2; background-color: #fdf6e3">@op</span><span style="background-color: #fdf6e3">                                                                                                            </span> │
+│ <span style="color: #859900; text-decoration-color: #859900; background-color: #fdf6e3">def</span><span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3"> </span><span style="color: #268bd2; text-decoration-color: #268bd2; background-color: #fdf6e3">eval_model</span><span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3">(model, X, y, scale</span><span style="color: #93a1a1; text-decoration-color: #93a1a1; background-color: #fdf6e3">=</span><span style="color: #2aa198; text-decoration-color: #2aa198; background-color: #fdf6e3">False</span><span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3">):</span><span style="background-color: #fdf6e3">                                                                      </span> │
+│ <span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3">    </span><span style="color: #859900; text-decoration-color: #859900; background-color: #fdf6e3">if</span><span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3"> scale:</span><span style="background-color: #fdf6e3">                                                                                                  </span> │
+│ <span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3">        X </span><span style="color: #93a1a1; text-decoration-color: #93a1a1; background-color: #fdf6e3">=</span><span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3"> scale_data(X)</span><span style="background-color: #fdf6e3">                                                                                      </span> │
+│ <span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3">    </span><span style="color: #859900; text-decoration-color: #859900; background-color: #fdf6e3">return</span><span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3"> model</span><span style="color: #93a1a1; text-decoration-color: #93a1a1; background-color: #fdf6e3">.</span><span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3">score(X, y)</span><span style="background-color: #fdf6e3">                                                                                   </span> │
+│ <span style="background-color: #fdf6e3">                                                                                                               </span> │
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ <span style="color: #93a1a1; text-decoration-color: #93a1a1; background-color: #fdf6e3; font-style: italic">### Dependencies for version of function eval_model from module __main__</span><span style="background-color: #fdf6e3">                                       </span> │
+│ <span style="color: #93a1a1; text-decoration-color: #93a1a1; background-color: #fdf6e3; font-style: italic">### content_version_id=5bdcd6ffc4888990d8922aa85795198d</span><span style="background-color: #fdf6e3">                                                        </span> │
+│ <span style="color: #93a1a1; text-decoration-color: #93a1a1; background-color: #fdf6e3; font-style: italic">### semantic_version_id=4e1d702e9797ebba156831294de46425</span><span style="background-color: #fdf6e3">                                                       </span> │
+│ <span style="background-color: #fdf6e3">                                                                                                               </span> │
+│ <span style="color: #93a1a1; text-decoration-color: #93a1a1; background-color: #fdf6e3; font-style: italic">################################################################################</span><span style="background-color: #fdf6e3">                               </span> │
+│ <span style="color: #93a1a1; text-decoration-color: #93a1a1; background-color: #fdf6e3; font-style: italic">### IN MODULE "__main__"</span><span style="background-color: #fdf6e3">                                                                                       </span> │
+│ <span style="color: #93a1a1; text-decoration-color: #93a1a1; background-color: #fdf6e3; font-style: italic">################################################################################</span><span style="background-color: #fdf6e3">                               </span> │
+│ <span style="background-color: #fdf6e3">                                                                                                               </span> │
+│ <span style="color: #268bd2; text-decoration-color: #268bd2; background-color: #fdf6e3">@op</span><span style="background-color: #fdf6e3">                                                                                                            </span> │
+│ <span style="color: #859900; text-decoration-color: #859900; background-color: #fdf6e3">def</span><span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3"> </span><span style="color: #268bd2; text-decoration-color: #268bd2; background-color: #fdf6e3">eval_model</span><span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3">(model, X, y, scale</span><span style="color: #93a1a1; text-decoration-color: #93a1a1; background-color: #fdf6e3">=</span><span style="color: #2aa198; text-decoration-color: #2aa198; background-color: #fdf6e3">False</span><span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3">):</span><span style="background-color: #fdf6e3">                                                                      </span> │
+│ <span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3">    </span><span style="color: #859900; text-decoration-color: #859900; background-color: #fdf6e3">if</span><span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3"> scale:</span><span style="background-color: #fdf6e3">                                                                                                  </span> │
+│ <span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3">        X </span><span style="color: #93a1a1; text-decoration-color: #93a1a1; background-color: #fdf6e3">=</span><span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3"> scale_data(X)</span><span style="background-color: #fdf6e3">                                                                                      </span> │
+│ <span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3">    </span><span style="color: #859900; text-decoration-color: #859900; background-color: #fdf6e3">return</span><span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3"> model</span><span style="color: #93a1a1; text-decoration-color: #93a1a1; background-color: #fdf6e3">.</span><span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3">score(X, y)</span><span style="background-color: #fdf6e3">                                                                                   </span> │
+│ <span style="background-color: #fdf6e3">                                                                                                               </span> │
+│ <span style="color: #268bd2; text-decoration-color: #268bd2; background-color: #fdf6e3">@track</span><span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3"> </span><span style="color: #93a1a1; text-decoration-color: #93a1a1; background-color: #fdf6e3; font-style: italic"># to track a non-memoized function as a dependency</span><span style="background-color: #fdf6e3">                                                      </span> │
+│ <span style="color: #859900; text-decoration-color: #859900; background-color: #fdf6e3">def</span><span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3"> </span><span style="color: #268bd2; text-decoration-color: #268bd2; background-color: #fdf6e3">scale_data</span><span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3">(X):</span><span style="background-color: #fdf6e3">                                                                                             </span> │
+│ <span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3">    </span><span style="color: #859900; text-decoration-color: #859900; background-color: #fdf6e3">return</span><span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3"> StandardScaler(with_mean</span><span style="color: #93a1a1; text-decoration-color: #93a1a1; background-color: #fdf6e3">=</span><span style="color: #2aa198; text-decoration-color: #2aa198; background-color: #fdf6e3">True</span><span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3">, with_std</span><span style="color: #93a1a1; text-decoration-color: #93a1a1; background-color: #fdf6e3">=</span><span style="color: #2aa198; text-decoration-color: #2aa198; background-color: #fdf6e3">False</span><span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3">)</span><span style="color: #93a1a1; text-decoration-color: #93a1a1; background-color: #fdf6e3">.</span><span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3">fit_transform(X)</span><span style="background-color: #fdf6e3">                                     </span> │
+│ <span style="background-color: #fdf6e3">                                                                                                               </span> │
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ <span style="color: #93a1a1; text-decoration-color: #93a1a1; background-color: #fdf6e3; font-style: italic">### Dependencies for version of function eval_model from module __main__</span><span style="background-color: #fdf6e3">                                       </span> │
+│ <span style="color: #93a1a1; text-decoration-color: #93a1a1; background-color: #fdf6e3; font-style: italic">### content_version_id=b50e3e2529b811e226d2bb39a572a5e4</span><span style="background-color: #fdf6e3">                                                        </span> │
+│ <span style="color: #93a1a1; text-decoration-color: #93a1a1; background-color: #fdf6e3; font-style: italic">### semantic_version_id=c847d6dc3f23c176e6c8bf9e7006576a</span><span style="background-color: #fdf6e3">                                                       </span> │
+│ <span style="background-color: #fdf6e3">                                                                                                               </span> │
+│ <span style="color: #93a1a1; text-decoration-color: #93a1a1; background-color: #fdf6e3; font-style: italic">################################################################################</span><span style="background-color: #fdf6e3">                               </span> │
+│ <span style="color: #93a1a1; text-decoration-color: #93a1a1; background-color: #fdf6e3; font-style: italic">### IN MODULE "__main__"</span><span style="background-color: #fdf6e3">                                                                                       </span> │
+│ <span style="color: #93a1a1; text-decoration-color: #93a1a1; background-color: #fdf6e3; font-style: italic">################################################################################</span><span style="background-color: #fdf6e3">                               </span> │
+│ <span style="background-color: #fdf6e3">                                                                                                               </span> │
+│ <span style="color: #268bd2; text-decoration-color: #268bd2; background-color: #fdf6e3">@op</span><span style="background-color: #fdf6e3">                                                                                                            </span> │
+│ <span style="color: #859900; text-decoration-color: #859900; background-color: #fdf6e3">def</span><span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3"> </span><span style="color: #268bd2; text-decoration-color: #268bd2; background-color: #fdf6e3">eval_model</span><span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3">(model, X, y, scale</span><span style="color: #93a1a1; text-decoration-color: #93a1a1; background-color: #fdf6e3">=</span><span style="color: #2aa198; text-decoration-color: #2aa198; background-color: #fdf6e3">False</span><span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3">):</span><span style="background-color: #fdf6e3">                                                                      </span> │
+│ <span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3">    </span><span style="color: #859900; text-decoration-color: #859900; background-color: #fdf6e3">if</span><span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3"> scale:</span><span style="background-color: #fdf6e3">                                                                                                  </span> │
+│ <span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3">        X </span><span style="color: #93a1a1; text-decoration-color: #93a1a1; background-color: #fdf6e3">=</span><span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3"> scale_data(X)</span><span style="background-color: #fdf6e3">                                                                                      </span> │
+│ <span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3">    </span><span style="color: #859900; text-decoration-color: #859900; background-color: #fdf6e3">return</span><span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3"> model</span><span style="color: #93a1a1; text-decoration-color: #93a1a1; background-color: #fdf6e3">.</span><span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3">score(X, y)</span><span style="background-color: #fdf6e3">                                                                                   </span> │
+│ <span style="background-color: #fdf6e3">                                                                                                               </span> │
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ <span style="color: #93a1a1; text-decoration-color: #93a1a1; background-color: #fdf6e3; font-style: italic">### Dependencies for version of function eval_model from module __main__</span><span style="background-color: #fdf6e3">                                       </span> │
+│ <span style="color: #93a1a1; text-decoration-color: #93a1a1; background-color: #fdf6e3; font-style: italic">### content_version_id=136129b20d9a3a3795e88ba8cf89b115</span><span style="background-color: #fdf6e3">                                                        </span> │
+│ <span style="color: #93a1a1; text-decoration-color: #93a1a1; background-color: #fdf6e3; font-style: italic">### semantic_version_id=f2573de2a6c25b390fc86d665ea85687</span><span style="background-color: #fdf6e3">                                                       </span> │
+│ <span style="background-color: #fdf6e3">                                                                                                               </span> │
+│ <span style="color: #93a1a1; text-decoration-color: #93a1a1; background-color: #fdf6e3; font-style: italic">################################################################################</span><span style="background-color: #fdf6e3">                               </span> │
+│ <span style="color: #93a1a1; text-decoration-color: #93a1a1; background-color: #fdf6e3; font-style: italic">### IN MODULE "__main__"</span><span style="background-color: #fdf6e3">                                                                                       </span> │
+│ <span style="color: #93a1a1; text-decoration-color: #93a1a1; background-color: #fdf6e3; font-style: italic">################################################################################</span><span style="background-color: #fdf6e3">                               </span> │
+│ <span style="background-color: #fdf6e3">                                                                                                               </span> │
+│ <span style="color: #268bd2; text-decoration-color: #268bd2; background-color: #fdf6e3">@op</span><span style="background-color: #fdf6e3">                                                                                                            </span> │
+│ <span style="color: #859900; text-decoration-color: #859900; background-color: #fdf6e3">def</span><span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3"> </span><span style="color: #268bd2; text-decoration-color: #268bd2; background-color: #fdf6e3">eval_model</span><span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3">(model, X, y, scale</span><span style="color: #93a1a1; text-decoration-color: #93a1a1; background-color: #fdf6e3">=</span><span style="color: #2aa198; text-decoration-color: #2aa198; background-color: #fdf6e3">False</span><span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3">):</span><span style="background-color: #fdf6e3">                                                                      </span> │
+│ <span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3">    </span><span style="color: #859900; text-decoration-color: #859900; background-color: #fdf6e3">if</span><span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3"> scale:</span><span style="background-color: #fdf6e3">                                                                                                  </span> │
+│ <span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3">        X </span><span style="color: #93a1a1; text-decoration-color: #93a1a1; background-color: #fdf6e3">=</span><span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3"> scale_data(X)</span><span style="background-color: #fdf6e3">                                                                                      </span> │
+│ <span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3">    </span><span style="color: #859900; text-decoration-color: #859900; background-color: #fdf6e3">return</span><span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3"> model</span><span style="color: #93a1a1; text-decoration-color: #93a1a1; background-color: #fdf6e3">.</span><span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3">score(X, y)</span><span style="background-color: #fdf6e3">                                                                                   </span> │
+│ <span style="background-color: #fdf6e3">                                                                                                               </span> │
+│ <span style="color: #268bd2; text-decoration-color: #268bd2; background-color: #fdf6e3">@track</span><span style="background-color: #fdf6e3">                                                                                                         </span> │
+│ <span style="color: #859900; text-decoration-color: #859900; background-color: #fdf6e3">def</span><span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3"> </span><span style="color: #268bd2; text-decoration-color: #268bd2; background-color: #fdf6e3">scale_data</span><span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3">(X):</span><span style="background-color: #fdf6e3">                                                                                             </span> │
+│ <span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3">    </span><span style="color: #859900; text-decoration-color: #859900; background-color: #fdf6e3">return</span><span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3"> StandardScaler(with_mean</span><span style="color: #93a1a1; text-decoration-color: #93a1a1; background-color: #fdf6e3">=</span><span style="color: #2aa198; text-decoration-color: #2aa198; background-color: #fdf6e3">True</span><span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3">, with_std</span><span style="color: #93a1a1; text-decoration-color: #93a1a1; background-color: #fdf6e3">=</span><span style="color: #2aa198; text-decoration-color: #2aa198; background-color: #fdf6e3">True</span><span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3">)</span><span style="color: #93a1a1; text-decoration-color: #93a1a1; background-color: #fdf6e3">.</span><span style="color: #657b83; text-decoration-color: #657b83; background-color: #fdf6e3">fit_transform(X)</span><span style="background-color: #fdf6e3">                                      </span> │
+│ <span style="background-color: #fdf6e3">                                                                                                               </span> │
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+</pre>
+
+<h2 id="additional-notes">Additional notes</h2>
+<h3 id="so-what-really-is-a-version-of-an-op">So what really is a version of an <code>@op</code>?</h3>
+<p>A <strong>version</strong> for an <code>@op</code> is a collection of</p>
+<ul>
+<li>(hashes of) the source code of functions and methods</li>
+<li>(hashes of) values of global variables</li>
+</ul>
+<p>at the time when a call to this <code>@op</code> was executed. Even if you don't change
+anything in the code, a single function can have multiple versions if it invokes
+different dependencies for different calls. </p>
+<h3 id="going-back-in-time">Going back in time</h3>
+<p>Since the versioning system is content-based, simply restoring an old state of
+the code makes the storage automatically recognize which "world" it's in, and
+which calls are memoized in this world.</p>
+<h3 id="caveats-of-marking-changes-as-non-breaking">Caveats of marking changes as non-breaking</h3>
+<p>The main motivation for allowing non-breaking changes is to maintain the storage
+when doing routine code improvements (refactoring, comments, logging).</p>
+<p><strong>However</strong>, non-semantic changes should be applied with care. Apart from being
+prone to errors (you wrongly conclude that a change has no effect on semantics
+when it does), they can also introduce <strong>invisible dependencies</strong>: suppose you
+factor a function out of some dependency and mark the change non-semantic. Then
+the newly extracted function may in reality be a dependency of the existing
+calls, but this goes unnoticed by the system. Consequently, changes in this 
+dependency may go unnoticed by the versioning algorithm.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    <script id="__config" type="application/json">{"base": "../..", "features": ["content.code.copy"], "search": "../../assets/javascripts/workers/search.6ce7567c.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.88dd0f4e.min.js"></script>
+      
+    
+  </body>
+</html>

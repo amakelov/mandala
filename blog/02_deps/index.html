@@ -1,0 +1,1686 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+      
+        <link rel="prev" href="../01_cf/">
+      
+      
+        <link rel="next" href="../../topics/01_storage_and_ops/">
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.5.49">
+    
+    
+      
+        <title>Practical dependency tracking for Python function calls - Mandala Documentation</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.6f8fc17f.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.06af60db.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../stylesheets/extra.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#practical-dependency-tracking-for-python-function-calls" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="Mandala Documentation" class="md-header__button md-logo" aria-label="Mandala Documentation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Mandala Documentation
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Practical dependency tracking for Python function calls
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      <label class="md-header__button md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+      </label>
+      <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+    
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="Mandala Documentation" class="md-nav__button md-logo" aria-label="Mandala Documentation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Mandala Documentation
+  </label>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Introduction
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    Blog
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            Blog
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../01_cf/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Tidy Computations
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  <span class="md-ellipsis">
+    Practical dependency tracking for Python function calls
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  <span class="md-ellipsis">
+    Practical dependency tracking for Python function calls
+  </span>
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#tldr" class="md-nav__link">
+    <span class="md-ellipsis">
+      tl;dr
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="tl;dr">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#outline" class="md-nav__link">
+    <span class="md-ellipsis">
+      Outline
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#motivation-efficient-and-reproducible-computational-experiments" class="md-nav__link">
+    <span class="md-ellipsis">
+      Motivation: efficient and reproducible computational experiments
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Motivation: efficient and reproducible computational experiments">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#technical-requirements" class="md-nav__link">
+    <span class="md-ellipsis">
+      Technical requirements
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#proposed-solution" class="md-nav__link">
+    <span class="md-ellipsis">
+      Proposed solution
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Proposed solution">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-decorator" class="md-nav__link">
+    <span class="md-ellipsis">
+      The decorator
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#the-tracer" class="md-nav__link">
+    <span class="md-ellipsis">
+      The tracer
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#a-minimal-example" class="md-nav__link">
+    <span class="md-ellipsis">
+      A minimal example
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#adding-globals-tracking" class="md-nav__link">
+    <span class="md-ellipsis">
+      Adding globals tracking
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#a-more-interesting-example" class="md-nav__link">
+    <span class="md-ellipsis">
+      A more interesting example
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#beyond-the-prototype" class="md-nav__link">
+    <span class="md-ellipsis">
+      Beyond the prototype
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-doesnt-work-and-why" class="md-nav__link">
+    <span class="md-ellipsis">
+      What doesn't work, and why
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="What doesn't work, and why">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#syssettrace" class="md-nav__link">
+    <span class="md-ellipsis">
+      sys.settrace
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="sys.settrace">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#syssettraces-unavoidable-overhead" class="md-nav__link">
+    <span class="md-ellipsis">
+      sys.settrace's unavoidable overhead
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cprofile" class="md-nav__link">
+    <span class="md-ellipsis">
+      cProfile
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#static-analysis" class="md-nav__link">
+    <span class="md-ellipsis">
+      Static analysis
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    Topics
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            Topics
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../topics/01_storage_and_ops/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Storage &amp; the @op Decorator
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../topics/02_retracing/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Patterns for Incremental Computation &amp; Development
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../topics/03_cf/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Query the Storage with ComputationFrames
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../topics/04_versions/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Changing @ops and managing versions
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../topics/05_collections/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Natively handling Python collections
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../topics/06_advanced_cf/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Advanced ComputationFrame tools
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    Tutorials
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            Tutorials
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/01_hello/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Quickstart
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/02_ml/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Random forest ML project
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/gotchas/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Gotchas
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#tldr" class="md-nav__link">
+    <span class="md-ellipsis">
+      tl;dr
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="tl;dr">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#outline" class="md-nav__link">
+    <span class="md-ellipsis">
+      Outline
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#motivation-efficient-and-reproducible-computational-experiments" class="md-nav__link">
+    <span class="md-ellipsis">
+      Motivation: efficient and reproducible computational experiments
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Motivation: efficient and reproducible computational experiments">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#technical-requirements" class="md-nav__link">
+    <span class="md-ellipsis">
+      Technical requirements
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#proposed-solution" class="md-nav__link">
+    <span class="md-ellipsis">
+      Proposed solution
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Proposed solution">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-decorator" class="md-nav__link">
+    <span class="md-ellipsis">
+      The decorator
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#the-tracer" class="md-nav__link">
+    <span class="md-ellipsis">
+      The tracer
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#a-minimal-example" class="md-nav__link">
+    <span class="md-ellipsis">
+      A minimal example
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#adding-globals-tracking" class="md-nav__link">
+    <span class="md-ellipsis">
+      Adding globals tracking
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#a-more-interesting-example" class="md-nav__link">
+    <span class="md-ellipsis">
+      A more interesting example
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#beyond-the-prototype" class="md-nav__link">
+    <span class="md-ellipsis">
+      Beyond the prototype
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-doesnt-work-and-why" class="md-nav__link">
+    <span class="md-ellipsis">
+      What doesn't work, and why
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="What doesn't work, and why">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#syssettrace" class="md-nav__link">
+    <span class="md-ellipsis">
+      sys.settrace
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="sys.settrace">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#syssettraces-unavoidable-overhead" class="md-nav__link">
+    <span class="md-ellipsis">
+      sys.settrace's unavoidable overhead
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cprofile" class="md-nav__link">
+    <span class="md-ellipsis">
+      cProfile
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#static-analysis" class="md-nav__link">
+    <span class="md-ellipsis">
+      Static analysis
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+<h1 id="practical-dependency-tracking-for-python-function-calls">Practical dependency tracking for Python function calls</h1>
+<h2 id="tldr">tl;dr</h2>
+<p>Tracking the code and data accessed by a (Python) function call is a broadly
+useful primitive, from drawing dependency graphs, to debugging and profiling, to
+cache invalidation. This post is a journey through the landscape
+of possible implementations, with a focus on solutions that are transparent,
+robust and applicable to practical production scenarios. A minimal
+viable implementation in &lt;100 lines of code is included (<a href="https://gist.github.com/amakelov/c48d1bfb2eec75385dd5df2d81dcd759">gist</a>); a practical
+implementation is part of
+<a href="https://github.com/amakelov/mandala">mandala</a>, a library for incremental
+computing and experiment management.</p>
+<p><img alt="Dependency graph" src="dependency_graph.png" /></p>
+<p><em>Figure. Dependencies extracted from a call to the function <code>train_model</code>
+in module <code><strong>main</strong></code>: functions (blue), methods (purple) and globals (red) </em></p>
+<h3 id="outline">Outline</h3>
+<ul>
+<li><a href="#motivation-efficient-and-reproducible-computational-experiments">motivation</a>:
+  the use case I ran into, and <a href="#technical-requirements">technical requirements</a> that came out of it</li>
+<li><a href="#proposed-solution">proposed solution</a>: a prototype in &lt;100 lines of code you
+  can customize to your own use cases</li>
+<li><a href="#what-doesnt-work-and-why">what doesn't work and why</a>: alternative designs and why
+  I decided against them</li>
+</ul>
+<h2 id="motivation-efficient-and-reproducible-computational-experiments">Motivation: efficient and reproducible computational experiments</h2>
+<p>Function dependency information is useful for all sorts of stuff, from <a href="https://github.com/gak/pycallgraph">drawing
+pretty call graphs</a> to
+<a href="https://docs.python.org/3/library/pdb.html">debugging</a> and
+<a href="https://github.com/joerick/pyinstrument">profiling</a> to <a href="https://github.com/nedbat/coveragepy">measuring test
+coverage</a>. Personally, I wanted to cache
+function calls and detect when a cached call is no longer valid because the code
+and/or data it depends on have changed. This means that, for each call, you must
+know the <em>exact</em> functions/methods it called and globals it accessed. </p>
+<p>Concretely, such a <a href="https://en.wikipedia.org/wiki/Memoization">memoization tool</a>
+can save a lot of computer/programmer time in computational fields like <a href="https://en.wikipedia.org/wiki/Machine_learning">machine
+learning</a> and <a href="https://en.wikipedia.org/wiki/Data_science">data
+science</a>. Projects there typically
+have many moving pieces, and each piece can change at any time. It's common for
+a change in one piece to affect only some steps of a project, and re-running
+everything from scratch takes too long: you want to do the "new" computations
+only.</p>
+<p>Manually keeping track of this is error-prone and distracts you from your actual
+project! There exist tools like <a href="https://dvc.org/">dvc</a> that can sort of
+automate this, but they are generally more rigid - e.g., require you to break
+your code up into scripts instead of functions. Instead, I wanted something
+simpler to understand and add to existing code in e.g. your <a href="https://jupyter.org/">Jupyter
+notebook</a>, so you can do your work in the most
+straightforward way with minimal boilerplate.</p>
+<h3 id="technical-requirements">Technical requirements</h3>
+<p>Deploying dependency tracking in a production ML/DS system poses more challenges
+than using it for e.g. debugging/profiling, because it's now part of all the
+computations you do! Unfortunately, I'm not aware of a tool that meets all the
+requirements of this use case:</p>
+<ul>
+<li><strong>track the dependencies <em>actually</em> accessed by each call</strong> (including global
+  variable accesses) as opposed to an over- or under-estimate</li>
+<li>easily <strong>limit the tracked dependencies</strong> to user code
+  (library functions typically don't change, even over relatively long projects)</li>
+<li><strong>report/abort when a dependency cannot be tracked</strong>, e.g. when a function
+accesses a <a href="https://en.wikipedia.org/wiki/Closure_(computer_programming)">closure</a> or a
+global variable that can't be hashed</li>
+<li>be <strong>robust</strong> and <strong>non-invasive</strong> to the main computational process so that
+  your code behaves as it would without tracking</li>
+<li>introduce <strong>low performance overhead</strong>, which is particularly important in
+  fast-feedback interactive settings, like exploratory computations in Jupyter notebooks.</li>
+<li>...and more (e.g. deal with concurrency/parallelism, which we won't get to here)</li>
+</ul>
+<p>As we'll see <a href="#what-doesnt-work-and-why">later</a>, take together, these
+requirements rule out several standard approaches: <a href="#static-analysis">static
+analyzers</a> (which can over- and under-estimate dependencies),
+<a href="#syssettrace">Python's <code>sys.settrace</code></a> (which is too invasive and inefficient),
+and <a href="#cprofile">profilers</a> (which are designed to provide aggregate statistics
+post-execution).</p>
+<h2 id="proposed-solution">Proposed solution</h2>
+<p>After tinkering with various
+<a href="https://en.wikipedia.org/wiki/Magic_(programming)">magical</a> ways to gather this
+data using Python internals, I found out that none of them really fit all the
+requirements of my use case. What ended up working was something simple but
+ultimately more reliable and efficient:</p>
+<ul>
+<li>decorate all the functions whose code you want to track. The decorator implements its own <a href="https://en.wikipedia.org/wiki/Call_stack">call
+stack</a>, separate from Python's, that
+tracks just these functions' calls.</li>
+<li>the decorator also hooks into the <code>__globals__</code> of the function object (the
+dictionary of globals available to the function), and tracks every access to it.
+I learned this from <a href="https://www.benkuhn.net/deps/">this blog post</a>.</li>
+</ul>
+<p>The only downside is that you have to explicitly decorate the functions/classes
+you want to track (you could do this automatically with an <a href="https://docs.python.org/3/reference/import.html#import-hooks">import
+hook</a>, but that's
+perhaps too much magic). The full code + an example is in <a href="https://gist.github.com/amakelov/c48d1bfb2eec75385dd5df2d81dcd759">this
+gist</a>.</p>
+<h3 id="the-decorator">The decorator</h3>
+<p>The <code>@track</code> decorator simply modifies a function <code>f</code> to emit an event to the
+global <code>Tracer</code> object (defined <a href="#the-tracer">below</a>) right before and after it
+is called:
+<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">types</span><span class="w"> </span><span class="kn">import</span> <span class="n">FunctionType</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">functools</span><span class="w"> </span><span class="kn">import</span> <span class="n">wraps</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Optional</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="k">class</span><span class="w"> </span><span class="nc">TracerState</span><span class="p">:</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="n">current</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="s1">&#39;Tracer&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="k">def</span><span class="w"> </span><span class="nf">track</span><span class="p">(</span><span class="n">f</span><span class="p">:</span> <span class="n">FunctionType</span><span class="p">):</span>
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>
+</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>    <span class="nd">@wraps</span><span class="p">(</span><span class="n">f</span><span class="p">)</span> <span class="c1"># to make the wrapped function look like `f`</span>
+</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">wrapper</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+</span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>        <span class="n">tracer</span> <span class="o">=</span> <span class="n">TracerState</span><span class="o">.</span><span class="n">current</span>
+</span><span id="__span-0-13"><a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>        <span class="k">if</span> <span class="n">tracer</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-0-14"><a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a>            <span class="n">tracer</span><span class="o">.</span><span class="n">register_call</span><span class="p">(</span><span class="n">func</span><span class="o">=</span><span class="n">f</span><span class="p">)</span> <span class="c1"># put call to `f` on stack</span>
+</span><span id="__span-0-15"><a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a>            <span class="n">result</span> <span class="o">=</span> <span class="n">f</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+</span><span id="__span-0-16"><a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a>            <span class="n">tracer</span><span class="o">.</span><span class="n">register_return</span><span class="p">()</span> <span class="c1"># pop call to `f` from stack</span>
+</span><span id="__span-0-17"><a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a>            <span class="k">return</span> <span class="n">result</span>
+</span><span id="__span-0-18"><a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a>        <span class="k">else</span><span class="p">:</span>
+</span><span id="__span-0-19"><a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a>            <span class="k">return</span> <span class="n">f</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+</span><span id="__span-0-20"><a id="__codelineno-0-20" name="__codelineno-0-20" href="#__codelineno-0-20"></a>
+</span><span id="__span-0-21"><a id="__codelineno-0-21" name="__codelineno-0-21" href="#__codelineno-0-21"></a>    <span class="k">return</span> <span class="n">wrapper</span>
+</span></code></pre></div></p>
+<h3 id="the-tracer">The tracer</h3>
+<p>Most importantly, the tracer keeps track of calls to decorated functions by
+<a href="https://en.wikipedia.org/wiki/Call_stack">putting a call on the stack</a> right
+before a decorated function is called, and popping the top call when a decorated
+function returns. Using the call stack, you can derive all sorts of other useful
+information. For example, the implementation below uses the stack to build a <a href="https://en.wikipedia.org/wiki/Call_graph">dynamic call
+graph</a> (represented as a list of edges
+for simplicity). It's implemented as a <a href="https://docs.python.org/3/library/stdtypes.html#typecontextmanager">context
+manager</a>
+that only tracks calls that happen inside a <code>with</code> block:
+<div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Callable</span>
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="k">class</span><span class="w"> </span><span class="nc">Tracer</span><span class="p">:</span>
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>        <span class="c1"># call stack of (module name, qualified function/method name) tuples</span>
+</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">stack</span> <span class="o">=</span> <span class="p">[]</span> 
+</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>        <span class="c1"># list of (caller module, caller qualname, callee module, callee</span>
+</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>        <span class="c1"># qualname) tuples</span>
+</span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">graph</span> <span class="o">=</span> <span class="p">[]</span> 
+</span><span id="__span-1-10"><a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a>
+</span><span id="__span-1-11"><a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">register_call</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">func</span><span class="p">:</span> <span class="n">Callable</span><span class="p">):</span> 
+</span><span id="__span-1-12"><a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a>        <span class="c1"># Add a call to the stack and the graph</span>
+</span><span id="__span-1-13"><a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a>        <span class="n">module_name</span><span class="p">,</span> <span class="n">qual_name</span> <span class="o">=</span> <span class="n">func</span><span class="o">.</span><span class="vm">__module__</span><span class="p">,</span> <span class="n">func</span><span class="o">.</span><span class="vm">__qualname__</span>
+</span><span id="__span-1-14"><a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">stack</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">module_name</span><span class="p">,</span> <span class="n">qual_name</span><span class="p">))</span>
+</span><span id="__span-1-15"><a id="__codelineno-1-15" name="__codelineno-1-15" href="#__codelineno-1-15"></a>        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">stack</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+</span><span id="__span-1-16"><a id="__codelineno-1-16" name="__codelineno-1-16" href="#__codelineno-1-16"></a>            <span class="n">caller_module</span><span class="p">,</span> <span class="n">caller_qual_name</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">stack</span><span class="p">[</span><span class="o">-</span><span class="mi">2</span><span class="p">]</span>
+</span><span id="__span-1-17"><a id="__codelineno-1-17" name="__codelineno-1-17" href="#__codelineno-1-17"></a>            <span class="bp">self</span><span class="o">.</span><span class="n">graph</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">caller_module</span><span class="p">,</span> <span class="n">caller_qual_name</span><span class="p">,</span>
+</span><span id="__span-1-18"><a id="__codelineno-1-18" name="__codelineno-1-18" href="#__codelineno-1-18"></a>                               <span class="n">module_name</span><span class="p">,</span> <span class="n">qual_name</span><span class="p">))</span>
+</span><span id="__span-1-19"><a id="__codelineno-1-19" name="__codelineno-1-19" href="#__codelineno-1-19"></a>
+</span><span id="__span-1-20"><a id="__codelineno-1-20" name="__codelineno-1-20" href="#__codelineno-1-20"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">register_return</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+</span><span id="__span-1-21"><a id="__codelineno-1-21" name="__codelineno-1-21" href="#__codelineno-1-21"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">stack</span><span class="o">.</span><span class="n">pop</span><span class="p">()</span>
+</span><span id="__span-1-22"><a id="__codelineno-1-22" name="__codelineno-1-22" href="#__codelineno-1-22"></a>
+</span><span id="__span-1-23"><a id="__codelineno-1-23" name="__codelineno-1-23" href="#__codelineno-1-23"></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__enter__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+</span><span id="__span-1-24"><a id="__codelineno-1-24" name="__codelineno-1-24" href="#__codelineno-1-24"></a>        <span class="n">TracerState</span><span class="o">.</span><span class="n">current</span> <span class="o">=</span> <span class="bp">self</span>
+</span><span id="__span-1-25"><a id="__codelineno-1-25" name="__codelineno-1-25" href="#__codelineno-1-25"></a>        <span class="k">return</span> <span class="bp">self</span>
+</span><span id="__span-1-26"><a id="__codelineno-1-26" name="__codelineno-1-26" href="#__codelineno-1-26"></a>
+</span><span id="__span-1-27"><a id="__codelineno-1-27" name="__codelineno-1-27" href="#__codelineno-1-27"></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__exit__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">exc_type</span><span class="p">,</span> <span class="n">exc_value</span><span class="p">,</span> <span class="n">traceback</span><span class="p">):</span>
+</span><span id="__span-1-28"><a id="__codelineno-1-28" name="__codelineno-1-28" href="#__codelineno-1-28"></a>        <span class="n">TracerState</span><span class="o">.</span><span class="n">current</span> <span class="o">=</span> <span class="kc">None</span>
+</span></code></pre></div>
+Note that we use the <a href="https://peps.python.org/pep-3155/">qualified name</a> of a
+function, which contains all the nested class names in the case of methods.</p>
+<h3 id="a-minimal-example">A minimal example</h3>
+<p>You can already use this as follows:
+<div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="n">In</span> <span class="p">[</span><span class="mi">1</span><span class="p">]:</span> <span class="nd">@track</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>   <span class="o">...</span><span class="p">:</span> <span class="k">def</span><span class="w"> </span><span class="nf">f</span><span class="p">(</span><span class="n">x</span><span class="p">):</span>
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>   <span class="o">...</span><span class="p">:</span>     <span class="k">return</span> <span class="n">x</span> <span class="o">+</span> <span class="mi">1</span>
+</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>   <span class="o">...</span><span class="p">:</span> 
+</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>
+</span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="n">In</span> <span class="p">[</span><span class="mi">2</span><span class="p">]:</span> <span class="nd">@track</span>
+</span><span id="__span-2-7"><a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>   <span class="o">...</span><span class="p">:</span> <span class="k">def</span><span class="w"> </span><span class="nf">g</span><span class="p">(</span><span class="n">x</span><span class="p">):</span>
+</span><span id="__span-2-8"><a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a>   <span class="o">...</span><span class="p">:</span>     <span class="k">return</span> <span class="n">f</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span>
+</span><span id="__span-2-9"><a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a>   <span class="o">...</span><span class="p">:</span> 
+</span><span id="__span-2-10"><a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a>
+</span><span id="__span-2-11"><a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a><span class="n">In</span> <span class="p">[</span><span class="mi">3</span><span class="p">]:</span> <span class="k">with</span> <span class="n">Tracer</span><span class="p">()</span> <span class="k">as</span> <span class="n">t</span><span class="p">:</span>
+</span><span id="__span-2-12"><a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a>   <span class="o">...</span><span class="p">:</span>     <span class="n">g</span><span class="p">(</span><span class="mi">23</span><span class="p">)</span>
+</span><span id="__span-2-13"><a id="__codelineno-2-13" name="__codelineno-2-13" href="#__codelineno-2-13"></a>   <span class="o">...</span><span class="p">:</span> 
+</span><span id="__span-2-14"><a id="__codelineno-2-14" name="__codelineno-2-14" href="#__codelineno-2-14"></a>
+</span><span id="__span-2-15"><a id="__codelineno-2-15" name="__codelineno-2-15" href="#__codelineno-2-15"></a><span class="n">In</span> <span class="p">[</span><span class="mi">4</span><span class="p">]:</span> <span class="n">t</span><span class="o">.</span><span class="n">graph</span>
+</span><span id="__span-2-16"><a id="__codelineno-2-16" name="__codelineno-2-16" href="#__codelineno-2-16"></a><span class="n">Out</span><span class="p">[</span><span class="mi">4</span><span class="p">]:</span> <span class="p">[(</span><span class="s1">&#39;__main__&#39;</span><span class="p">,</span> <span class="s1">&#39;g&#39;</span><span class="p">,</span> <span class="s1">&#39;__main__&#39;</span><span class="p">,</span> <span class="s1">&#39;f&#39;</span><span class="p">)]</span>
+</span></code></pre></div></p>
+<h3 id="adding-globals-tracking">Adding globals tracking</h3>
+<p>When a function <code>f</code> is called, how does Python know how names in the code of <code>f</code>
+correspond to values in the program? You can read about this at length in
+<a href="https://docs.python.org/3/tutorial/classes.html#python-scopes-and-namespaces">Python's documentation</a>,
+but the gist of it is that the relevant scopes are looked up in the following
+order:</p>
+<ul>
+<li><strong>local</strong>: <code>func</code>'s own scope,</li>
+<li><strong>enclosing</strong>: any scopes of functions inside which <code>func</code> is defined,
+accessible through <code>func.__closure__</code></li>
+<li><strong>global</strong>: the the namespace of the function's module, accessible through <code>func.__globals__</code>.</li>
+<li><strong>builtin</strong>: Python's imported-by-default objects</li>
+</ul>
+<p>It even has a "catchy" acronym: the LEGB rule. For now, we'll assume there's
+no enclosing scope. In this case, we are really only interested in accesses to
+<code>__globals__</code>. As it turns out, we can substitute a function's <code>__globals__</code> -
+which is a dictionary - with a modified object that behaves exactly the same but
+also tracks accesses. For this, we add a <code>register_global_access</code> method to
+<code>Tracer</code> (which adds globals to the graph as key-value pairs to disambiguate
+them from function calls), and define a simple subclass of <code>dict</code>:
+<div class="language-python highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">Tracer</span><span class="p">:</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>    <span class="o">...</span>
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>
+</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">register_global_access</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span> <span class="c1"># &lt;- ADD THIS METHOD</span>
+</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>        <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">stack</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span>
+</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a>        <span class="n">caller_module</span><span class="p">,</span> <span class="n">caller_qual_name</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">stack</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+</span><span id="__span-3-7"><a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">graph</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">caller_module</span><span class="p">,</span> <span class="n">caller_qual_name</span><span class="p">,</span> <span class="p">{</span><span class="n">key</span><span class="p">:</span> <span class="n">value</span><span class="p">}))</span>
+</span><span id="__span-3-8"><a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a>
+</span><span id="__span-3-9"><a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a>    <span class="o">...</span>
+</span><span id="__span-3-10"><a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a>
+</span><span id="__span-3-11"><a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a><span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span>
+</span><span id="__span-3-12"><a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a>
+</span><span id="__span-3-13"><a id="__codelineno-3-13" name="__codelineno-3-13" href="#__codelineno-3-13"></a><span class="k">class</span><span class="w"> </span><span class="nc">TrackedDict</span><span class="p">(</span><span class="nb">dict</span><span class="p">):</span>
+</span><span id="__span-3-14"><a id="__codelineno-3-14" name="__codelineno-3-14" href="#__codelineno-3-14"></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">original</span><span class="p">:</span> <span class="nb">dict</span><span class="p">):</span>
+</span><span id="__span-3-15"><a id="__codelineno-3-15" name="__codelineno-3-15" href="#__codelineno-3-15"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">__original__</span> <span class="o">=</span> <span class="n">original</span>
+</span><span id="__span-3-16"><a id="__codelineno-3-16" name="__codelineno-3-16" href="#__codelineno-3-16"></a>
+</span><span id="__span-3-17"><a id="__codelineno-3-17" name="__codelineno-3-17" href="#__codelineno-3-17"></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__getitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">__key</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+</span><span id="__span-3-18"><a id="__codelineno-3-18" name="__codelineno-3-18" href="#__codelineno-3-18"></a>        <span class="n">value</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">__original__</span><span class="o">.</span><span class="fm">__getitem__</span><span class="p">(</span><span class="n">__key</span><span class="p">)</span>
+</span><span id="__span-3-19"><a id="__codelineno-3-19" name="__codelineno-3-19" href="#__codelineno-3-19"></a>        <span class="k">if</span> <span class="n">TracerState</span><span class="o">.</span><span class="n">current</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-3-20"><a id="__codelineno-3-20" name="__codelineno-3-20" href="#__codelineno-3-20"></a>            <span class="n">tracer</span> <span class="o">=</span> <span class="n">TracerState</span><span class="o">.</span><span class="n">current</span>
+</span><span id="__span-3-21"><a id="__codelineno-3-21" name="__codelineno-3-21" href="#__codelineno-3-21"></a>            <span class="n">tracer</span><span class="o">.</span><span class="n">register_global_access</span><span class="p">(</span><span class="n">key</span><span class="o">=</span><span class="n">__key</span><span class="p">,</span> <span class="n">value</span><span class="o">=</span><span class="n">value</span><span class="p">)</span>
+</span><span id="__span-3-22"><a id="__codelineno-3-22" name="__codelineno-3-22" href="#__codelineno-3-22"></a>        <span class="k">return</span> <span class="n">value</span>
+</span></code></pre></div>
+Implementing the strategy is somewhat complicated by the fact that <code>__globals__</code>
+is a read-only attribute and can't be updated in-place. The below helper
+copies a function, keeping everything the same except for using a <code>TrackedDict</code>
+for the globals:
+<div class="language-python highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">copy</span>
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">functools</span><span class="w"> </span><span class="kn">import</span> <span class="n">update_wrapper</span>
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>
+</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="k">def</span><span class="w"> </span><span class="nf">make_tracked_copy</span><span class="p">(</span><span class="n">f</span><span class="p">:</span> <span class="n">FunctionType</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">FunctionType</span><span class="p">:</span>
+</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>    <span class="n">result</span> <span class="o">=</span> <span class="n">FunctionType</span><span class="p">(</span>
+</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>        <span class="n">code</span><span class="o">=</span><span class="n">f</span><span class="o">.</span><span class="vm">__code__</span><span class="p">,</span>
+</span><span id="__span-4-7"><a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>        <span class="nb">globals</span><span class="o">=</span><span class="n">TrackedDict</span><span class="p">(</span><span class="n">f</span><span class="o">.</span><span class="vm">__globals__</span><span class="p">),</span>
+</span><span id="__span-4-8"><a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a>        <span class="n">name</span><span class="o">=</span><span class="n">f</span><span class="o">.</span><span class="vm">__name__</span><span class="p">,</span>
+</span><span id="__span-4-9"><a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a>        <span class="n">argdefs</span><span class="o">=</span><span class="n">f</span><span class="o">.</span><span class="vm">__defaults__</span><span class="p">,</span>
+</span><span id="__span-4-10"><a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a>        <span class="n">closure</span><span class="o">=</span><span class="n">f</span><span class="o">.</span><span class="vm">__closure__</span><span class="p">,</span>
+</span><span id="__span-4-11"><a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a>    <span class="p">)</span>
+</span><span id="__span-4-12"><a id="__codelineno-4-12" name="__codelineno-4-12" href="#__codelineno-4-12"></a>    <span class="n">result</span> <span class="o">=</span> <span class="n">update_wrapper</span><span class="p">(</span><span class="n">result</span><span class="p">,</span> <span class="n">f</span><span class="p">)</span>
+</span><span id="__span-4-13"><a id="__codelineno-4-13" name="__codelineno-4-13" href="#__codelineno-4-13"></a>    <span class="n">result</span><span class="o">.</span><span class="vm">__module__</span> <span class="o">=</span> <span class="n">f</span><span class="o">.</span><span class="vm">__module__</span>
+</span><span id="__span-4-14"><a id="__codelineno-4-14" name="__codelineno-4-14" href="#__codelineno-4-14"></a>    <span class="n">result</span><span class="o">.</span><span class="vm">__kwdefaults__</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="n">f</span><span class="o">.</span><span class="vm">__kwdefaults__</span><span class="p">)</span>
+</span><span id="__span-4-15"><a id="__codelineno-4-15" name="__codelineno-4-15" href="#__codelineno-4-15"></a>    <span class="n">result</span><span class="o">.</span><span class="vm">__annotations__</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="n">f</span><span class="o">.</span><span class="vm">__annotations__</span><span class="p">)</span>
+</span><span id="__span-4-16"><a id="__codelineno-4-16" name="__codelineno-4-16" href="#__codelineno-4-16"></a>    <span class="k">return</span> <span class="n">result</span>
+</span></code></pre></div>
+Note that, even though we use
+<a href="https://docs.python.org/3/library/functools.html#functools.update_wrapper"><code>update_wrapper</code></a>,
+some properties of <code>f</code> must be carried over manually to <code>f</code>'s copy; maybe there
+are some others you need to copy as well depending on your use case. You can now
+modify the <code>track</code> decorator as
+<div class="language-python highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">track</span><span class="p">(</span><span class="n">f</span><span class="p">:</span> <span class="n">FunctionType</span><span class="p">):</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>    <span class="n">f</span> <span class="o">=</span> <span class="n">make_tracked_copy</span><span class="p">(</span><span class="n">f</span><span class="p">)</span> <span class="c1"># add this line</span>
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>
+</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>    <span class="nd">@wraps</span><span class="p">(</span><span class="n">f</span><span class="p">)</span>
+</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>    <span class="o">...</span>
+</span></code></pre></div></p>
+<h3 id="a-more-interesting-example">A more interesting example</h3>
+<p>Here's a more interesting example of all the stuff we covered so far in action:
+tracking global variables, functions, and even nested class methods:
+<div class="language-python highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="n">A</span> <span class="o">=</span> <span class="mi">23</span>
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="n">B</span> <span class="o">=</span> <span class="mi">42</span>
+</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>
+</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="nd">@track</span>
+</span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a><span class="k">def</span><span class="w"> </span><span class="nf">f</span><span class="p">(</span><span class="n">x</span><span class="p">):</span>
+</span><span id="__span-6-6"><a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>    <span class="k">return</span> <span class="n">x</span> <span class="o">+</span> <span class="n">A</span>
+</span><span id="__span-6-7"><a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a>
+</span><span id="__span-6-8"><a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a><span class="k">class</span><span class="w"> </span><span class="nc">C</span><span class="p">:</span>
+</span><span id="__span-6-9"><a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a>    <span class="nd">@track</span>
+</span><span id="__span-6-10"><a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">):</span>
+</span><span id="__span-6-11"><a id="__codelineno-6-11" name="__codelineno-6-11" href="#__codelineno-6-11"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">x</span> <span class="o">=</span> <span class="n">x</span> <span class="o">+</span> <span class="n">B</span>
+</span><span id="__span-6-12"><a id="__codelineno-6-12" name="__codelineno-6-12" href="#__codelineno-6-12"></a>
+</span><span id="__span-6-13"><a id="__codelineno-6-13" name="__codelineno-6-13" href="#__codelineno-6-13"></a>    <span class="nd">@track</span>
+</span><span id="__span-6-14"><a id="__codelineno-6-14" name="__codelineno-6-14" href="#__codelineno-6-14"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">m</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">y</span><span class="p">):</span>
+</span><span id="__span-6-15"><a id="__codelineno-6-15" name="__codelineno-6-15" href="#__codelineno-6-15"></a>        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">x</span> <span class="o">+</span> <span class="n">y</span>
+</span><span id="__span-6-16"><a id="__codelineno-6-16" name="__codelineno-6-16" href="#__codelineno-6-16"></a>
+</span><span id="__span-6-17"><a id="__codelineno-6-17" name="__codelineno-6-17" href="#__codelineno-6-17"></a>    <span class="k">class</span><span class="w"> </span><span class="nc">D</span><span class="p">:</span>
+</span><span id="__span-6-18"><a id="__codelineno-6-18" name="__codelineno-6-18" href="#__codelineno-6-18"></a>        <span class="nd">@track</span>
+</span><span id="__span-6-19"><a id="__codelineno-6-19" name="__codelineno-6-19" href="#__codelineno-6-19"></a>        <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">):</span>
+</span><span id="__span-6-20"><a id="__codelineno-6-20" name="__codelineno-6-20" href="#__codelineno-6-20"></a>            <span class="bp">self</span><span class="o">.</span><span class="n">x</span> <span class="o">=</span> <span class="n">x</span> <span class="o">+</span> <span class="n">f</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+</span><span id="__span-6-21"><a id="__codelineno-6-21" name="__codelineno-6-21" href="#__codelineno-6-21"></a>
+</span><span id="__span-6-22"><a id="__codelineno-6-22" name="__codelineno-6-22" href="#__codelineno-6-22"></a>        <span class="nd">@track</span>
+</span><span id="__span-6-23"><a id="__codelineno-6-23" name="__codelineno-6-23" href="#__codelineno-6-23"></a>        <span class="k">def</span><span class="w"> </span><span class="nf">m</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">y</span><span class="p">):</span>
+</span><span id="__span-6-24"><a id="__codelineno-6-24" name="__codelineno-6-24" href="#__codelineno-6-24"></a>            <span class="k">return</span> <span class="n">y</span> <span class="o">+</span> <span class="n">A</span>
+</span><span id="__span-6-25"><a id="__codelineno-6-25" name="__codelineno-6-25" href="#__codelineno-6-25"></a>
+</span><span id="__span-6-26"><a id="__codelineno-6-26" name="__codelineno-6-26" href="#__codelineno-6-26"></a><span class="nd">@track</span>
+</span><span id="__span-6-27"><a id="__codelineno-6-27" name="__codelineno-6-27" href="#__codelineno-6-27"></a><span class="k">def</span><span class="w"> </span><span class="nf">g</span><span class="p">(</span><span class="n">x</span><span class="p">):</span>
+</span><span id="__span-6-28"><a id="__codelineno-6-28" name="__codelineno-6-28" href="#__codelineno-6-28"></a>    <span class="k">if</span> <span class="n">x</span> <span class="o">%</span> <span class="mi">2</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+</span><span id="__span-6-29"><a id="__codelineno-6-29" name="__codelineno-6-29" href="#__codelineno-6-29"></a>        <span class="k">return</span> <span class="n">C</span><span class="p">(</span><span class="n">x</span><span class="p">)</span><span class="o">.</span><span class="n">m</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+</span><span id="__span-6-30"><a id="__codelineno-6-30" name="__codelineno-6-30" href="#__codelineno-6-30"></a>    <span class="k">else</span><span class="p">:</span>
+</span><span id="__span-6-31"><a id="__codelineno-6-31" name="__codelineno-6-31" href="#__codelineno-6-31"></a>        <span class="k">return</span> <span class="n">C</span><span class="o">.</span><span class="n">D</span><span class="p">(</span><span class="n">x</span><span class="p">)</span><span class="o">.</span><span class="n">m</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+</span></code></pre></div>
+As expected, you get different results for the two branches of <code>g</code>:
+<div class="language-python highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="n">In</span> <span class="p">[</span><span class="mi">1</span><span class="p">]:</span> <span class="k">with</span> <span class="n">Tracer</span><span class="p">()</span> <span class="k">as</span> <span class="n">t</span><span class="p">:</span>
+</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>   <span class="o">...</span><span class="p">:</span>     <span class="n">g</span><span class="p">(</span><span class="mi">23</span><span class="p">)</span>
+</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>   <span class="o">...</span><span class="p">:</span> 
+</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a>
+</span><span id="__span-7-5"><a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="n">In</span> <span class="p">[</span><span class="mi">2</span><span class="p">]:</span> <span class="n">t</span><span class="o">.</span><span class="n">graph</span>
+</span><span id="__span-7-6"><a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a><span class="n">Out</span><span class="p">[</span><span class="mi">2</span><span class="p">]:</span> 
+</span><span id="__span-7-7"><a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a><span class="p">[(</span><span class="s1">&#39;__main__&#39;</span><span class="p">,</span> <span class="s1">&#39;g&#39;</span><span class="p">,</span> <span class="p">{</span><span class="s1">&#39;C&#39;</span><span class="p">:</span> <span class="n">__main__</span><span class="o">.</span><span class="n">C</span><span class="p">}),</span>
+</span><span id="__span-7-8"><a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a> <span class="p">(</span><span class="s1">&#39;__main__&#39;</span><span class="p">,</span> <span class="s1">&#39;g&#39;</span><span class="p">,</span> <span class="s1">&#39;__main__&#39;</span><span class="p">,</span> <span class="s1">&#39;C.D.__init__&#39;</span><span class="p">),</span>
+</span><span id="__span-7-9"><a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a> <span class="p">(</span><span class="s1">&#39;__main__&#39;</span><span class="p">,</span> <span class="s1">&#39;C.D.__init__&#39;</span><span class="p">,</span> <span class="p">{</span><span class="s1">&#39;f&#39;</span><span class="p">:</span> <span class="o">&lt;</span><span class="n">function</span> <span class="n">__main__</span><span class="o">.</span><span class="n">f</span><span class="p">(</span><span class="n">x</span><span class="p">)</span><span class="o">&gt;</span><span class="p">}),</span>
+</span><span id="__span-7-10"><a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a> <span class="p">(</span><span class="s1">&#39;__main__&#39;</span><span class="p">,</span> <span class="s1">&#39;C.D.__init__&#39;</span><span class="p">,</span> <span class="s1">&#39;__main__&#39;</span><span class="p">,</span> <span class="s1">&#39;f&#39;</span><span class="p">),</span>
+</span><span id="__span-7-11"><a id="__codelineno-7-11" name="__codelineno-7-11" href="#__codelineno-7-11"></a> <span class="p">(</span><span class="s1">&#39;__main__&#39;</span><span class="p">,</span> <span class="s1">&#39;f&#39;</span><span class="p">,</span> <span class="p">{</span><span class="s1">&#39;A&#39;</span><span class="p">:</span> <span class="mi">23</span><span class="p">}),</span>
+</span><span id="__span-7-12"><a id="__codelineno-7-12" name="__codelineno-7-12" href="#__codelineno-7-12"></a> <span class="p">(</span><span class="s1">&#39;__main__&#39;</span><span class="p">,</span> <span class="s1">&#39;g&#39;</span><span class="p">,</span> <span class="s1">&#39;__main__&#39;</span><span class="p">,</span> <span class="s1">&#39;C.D.m&#39;</span><span class="p">),</span>
+</span><span id="__span-7-13"><a id="__codelineno-7-13" name="__codelineno-7-13" href="#__codelineno-7-13"></a> <span class="p">(</span><span class="s1">&#39;__main__&#39;</span><span class="p">,</span> <span class="s1">&#39;C.D.m&#39;</span><span class="p">,</span> <span class="p">{</span><span class="s1">&#39;A&#39;</span><span class="p">:</span> <span class="mi">23</span><span class="p">})]</span>
+</span><span id="__span-7-14"><a id="__codelineno-7-14" name="__codelineno-7-14" href="#__codelineno-7-14"></a>
+</span><span id="__span-7-15"><a id="__codelineno-7-15" name="__codelineno-7-15" href="#__codelineno-7-15"></a><span class="n">In</span> <span class="p">[</span><span class="mi">3</span><span class="p">]:</span> <span class="k">with</span> <span class="n">Tracer</span><span class="p">()</span> <span class="k">as</span> <span class="n">t</span><span class="p">:</span>
+</span><span id="__span-7-16"><a id="__codelineno-7-16" name="__codelineno-7-16" href="#__codelineno-7-16"></a>    <span class="o">...</span><span class="p">:</span>     <span class="n">g</span><span class="p">(</span><span class="mi">42</span><span class="p">)</span>
+</span><span id="__span-7-17"><a id="__codelineno-7-17" name="__codelineno-7-17" href="#__codelineno-7-17"></a>    <span class="o">...</span><span class="p">:</span> 
+</span><span id="__span-7-18"><a id="__codelineno-7-18" name="__codelineno-7-18" href="#__codelineno-7-18"></a>
+</span><span id="__span-7-19"><a id="__codelineno-7-19" name="__codelineno-7-19" href="#__codelineno-7-19"></a><span class="n">In</span> <span class="p">[</span><span class="mi">4</span><span class="p">]:</span> <span class="n">t</span><span class="o">.</span><span class="n">graph</span>
+</span><span id="__span-7-20"><a id="__codelineno-7-20" name="__codelineno-7-20" href="#__codelineno-7-20"></a><span class="n">Out</span><span class="p">[</span><span class="mi">4</span><span class="p">]:</span> 
+</span><span id="__span-7-21"><a id="__codelineno-7-21" name="__codelineno-7-21" href="#__codelineno-7-21"></a><span class="p">[(</span><span class="s1">&#39;__main__&#39;</span><span class="p">,</span> <span class="s1">&#39;g&#39;</span><span class="p">,</span> <span class="p">{</span><span class="s1">&#39;C&#39;</span><span class="p">:</span> <span class="n">__main__</span><span class="o">.</span><span class="n">C</span><span class="p">}),</span>
+</span><span id="__span-7-22"><a id="__codelineno-7-22" name="__codelineno-7-22" href="#__codelineno-7-22"></a> <span class="p">(</span><span class="s1">&#39;__main__&#39;</span><span class="p">,</span> <span class="s1">&#39;g&#39;</span><span class="p">,</span> <span class="s1">&#39;__main__&#39;</span><span class="p">,</span> <span class="s1">&#39;C.__init__&#39;</span><span class="p">),</span>
+</span><span id="__span-7-23"><a id="__codelineno-7-23" name="__codelineno-7-23" href="#__codelineno-7-23"></a> <span class="p">(</span><span class="s1">&#39;__main__&#39;</span><span class="p">,</span> <span class="s1">&#39;C.__init__&#39;</span><span class="p">,</span> <span class="p">{</span><span class="s1">&#39;B&#39;</span><span class="p">:</span> <span class="mi">42</span><span class="p">}),</span>
+</span><span id="__span-7-24"><a id="__codelineno-7-24" name="__codelineno-7-24" href="#__codelineno-7-24"></a> <span class="p">(</span><span class="s1">&#39;__main__&#39;</span><span class="p">,</span> <span class="s1">&#39;g&#39;</span><span class="p">,</span> <span class="s1">&#39;__main__&#39;</span><span class="p">,</span> <span class="s1">&#39;C.m&#39;</span><span class="p">)]</span>
+</span></code></pre></div></p>
+<h3 id="beyond-the-prototype">Beyond the prototype</h3>
+<p>The code so far already has all the key components of a
+solution. Even better, it's easily customizable: it's up to you to decide
+whether some calls or globals should be excluded, how to respond to changes in
+dependencies, etc. To make this scaffolding more robust and practical, you might
+want to add a few minor improvements. I found the following helpful:</p>
+<ul>
+<li><strong>replace global variable values with content hashes</strong>, because otherwise you
+  might end up tracking a lot of state that is not garbage-collected</li>
+<li><strong>apply the decorator to entire classes</strong> by decorating each of their methods
+  automatically. This saves you at least some of the manual work!</li>
+<li><strong>filter out function/method/class accesses</strong> when tracking globals accesses.
+  As you can see above, <code>C.D.__init__</code> accesses the global variable <code>f</code>, but you
+  probably don't care about this most of the time.</li>
+<li><strong>check for
+<a href="https://en.wikipedia.org/wiki/Closure_(computer_programming)">closures</a></strong> using
+the <code>__closure__</code> attribute of the function being called. Closures are more
+complex to track than code available at import time. To make life simpler, you
+may choose to detect closures at runtime and raise an error to disable them.</li>
+<li><strong>make the decorator work well with other decorators</strong>: Python decorators are
+great, but also a total anarchy. Anybody can use something like <code>lambda x: None</code>
+as a decorator! If it's in your power, you should put <code>@track</code> on the bottom of
+decorator stacks (i.e. directly over the function definition). Otherwise, cross
+your fingers that whoever implemented the decorators in your code was nice and
+exposed a <code>__wrapped__</code> attribute. Take a look at <a href="https://docs.python.org/3/library/functools.html#functools.update_wrapper">the Python
+docs</a>. </li>
+<li><strong>use <a href="https://docs.python.org/3/reference/import.html#import-hooks">import
+hooks</a></strong> to
+automatically decorate your code at import time, if you dare.</li>
+</ul>
+<h2 id="what-doesnt-work-and-why">What doesn't work, and why</h2>
+<p>What follows is a tour through some Python tools/internals that can address
+parts of the problem, but ultimately fail to satisfy all requirements:</p>
+<ul>
+<li><a href="#syssettrace"><code>sys.settrace</code></a> is a solid alternative, but
+introduces <a href="#syssettraces-unavoidable-overhead">too much unavoidable overhead</a>
+in practical interactive scenarios, and can't track dynamic accesses to the globals.</li>
+<li><a href="#cprofile">profilers</a> like <a href="https://docs.python.org/3.5/library/profile.html#module-cProfile">cProfile</a> introduce less overhead than <code>sys.settrace</code>. However,
+  they don't track per-call dependencies, don't give you runtime control over what
+  the program does (so you can't e.g. react to a dependency that you fundamentally
+  can't track), and make it harder to extract full dependency information.</li>
+<li><a href="#static-analysis">static analysis</a> can discover more/fewer dependencies than
+  the ground truth, and is altogether messier to implement.</li>
+</ul>
+<h3 id="syssettrace"><code>sys.settrace</code></h3>
+<p>Python is a famously (notoriously?) hackable language: it lets you hook into a
+lot of the internal machinery of the interpreter itself. One such piece of magic
+is <a href="https://docs.python.org/3/library/sys.html#sys.settrace"><code>sys.settrace</code></a>,
+which allows you to install a hook that gets called for each of the main events
+of the interpreter: function calls/returns, and even executing a single line of
+code in a function (for example, this is how
+<a href="https://github.com/nedbat/coveragepy">coverage</a> can be so fine-grained).</p>
+<p>Using <code>sys.settrace</code>, we can obtain something very similar to the <a href="#proposed-solution">solution
+developed above</a>, but without the need to explicitly
+decorate your code. Here is a minimal example of a stateful context manager
+using <code>settrace</code> to maintain a call stack of the functions that get called and
+the modules they originate from:
+<div class="language-python highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">sys</span><span class="o">,</span><span class="w"> </span><span class="nn">types</span> 
+</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>
+</span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="k">class</span><span class="w"> </span><span class="nc">Tracer</span><span class="p">:</span>
+</span><span id="__span-8-4"><a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+</span><span id="__span-8-5"><a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a>        <span class="c1"># stack of (module name, function name) tuples</span>
+</span><span id="__span-8-6"><a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">call_stack</span> <span class="o">=</span> <span class="p">[]</span>
+</span><span id="__span-8-7"><a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a>
+</span><span id="__span-8-8"><a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__enter__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+</span><span id="__span-8-9"><a id="__codelineno-8-9" name="__codelineno-8-9" href="#__codelineno-8-9"></a>        <span class="k">def</span><span class="w"> </span><span class="nf">tracer</span><span class="p">(</span><span class="n">frame</span><span class="p">:</span> <span class="n">types</span><span class="o">.</span><span class="n">FrameType</span><span class="p">,</span> <span class="n">event</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">arg</span><span class="p">):</span>
+</span><span id="__span-8-10"><a id="__codelineno-8-10" name="__codelineno-8-10" href="#__codelineno-8-10"></a>            <span class="c1"># the name of the function being executed</span>
+</span><span id="__span-8-11"><a id="__codelineno-8-11" name="__codelineno-8-11" href="#__codelineno-8-11"></a>            <span class="n">func_name</span> <span class="o">=</span> <span class="n">frame</span><span class="o">.</span><span class="n">f_code</span><span class="o">.</span><span class="n">co_name</span>
+</span><span id="__span-8-12"><a id="__codelineno-8-12" name="__codelineno-8-12" href="#__codelineno-8-12"></a>            <span class="c1"># the name of the module in which the function is defined</span>
+</span><span id="__span-8-13"><a id="__codelineno-8-13" name="__codelineno-8-13" href="#__codelineno-8-13"></a>            <span class="n">module_name</span> <span class="o">=</span> <span class="n">frame</span><span class="o">.</span><span class="n">f_globals</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;__name__&quot;</span><span class="p">)</span>
+</span><span id="__span-8-14"><a id="__codelineno-8-14" name="__codelineno-8-14" href="#__codelineno-8-14"></a>            <span class="k">if</span> <span class="n">event</span> <span class="o">==</span> <span class="s1">&#39;call&#39;</span><span class="p">:</span> <span class="c1"># function call</span>
+</span><span id="__span-8-15"><a id="__codelineno-8-15" name="__codelineno-8-15" href="#__codelineno-8-15"></a>                <span class="bp">self</span><span class="o">.</span><span class="n">call_stack</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">module_name</span><span class="p">,</span> <span class="n">func_name</span><span class="p">))</span>
+</span><span id="__span-8-16"><a id="__codelineno-8-16" name="__codelineno-8-16" href="#__codelineno-8-16"></a>                <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Calling </span><span class="si">{</span><span class="n">module_name</span><span class="si">}</span><span class="s2">.</span><span class="si">{</span><span class="n">func_name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</span><span id="__span-8-17"><a id="__codelineno-8-17" name="__codelineno-8-17" href="#__codelineno-8-17"></a>            <span class="k">elif</span> <span class="n">event</span> <span class="o">==</span> <span class="s1">&#39;return&#39;</span><span class="p">:</span> <span class="c1"># function return</span>
+</span><span id="__span-8-18"><a id="__codelineno-8-18" name="__codelineno-8-18" href="#__codelineno-8-18"></a>                <span class="n">ret_module</span><span class="p">,</span> <span class="n">ret_func</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">call_stack</span><span class="o">.</span><span class="n">pop</span><span class="p">()</span>
+</span><span id="__span-8-19"><a id="__codelineno-8-19" name="__codelineno-8-19" href="#__codelineno-8-19"></a>                <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Returning from </span><span class="si">{</span><span class="n">ret_module</span><span class="si">}</span><span class="s2">.</span><span class="si">{</span><span class="n">ret_func</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</span><span id="__span-8-20"><a id="__codelineno-8-20" name="__codelineno-8-20" href="#__codelineno-8-20"></a>            <span class="k">else</span><span class="p">:</span>
+</span><span id="__span-8-21"><a id="__codelineno-8-21" name="__codelineno-8-21" href="#__codelineno-8-21"></a>                <span class="k">pass</span>
+</span><span id="__span-8-22"><a id="__codelineno-8-22" name="__codelineno-8-22" href="#__codelineno-8-22"></a>            <span class="k">return</span> <span class="n">tracer</span>
+</span><span id="__span-8-23"><a id="__codelineno-8-23" name="__codelineno-8-23" href="#__codelineno-8-23"></a>
+</span><span id="__span-8-24"><a id="__codelineno-8-24" name="__codelineno-8-24" href="#__codelineno-8-24"></a>        <span class="n">sys</span><span class="o">.</span><span class="n">settrace</span><span class="p">(</span><span class="n">tracer</span><span class="p">)</span> <span class="c1"># enable tracing</span>
+</span><span id="__span-8-25"><a id="__codelineno-8-25" name="__codelineno-8-25" href="#__codelineno-8-25"></a>        <span class="k">return</span> <span class="bp">self</span>
+</span><span id="__span-8-26"><a id="__codelineno-8-26" name="__codelineno-8-26" href="#__codelineno-8-26"></a>
+</span><span id="__span-8-27"><a id="__codelineno-8-27" name="__codelineno-8-27" href="#__codelineno-8-27"></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__exit__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">exc_type</span><span class="p">,</span> <span class="n">exc_value</span><span class="p">,</span> <span class="n">traceback</span><span class="p">):</span>
+</span><span id="__span-8-28"><a id="__codelineno-8-28" name="__codelineno-8-28" href="#__codelineno-8-28"></a>        <span class="n">sys</span><span class="o">.</span><span class="n">settrace</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span> <span class="c1"># disable tracing</span>
+</span></code></pre></div>
+The <code>frame</code> object is what Python puts on its <a href="https://en.wikipedia.org/wiki/Call_stack">call
+stack</a>, and contains data about the
+function being called, its
+<a href="https://docs.python.org/3/glossary.html#term-bytecode">bytecode</a>, who called
+it, etc. You can use this context manager as follows:
+<div class="language-python highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="c1">### in funcs.py</span>
+</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="k">def</span><span class="w"> </span><span class="nf">f</span><span class="p">(</span><span class="n">x</span><span class="p">):</span>
+</span><span id="__span-9-3"><a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>    <span class="k">return</span> <span class="n">x</span> <span class="o">+</span> <span class="mi">1</span>
+</span><span id="__span-9-4"><a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a>
+</span><span id="__span-9-5"><a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a><span class="c1">### in IPython session</span>
+</span><span id="__span-9-6"><a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a><span class="n">In</span> <span class="p">[</span><span class="mi">1</span><span class="p">]:</span> <span class="kn">from</span><span class="w"> </span><span class="nn">funcs</span><span class="w"> </span><span class="kn">import</span> <span class="o">*</span>
+</span><span id="__span-9-7"><a id="__codelineno-9-7" name="__codelineno-9-7" href="#__codelineno-9-7"></a>
+</span><span id="__span-9-8"><a id="__codelineno-9-8" name="__codelineno-9-8" href="#__codelineno-9-8"></a><span class="n">In</span> <span class="p">[</span><span class="mi">2</span><span class="p">]:</span> <span class="k">def</span><span class="w"> </span><span class="nf">g</span><span class="p">(</span><span class="n">x</span><span class="p">):</span>
+</span><span id="__span-9-9"><a id="__codelineno-9-9" name="__codelineno-9-9" href="#__codelineno-9-9"></a>   <span class="o">...</span><span class="p">:</span>     <span class="k">return</span> <span class="n">f</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span>
+</span><span id="__span-9-10"><a id="__codelineno-9-10" name="__codelineno-9-10" href="#__codelineno-9-10"></a>   <span class="o">...</span><span class="p">:</span> 
+</span><span id="__span-9-11"><a id="__codelineno-9-11" name="__codelineno-9-11" href="#__codelineno-9-11"></a>
+</span><span id="__span-9-12"><a id="__codelineno-9-12" name="__codelineno-9-12" href="#__codelineno-9-12"></a><span class="n">In</span> <span class="p">[</span><span class="mi">3</span><span class="p">]:</span> <span class="k">with</span> <span class="n">Tracer</span><span class="p">():</span>
+</span><span id="__span-9-13"><a id="__codelineno-9-13" name="__codelineno-9-13" href="#__codelineno-9-13"></a>   <span class="o">...</span><span class="p">:</span>     <span class="n">g</span><span class="p">(</span><span class="mi">23</span><span class="p">)</span>
+</span><span id="__span-9-14"><a id="__codelineno-9-14" name="__codelineno-9-14" href="#__codelineno-9-14"></a>   <span class="o">...</span><span class="p">:</span> 
+</span><span id="__span-9-15"><a id="__codelineno-9-15" name="__codelineno-9-15" href="#__codelineno-9-15"></a><span class="n">Calling</span> <span class="n">__main__</span><span class="o">.</span><span class="n">g</span>
+</span><span id="__span-9-16"><a id="__codelineno-9-16" name="__codelineno-9-16" href="#__codelineno-9-16"></a><span class="n">Calling</span> <span class="n">funcs</span><span class="o">.</span><span class="n">f</span>
+</span><span id="__span-9-17"><a id="__codelineno-9-17" name="__codelineno-9-17" href="#__codelineno-9-17"></a><span class="n">Returning</span> <span class="kn">from</span><span class="w"> </span><span class="nn">funcs.f</span>
+</span><span id="__span-9-18"><a id="__codelineno-9-18" name="__codelineno-9-18" href="#__codelineno-9-18"></a><span class="n">Returning</span> <span class="kn">from</span><span class="w"> </span><span class="nn">__main__.g</span>
+</span><span id="__span-9-19"><a id="__codelineno-9-19" name="__codelineno-9-19" href="#__codelineno-9-19"></a><span class="n">Calling</span> <span class="n">funcs</span><span class="o">.</span><span class="fm">__exit__</span> <span class="c1"># you&#39;d have to manually remove this one</span>
+</span></code></pre></div>
+This can be extended with more features <a href="#beyond-the-prototype">much like the decorator-based
+tracer</a>. There are some <code>settrace</code>-specific problems
+you have to deal with though:</p>
+<ul>
+<li><strong>limit the dependencies to user code</strong> by looking at the module in which the
+function is defined, getting its path, and deciding if it's a user's file or
+not.</li>
+<li><strong>get the qualified name</strong>: this is frustratingly not readily available as
+  part of the <code>frame</code> object. You need some hacks to extract it:
+<div class="language-python highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">get_qualname_from_frame</span><span class="p">(</span><span class="n">frame</span><span class="p">:</span> <span class="n">types</span><span class="o">.</span><span class="n">FrameType</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+</span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>    <span class="n">arg_names</span> <span class="o">=</span> <span class="n">frame</span><span class="o">.</span><span class="n">f_code</span><span class="o">.</span><span class="n">co_varnames</span><span class="p">[:</span> <span class="n">frame</span><span class="o">.</span><span class="n">f_code</span><span class="o">.</span><span class="n">co_argcount</span><span class="p">]</span>
+</span><span id="__span-10-3"><a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">arg_names</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="ow">and</span> <span class="n">arg_names</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="s1">&#39;self&#39;</span><span class="p">:</span>
+</span><span id="__span-10-4"><a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a>        <span class="n">cls_candidate</span> <span class="o">=</span> <span class="n">frame</span><span class="o">.</span><span class="n">f_locals</span><span class="p">[</span><span class="s1">&#39;self&#39;</span><span class="p">]</span><span class="o">.</span><span class="vm">__class__</span>
+</span><span id="__span-10-5"><a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a>        <span class="n">method_candidate</span> <span class="o">=</span> <span class="n">cls_candidate</span><span class="o">.</span><span class="vm">__dict__</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">frame</span><span class="o">.</span><span class="n">f_code</span><span class="o">.</span><span class="n">co_name</span><span class="p">)</span>
+</span><span id="__span-10-6"><a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a>        <span class="k">if</span> <span class="n">method_candidate</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">method_candidate</span><span class="o">.</span><span class="vm">__code__</span> <span class="ow">is</span> <span class="n">frame</span><span class="o">.</span><span class="n">f_code</span><span class="p">:</span>
+</span><span id="__span-10-7"><a id="__codelineno-10-7" name="__codelineno-10-7" href="#__codelineno-10-7"></a>            <span class="k">return</span> <span class="n">method_candidate</span><span class="o">.</span><span class="vm">__qualname__</span>
+</span><span id="__span-10-8"><a id="__codelineno-10-8" name="__codelineno-10-8" href="#__codelineno-10-8"></a>    <span class="k">return</span> <span class="n">frame</span><span class="o">.</span><span class="n">f_code</span><span class="o">.</span><span class="n">co_name</span>
+</span></code></pre></div></li>
+<li><strong>skip over non-function frames</strong>: the interpreter assigns comprehensions,
+  generators and <code>lambda</code>-calls their own frames. You have to check for this
+  using <code>frame.f_code.co_name</code>, and assign their dependencies to the closest "actual"
+  function call on the stack.</li>
+</ul>
+<h4 id="syssettraces-unavoidable-overhead"><code>sys.settrace</code>'s unavoidable overhead</h4>
+<p>A good reason to avoid <code>settrace</code> in production code is that it's <a href="https://stackoverflow.com/a/1693108/6538618">too magical
+for its own good</a>. However, the
+real deal-breaker for my use case was the impossible-to-avoid factor by which it
+slows down some kinds of code.</p>
+<p>The crux is that the trace function is inherently called for each <code>call</code> event,
+including calls to library functions that you don't care about tracking, because
+they typically don't change over the course of a months-long project. For
+relatively fast function calls (on the order of seconds), you may get an
+<strong>order-of-magnitude slowdown</strong> if the call involves many sub-calls. <strong>This is
+unacceptable for interactive workflows</strong>!</p>
+<p>You might think you could fix that with a bit of manual work by excluding such
+library code from the tracing. Indeed, you can define a simple context manager
+that temporarily suspends the current trace:
+<div class="language-python highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">Suspend</span><span class="p">:</span>
+</span><span id="__span-11-2"><a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+</span><span id="__span-11-3"><a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">suspended_trace</span> <span class="o">=</span> <span class="kc">None</span>
+</span><span id="__span-11-4"><a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a>
+</span><span id="__span-11-5"><a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__enter__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;Suspend&quot;</span><span class="p">:</span>
+</span><span id="__span-11-6"><a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a>        <span class="k">if</span> <span class="n">sys</span><span class="o">.</span><span class="n">gettrace</span><span class="p">()</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-11-7"><a id="__codelineno-11-7" name="__codelineno-11-7" href="#__codelineno-11-7"></a>            <span class="bp">self</span><span class="o">.</span><span class="n">suspended_trace</span> <span class="o">=</span> <span class="n">sys</span><span class="o">.</span><span class="n">gettrace</span><span class="p">()</span>
+</span><span id="__span-11-8"><a id="__codelineno-11-8" name="__codelineno-11-8" href="#__codelineno-11-8"></a>            <span class="n">sys</span><span class="o">.</span><span class="n">settrace</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span>
+</span><span id="__span-11-9"><a id="__codelineno-11-9" name="__codelineno-11-9" href="#__codelineno-11-9"></a>        <span class="k">return</span> <span class="bp">self</span>
+</span><span id="__span-11-10"><a id="__codelineno-11-10" name="__codelineno-11-10" href="#__codelineno-11-10"></a>
+</span><span id="__span-11-11"><a id="__codelineno-11-11" name="__codelineno-11-11" href="#__codelineno-11-11"></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__exit__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">exc_info</span><span class="p">):</span>
+</span><span id="__span-11-12"><a id="__codelineno-11-12" name="__codelineno-11-12" href="#__codelineno-11-12"></a>        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">suspended_trace</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-11-13"><a id="__codelineno-11-13" name="__codelineno-11-13" href="#__codelineno-11-13"></a>            <span class="n">sys</span><span class="o">.</span><span class="n">settrace</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">suspended_trace</span><span class="p">)</span>
+</span><span id="__span-11-14"><a id="__codelineno-11-14" name="__codelineno-11-14" href="#__codelineno-11-14"></a>            <span class="bp">self</span><span class="o">.</span><span class="n">suspended_trace</span> <span class="o">=</span> <span class="kc">None</span>
+</span></code></pre></div>
+Then you can use it like this:
+<div class="language-python highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">my_tracked_func</span><span class="p">(</span><span class="o">...</span><span class="p">):</span>
+</span><span id="__span-12-2"><a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a>    <span class="o">...</span>
+</span><span id="__span-12-3"><a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a>    <span class="n">a</span> <span class="o">=</span> <span class="n">another_tracked_func</span><span class="p">()</span>
+</span><span id="__span-12-4"><a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a>    <span class="k">with</span> <span class="n">Suspend</span><span class="p">():</span>
+</span><span id="__span-12-5"><a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a>        <span class="n">b</span> <span class="o">=</span> <span class="n">some_library_calls_you_dont_want_to_track</span><span class="p">(</span><span class="n">a</span><span class="p">)</span>
+</span><span id="__span-12-6"><a id="__codelineno-12-6" name="__codelineno-12-6" href="#__codelineno-12-6"></a>        <span class="o">...</span>
+</span><span id="__span-12-7"><a id="__codelineno-12-7" name="__codelineno-12-7" href="#__codelineno-12-7"></a>    <span class="o">...</span>
+</span></code></pre></div>
+However, there are cases when you simply can't do that!  To give a concrete
+example, I was going though the code for
+<a href="https://google-research.github.io/self-organising-systems/2022/diff-fsm/">this</a>
+blog post, and I ran into an interesting scenario. A user-defined function <code>f</code>
+was passed into
+<a href="https://jax.readthedocs.io/en/latest/_autosummary/jax.lax.scan.html"><code>jax.lax.scan</code></a>,
+as a way to speed up certain applications of <code>f</code>:
+<div class="language-python highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">run_fsm</span><span class="p">(</span><span class="n">fsm</span><span class="p">:</span> <span class="n">FSM</span><span class="p">,</span> <span class="n">inputs</span><span class="p">):</span>
+</span><span id="__span-13-2"><a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a>  <span class="k">def</span><span class="w"> </span><span class="nf">f</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="n">x</span><span class="p">):</span>
+</span><span id="__span-13-3"><a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a>    <span class="n">y</span>  <span class="o">=</span> <span class="n">jp</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span><span class="s1">&#39;x,s,xsy-&gt;y&#39;</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">s</span><span class="p">,</span> <span class="n">fsm</span><span class="o">.</span><span class="n">R</span><span class="p">)</span>
+</span><span id="__span-13-4"><a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a>    <span class="n">s1</span> <span class="o">=</span> <span class="n">jp</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span><span class="s1">&#39;x,s,xst-&gt;t&#39;</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">s</span><span class="p">,</span> <span class="n">fsm</span><span class="o">.</span><span class="n">T</span><span class="p">)</span>
+</span><span id="__span-13-5"><a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a>    <span class="k">return</span> <span class="n">s1</span><span class="p">,</span> <span class="p">(</span><span class="n">y</span><span class="p">,</span> <span class="n">s1</span><span class="p">)</span>
+</span><span id="__span-13-6"><a id="__codelineno-13-6" name="__codelineno-13-6" href="#__codelineno-13-6"></a>  <span class="n">_</span><span class="p">,</span> <span class="p">(</span><span class="n">outputs</span><span class="p">,</span> <span class="n">states</span><span class="p">)</span> <span class="o">=</span> <span class="n">jax</span><span class="o">.</span><span class="n">lax</span><span class="o">.</span><span class="n">scan</span><span class="p">(</span><span class="n">f</span><span class="p">,</span> <span class="n">fsm</span><span class="o">.</span><span class="n">s0</span><span class="p">,</span> <span class="n">inputs</span><span class="p">)</span> <span class="c1"># THIS IS BAD</span>
+</span><span id="__span-13-7"><a id="__codelineno-13-7" name="__codelineno-13-7" href="#__codelineno-13-7"></a>  <span class="k">return</span> <span class="n">outputs</span><span class="p">,</span> <span class="n">jp</span><span class="o">.</span><span class="n">vstack</span><span class="p">([</span><span class="n">fsm</span><span class="o">.</span><span class="n">s0</span><span class="p">,</span> <span class="n">states</span><span class="p">]</span>
+</span></code></pre></div>
+Because you're passing your function to the library and it can call it however
+it likes, you <strong>lose the ability to separate the executions of your code from
+those of library code</strong>. The <code>Suspend</code> trick can't work: you're forced to trace
+all the internal calls the library makes alongside the calls to your code.</p>
+<h3 id="cprofile"><code>cProfile</code></h3>
+<p>A <a href="https://en.wikipedia.org/wiki/Profiling_(computer_programming)">profiler</a> is
+a dynamic program analysis tool typically used to pinpoint performance
+bottlenecks in code. There are two main kinds: </p>
+<ul>
+<li><a href="https://en.wikipedia.org/wiki/Profiling_(computer_programming)#Statistical_profilers">statistical
+profilers</a>
+sample a program's state (e.g. call stack, memory allocation) at regular
+intervals. This reduces overhead, while still detecting functions where the
+program spends a lot of time.</li>
+<li><a href="https://docs.python.org/3.5/library/profile.html#what-is-deterministic-profiling">deterministic
+  profilers</a>
+  by contrast record <em>every</em> function call that happens in the program, and
+  accordingly suffer higher overhead.</li>
+</ul>
+<p>In dependency tracking, failing to notice even a single dependency that is fast
+and gets called rarely can have disastrous results, so statistical profilers are
+not really an option: you need a deterministic one. Since Python's interpreter
+adds so much overhead anyway, Python's built-in (deterministic) profilers
+don't introduce <em>that</em> much over-overhead. Of the two, <code>cProfile</code> is faster. Here's the minimal
+implementation of a tracer based on profiling:
+<div class="language-python highlight"><pre><span></span><code><span id="__span-14-1"><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">cProfile</span>
+</span><span id="__span-14-2"><a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a><span class="kn">import</span><span class="w"> </span><span class="nn">pstats</span>
+</span><span id="__span-14-3"><a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a>
+</span><span id="__span-14-4"><a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a><span class="k">class</span><span class="w"> </span><span class="nc">ProfilingTracer</span><span class="p">:</span>
+</span><span id="__span-14-5"><a id="__codelineno-14-5" name="__codelineno-14-5" href="#__codelineno-14-5"></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+</span><span id="__span-14-6"><a id="__codelineno-14-6" name="__codelineno-14-6" href="#__codelineno-14-6"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">_profiler</span> <span class="o">=</span> <span class="n">cProfile</span><span class="o">.</span><span class="n">Profile</span><span class="p">()</span>
+</span><span id="__span-14-7"><a id="__codelineno-14-7" name="__codelineno-14-7" href="#__codelineno-14-7"></a>
+</span><span id="__span-14-8"><a id="__codelineno-14-8" name="__codelineno-14-8" href="#__codelineno-14-8"></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__enter__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+</span><span id="__span-14-9"><a id="__codelineno-14-9" name="__codelineno-14-9" href="#__codelineno-14-9"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">_profiler</span><span class="o">.</span><span class="n">enable</span><span class="p">()</span>
+</span><span id="__span-14-10"><a id="__codelineno-14-10" name="__codelineno-14-10" href="#__codelineno-14-10"></a>        <span class="k">return</span> <span class="bp">self</span>
+</span><span id="__span-14-11"><a id="__codelineno-14-11" name="__codelineno-14-11" href="#__codelineno-14-11"></a>
+</span><span id="__span-14-12"><a id="__codelineno-14-12" name="__codelineno-14-12" href="#__codelineno-14-12"></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__exit__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">exc_type</span><span class="p">,</span> <span class="n">exc_value</span><span class="p">,</span> <span class="n">traceback</span><span class="p">):</span>
+</span><span id="__span-14-13"><a id="__codelineno-14-13" name="__codelineno-14-13" href="#__codelineno-14-13"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">_profiler</span><span class="o">.</span><span class="n">disable</span><span class="p">()</span>
+</span><span id="__span-14-14"><a id="__codelineno-14-14" name="__codelineno-14-14" href="#__codelineno-14-14"></a>        <span class="n">stats</span> <span class="o">=</span> <span class="n">pstats</span><span class="o">.</span><span class="n">Stats</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_profiler</span><span class="p">)</span>
+</span><span id="__span-14-15"><a id="__codelineno-14-15" name="__codelineno-14-15" href="#__codelineno-14-15"></a>        <span class="n">stats</span><span class="o">.</span><span class="n">print_callees</span><span class="p">()</span>
+</span></code></pre></div>
+Conveniently, the output of the profiler has a method <code>print_callees</code> that
+prints all the functions that were called by each given function in the profiled
+block of code. We can run it on the <a href="#a-more-interesting-example">code from
+before</a> to get this (simplified for readability) output:
+<div class="language-python highlight"><pre><span></span><code><span id="__span-15-1"><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="n">Function</span>                                  <span class="n">called</span><span class="o">...</span>
+</span><span id="__span-15-2"><a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a>                <span class="n">ncalls</span>  <span class="n">tottime</span>  <span class="n">cumtime</span>
+</span><span id="__span-15-3"><a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a><span class="p">(</span><span class="fm">__init__</span><span class="p">)</span>  <span class="o">-&gt;</span>       <span class="mi">1</span>    <span class="mf">0.000</span>    <span class="mf">0.000</span>  <span class="p">(</span><span class="n">f</span><span class="p">)</span>
+</span><span id="__span-15-4"><a id="__codelineno-15-4" name="__codelineno-15-4" href="#__codelineno-15-4"></a><span class="p">(</span><span class="n">m</span><span class="p">)</span>         <span class="o">-&gt;</span> 
+</span><span id="__span-15-5"><a id="__codelineno-15-5" name="__codelineno-15-5" href="#__codelineno-15-5"></a><span class="p">(</span><span class="n">g</span><span class="p">)</span>         <span class="o">-&gt;</span>       <span class="mi">1</span>    <span class="mf">0.000</span>    <span class="mf">0.000</span>  <span class="p">(</span><span class="fm">__init__</span><span class="p">)</span>
+</span><span id="__span-15-6"><a id="__codelineno-15-6" name="__codelineno-15-6" href="#__codelineno-15-6"></a>                     <span class="mi">1</span>    <span class="mf">0.000</span>    <span class="mf">0.000</span>  <span class="p">(</span><span class="n">m</span><span class="p">)</span>
+</span><span id="__span-15-7"><a id="__codelineno-15-7" name="__codelineno-15-7" href="#__codelineno-15-7"></a>                     <span class="mi">1</span>    <span class="mf">0.000</span>    <span class="mf">0.000</span>  <span class="p">(</span><span class="fm">__init__</span><span class="p">)</span>
+</span><span id="__span-15-8"><a id="__codelineno-15-8" name="__codelineno-15-8" href="#__codelineno-15-8"></a>                     <span class="mi">1</span>    <span class="mf">0.000</span>    <span class="mf">0.000</span>  <span class="p">(</span><span class="n">m</span><span class="p">)</span>
+</span><span id="__span-15-9"><a id="__codelineno-15-9" name="__codelineno-15-9" href="#__codelineno-15-9"></a><span class="p">(</span><span class="n">m</span><span class="p">)</span>         <span class="o">-&gt;</span> 
+</span><span id="__span-15-10"><a id="__codelineno-15-10" name="__codelineno-15-10" href="#__codelineno-15-10"></a><span class="p">(</span><span class="n">f</span><span class="p">)</span>         <span class="o">-&gt;</span> 
+</span><span id="__span-15-11"><a id="__codelineno-15-11" name="__codelineno-15-11" href="#__codelineno-15-11"></a><span class="p">(</span><span class="fm">__init__</span><span class="p">)</span>  <span class="o">-&gt;</span> 
+</span></code></pre></div>
+The downsides of this approach become clear:</p>
+<ul>
+<li><strong>data is aggregated across all calls to a given function</strong>: in the tracked
+  code, we call <code>g</code> twice, and the two calls have different dependencies. But in
+  the final report of the profiler, the two calls are grouped together. So <strong>we
+  have no way of tracking per-call dependencies based on this data</strong>!</li>
+<li><strong>no qualified names and globals</strong>: you would have to do some extra work (e.g. looking at
+  line numbers, which <em>do</em> appear in the profiler report) to disambiguate the
+  classes methods come from. And as with <code>settrace</code>, you have no way to detect
+  globals accesses.</li>
+<li><strong>no runtime control over dependencies</strong>: the profiler report is an
+  after-the-fact summary of what happened; you don't have the option to abort if
+  you detect a bad dependency.</li>
+</ul>
+<p>Of course, it's not surprising that profilers have a hard time tracking
+fine-grained dependencies: they weren't designed for that!</p>
+<h3 id="static-analysis">Static analysis</h3>
+<p>Finally, <a href="https://en.wikipedia.org/wiki/Static_program_analysis">static analysis</a> is a
+collection of methods for deducing program properties from source code alone,
+i.e. <em>without running the program</em>. For example,
+<a href="https://github.com/scottrogowski/code2flow">code2flow</a> is a static call graph
+builder for Python. In Python, static analyses typically proceed from the <a href="https://docs.python.org/3/library/ast.html">abstract syntax
+tree</a> and/or the
+<a href="https://docs.python.org/3/library/dis.html">bytecode</a>.</p>
+<p>This approach doesn't interact with your running program at
+all, which is great for performance and generally letting your code work the way
+it's supposed to. Unfortunately, it's fundamentally flawed for many other reasons:</p>
+<ul>
+<li><strong>false positives</strong>: suppose <code>f</code>'s source code contains calls to <code>g</code> and <code>h</code>,
+but some calls to <code>f</code> use only <code>g</code>, and others only <code>h</code>.  A static analysis
+would miss that and declare <code>g</code> and <code>h</code> as dependencies of all calls.</li>
+<li><strong>false negatives</strong>: your function can call another function in all sorts of
+  weird ways that cannot be inferred from the syntax tree and/or bytecode alone. For an extreme
+  example, consider something like <code>a = eval('my_' + 'function(42)')</code>. Because
+  of variations of the <a href="https://en.wikipedia.org/wiki/Halting_problem">halting problem</a>, it's <a href="https://youtu.be/Z3515_x8R9c?t=136">both difficult
+  and impossible</a> for a static analysis to
+  determine what a function will do at runtime.</li>
+<li><strong>high implementation complexity</strong>: even if you adopt a best-effort approach,
+  you have to do a lot of work to figure out the precise function called by
+  an expression like <code>a().b().c()</code>.</li>
+</ul>
+<p>Overall, using static analysis is not worth the hassle given the ultimately
+coarse-grained information it can provide.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    <script id="__config" type="application/json">{"base": "../..", "features": ["content.code.copy"], "search": "../../assets/javascripts/workers/search.6ce7567c.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.88dd0f4e.min.js"></script>
+      
+    
+  </body>
+</html>
