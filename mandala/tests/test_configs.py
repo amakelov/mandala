@@ -73,3 +73,30 @@ def test_noop_standalone():
     with noop():
         x = inc(20)
         assert x == 21
+
+
+def test_no_new_calls():
+    @op
+    def inc(x: int) -> int:
+        return x + 1
+    
+    storage = Storage()
+    with storage:
+        inc(20)
+    
+    storage.allow_new_calls(False)
+
+    # memoized calls should still work
+    with storage:
+        inc(20)
+
+    try:
+        with storage:
+            inc(21)
+    except RuntimeError as e:
+        assert str(e) == "Call to inc does not exist and new calls are not allowed."
+    except Exception as e:
+        raise e
+    finally:
+        storage.allow_new_calls(True)
+

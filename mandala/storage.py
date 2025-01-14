@@ -127,6 +127,7 @@ class Storage:
         # stack of modes
         self._mode_stack = []
         self._next_mode = 'run'
+        self._allow_new_calls = True
     
     def dump_config(self) -> dict[str, Any]:
         return {
@@ -144,16 +145,23 @@ class Storage:
             "track_globals": self._track_globals,
         }
     
-    @property
-    def mode(self) -> str:
-        return self._mode_stack[-1] if self._mode_stack else 'run'
-    
     def conn(self) -> sqlite3.Connection:
         return self.db.conn()
 
     def vacuum(self):
         with self.conn() as conn:
             conn.execute("VACUUM")
+
+
+    ############################################################################ 
+    ### runtime configuration options
+    ############################################################################ 
+    @property
+    def mode(self) -> str:
+        return self._mode_stack[-1] if self._mode_stack else 'run'
+
+    def allow_new_calls(self, allow: bool):
+        self._allow_new_calls = allow
 
     ############################################################################
     ### managing the caches
@@ -816,6 +824,10 @@ class Storage:
             if not op.__structural__: logger.debug(f"Call to {op.name} with hid {call_hid} already exists.")
             main_call = call_option
             return main_call.outputs, main_call, input_calls
+        
+        if not self._allow_new_calls:
+            # caller should decide how to handle this
+            raise RuntimeError(f"Call to {op.name} does not exist and new calls are not allowed.")
 
         ### execute the call if it doesn't exist
         if not op.__structural__: 
